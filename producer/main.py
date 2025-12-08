@@ -73,7 +73,9 @@ def run_wiki_stream():
                                 )
 
                         except json.JSONDecodeError:
-                            logging.warning(f"⚠️ 잘못된 JSON 데이터를 건너뜁니다: {sse.data}")
+                            logging.warning(
+                                f"⚠️ 잘못된 JSON 데이터를 건너뜁니다: {sse.data}"
+                            )
                         except Exception as e:
                             logging.error(f"메시지 처리 중 오류 발생: {e}")
 
