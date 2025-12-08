@@ -68,7 +68,8 @@ def run_wiki_stream():
                             # 현재 어떤 데이터가 전송되고 있는지 확인하기 위한 로그 (선택 사항)
                             if "title" in data:
                                 logging.info(
-                                    f"📨 메시지 전송됨: {data.get('meta', {}).get('domain', '')} - {data.get('title', '')}"
+                                    f"📨 메시지 전송됨: {data.get('meta', {}).get('domain', '')} -"
+                                    f"{data.get('title', '')}"
                                 )
 
                         except json.JSONDecodeError:
