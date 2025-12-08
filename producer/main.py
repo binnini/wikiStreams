@@ -2,7 +2,6 @@ import os
 import json
 import time
 import logging
-from wsgiref import headers
 import httpx
 from httpx_sse import connect_sse
 from kafka import KafkaProducer
