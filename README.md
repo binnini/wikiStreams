@@ -95,9 +95,9 @@ graph TD
 3.  **데이터 흐름 확인:**
     새로운 터미널을 열고, 아래 명령어를 실행하여 Kafka의 `wikimedia.recentchange` 토픽에 데이터가 실시간으로 들어오는지 확인합니다.
     ```bash
-    docker compose exec kafka-kraft /usr/bin/kafka-console-consumer.sh \
-        --topic wikimedia.recentchange \
-        --bootstrap-server localhost:9092
+    docker exec -it kafka-kraft kafka-console-consumer \
+    --bootstrap-server kafka-kraft:29092 \
+    --topic wikimedia.recentchange
     ```
     JSON 형태의 데이터가 터미널에 계속해서 출력되면 성공입니다.
 
