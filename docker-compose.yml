@@ -6,7 +6,7 @@ volumes:
   coordinator_var: {}
   router_var: {}
   druid_shared: {}
-
+  producer_cache: {}
 services:
   kafka-kraft:
     image: confluentinc/cp-kafka:8.1.1
@@ -32,6 +32,8 @@ services:
   producer:
     build: ./producer
     container_name: producer
+    volumes:
+      - producer_cache:/cache
     depends_on:
       - kafka-kraft
     restart: on-failure
