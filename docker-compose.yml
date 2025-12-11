@@ -68,8 +68,8 @@ services:
       KAFKA_TOPIC: 'wikimedia.recentchange'
   
   # Druid services
-  postgres:
-    container_name: postgres
+  druid_db:
+    container_name: druid_db
     image: postgres:latest
     ports:
       - "5432:5432"
@@ -90,15 +90,15 @@ services:
       - wikistreams-net
     environment:
       - ZOO_MY_ID=1
-  coordinator:
+  druid_coordinator:
     image: apache/druid:35.0.0
-    container_name: coordinator
+    container_name: druid_coordinator
     volumes:
       - druid_shared:/opt/shared
       - coordinator_var:/opt/druid/var
     depends_on:
       - zookeeper
-      - postgres
+      - druid_db
     ports:
       - "8081:8081"
     command:
@@ -107,15 +107,15 @@ services:
       - wikistreams-net
     env_file:
       - environment
-  broker:
+  druid_broker:
     image: apache/druid:35.0.0
-    container_name: broker
+    container_name: druid_broker
     volumes:
       - broker_var:/opt/druid/var
     depends_on:
       - zookeeper
-      - postgres
-      - coordinator
+      - druid_db
+      - druid_coordinator
     ports:
       - "8082:8082"
     command:
@@ -124,16 +124,16 @@ services:
       - wikistreams-net
     env_file:
       - environment
-  historical:
+  druid_historical:
     image: apache/druid:35.0.0
-    container_name: historical
+    container_name: druid_historical
     volumes:
       - druid_shared:/opt/shared
       - historical_var:/opt/druid/var
     depends_on: 
       - zookeeper
-      - postgres
-      - coordinator
+      - druid_db
+      - druid_coordinator
     ports:
       - "8083:8083"
     command:
@@ -142,16 +142,16 @@ services:
       - wikistreams-net
     env_file:
       - environment
-  middlemanager:
+  druid_middlemanager:
     image: apache/druid:35.0.0
-    container_name: middlemanager
+    container_name: druid_middlemanager
     volumes:
       - druid_shared:/opt/shared
       - middle_var:/opt/druid/var
     depends_on: 
       - zookeeper
-      - postgres
-      - coordinator
+      - druid_db
+      - druid_coordinator
     ports:
       - "8091:8091"
       - "8100-8105:8100-8105"
@@ -161,15 +161,15 @@ services:
       - wikistreams-net
     env_file:
       - environment
-  router:
+  druid_router:
     image: apache/druid:35.0.0
-    container_name: router
+    container_name: druid_router
     volumes:
       - router_var:/opt/druid/var
     depends_on:
       - zookeeper
-      - postgres
-      - coordinator
+      - druid_db
+      - druid_coordinator
     ports:
       - "8888:8888"
     command:
@@ -218,7 +218,7 @@ services:
     depends_on:
       superset-dashboard-importer:
         condition: service_completed_successfully
-      router:
+      druid_router:
         condition: service_started
     volumes: *superset-volumes
     networks:
