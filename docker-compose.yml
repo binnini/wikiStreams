@@ -1,4 +1,16 @@
+
+x-superset-image: &superset-image apachesuperset.docker.scarf.sh/apache/superset:${TAG:-latest-dev}
+x-superset-volumes:
+  &superset-volumes # /app/pythonpath_docker will be appended to the PYTHONPATH in the final container
+  - ./docker:/app/docker
+  - ./superset-core:/app/superset-core
+  - superset_home:/app/superset_home
+
+networks:
+  wikistreams-net: {}
+
 volumes:
+  # WikiStreams volumes
   metadata_data: {}
   middle_var: {}
   historical_var: {}
@@ -7,7 +19,17 @@ volumes:
   router_var: {}
   druid_shared: {}
   producer_cache: {}
+  # Superset volumes
+  superset_home:
+    external: false
+  db_home:
+    external: false
+  redis:
+    external: false
+
+# WikiStreams services
 services:
+  # Kafka services
   kafka-kraft:
     image: confluentinc/cp-kafka:8.1.1
     container_name: kafka-kraft
@@ -15,8 +37,9 @@ services:
     ports:
       - "9092:9092"
       - "9101:9101" # JMX 모니터링 포트
+    networks:
+      - wikistreams-net
     environment:
-      # 노드 식별자
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: 'broker,controller'
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
@@ -29,17 +52,22 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_JMX_PORT: 9101
       KAFKA_JMX_HOSTNAME: localhost
+  # Producer (Stream fetcher)
   producer:
     build: ./producer
     container_name: producer
     volumes:
       - producer_cache:/cache
+    networks:
+      - wikistreams-net
     depends_on:
       - kafka-kraft
     restart: on-failure
     environment:
       KAFKA_BROKER: 'kafka-kraft:29092'
       KAFKA_TOPIC: 'wikimedia.recentchange'
+  
+  # Druid services
   postgres:
     container_name: postgres
     image: postgres:latest
@@ -47,20 +75,21 @@ services:
       - "5432:5432"
     volumes:
       - metadata_data:/var/lib/postgresql
+    networks:
+      - wikistreams-net
     environment:
       - POSTGRES_PASSWORD=FoolishPassword
       - POSTGRES_USER=druid
       - POSTGRES_DB=druid
-
-  # Need 3.5 or later for container nodes
   zookeeper:
     container_name: zookeeper
     image: zookeeper:3.5.10
     ports:
       - "2181:2181"
+    networks:
+      - wikistreams-net
     environment:
       - ZOO_MY_ID=1
-
   coordinator:
     image: apache/druid:35.0.0
     container_name: coordinator
@@ -74,9 +103,10 @@ services:
       - "8081:8081"
     command:
       - coordinator
+    networks:
+      - wikistreams-net
     env_file:
       - environment
-
   broker:
     image: apache/druid:35.0.0
     container_name: broker
@@ -90,9 +120,10 @@ services:
       - "8082:8082"
     command:
       - broker
+    networks:
+      - wikistreams-net
     env_file:
       - environment
-
   historical:
     image: apache/druid:35.0.0
     container_name: historical
@@ -107,9 +138,10 @@ services:
       - "8083:8083"
     command:
       - historical
+    networks:
+      - wikistreams-net
     env_file:
       - environment
-
   middlemanager:
     image: apache/druid:35.0.0
     container_name: middlemanager
@@ -125,9 +157,10 @@ services:
       - "8100-8105:8100-8105"
     command:
       - middleManager
+    networks:
+      - wikistreams-net
     env_file:
       - environment
-
   router:
     image: apache/druid:35.0.0
     container_name: router
@@ -141,5 +174,130 @@ services:
       - "8888:8888"
     command:
       - router
+    networks:
+      - wikistreams-net
     env_file:
       - environment
+
+  # Superset services
+  redis:
+    image: redis:7
+    container_name: superset_cache
+    restart: unless-stopped
+    volumes:
+      - redis:/data
+    networks:
+      - wikistreams-net
+  db:
+    env_file:
+      - path: docker/.env # default
+        required: true
+      - path: docker/.env-local # optional override
+        required: false
+    image: postgres:16
+    container_name: superset_db
+    restart: unless-stopped
+    volumes:
+      - db_home:/var/lib/postgresql/data
+      - ./docker/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    networks:
+      - wikistreams-net
+  superset:
+    env_file:
+      - path: docker/.env # default
+        required: true
+      - path: docker/.env-local # optional override
+        required: false
+    image: *superset-image
+    container_name: superset_app
+    command: ["/app/docker/docker-bootstrap.sh", "app-gunicorn"]
+    user: "root"
+    restart: unless-stopped
+    ports:
+      - 8088:8088
+    depends_on:
+      superset-dashboard-importer:
+        condition: service_completed_successfully
+      router:
+        condition: service_started
+    volumes: *superset-volumes
+    networks:
+      - wikistreams-net
+  superset-init:
+    image: *superset-image
+    container_name: superset_init
+    command: ["/app/docker/docker-init.sh"]
+    env_file:
+      - path: docker/.env # default
+        required: true
+      - path: docker/.env-local # optional override
+        required: false
+    depends_on:
+      db:
+        condition: service_started
+      redis:
+        condition: service_started
+    user: "root"
+    volumes: *superset-volumes
+    networks:
+      - wikistreams-net
+    healthcheck:
+      disable: true
+  superset-dashboard-importer:
+    image: *superset-image
+    container_name: superset_dashboard_importer
+    command: ["/app/docker/import_dashboard.sh"]
+    env_file:
+      - path: docker/.env
+        required: true
+      - path: docker/.env-local
+        required: false
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    user: "root"
+    volumes: *superset-volumes
+    networks:
+      - wikistreams-net
+  superset-worker:
+    image: *superset-image
+    container_name: superset_worker
+    command: ["/app/docker/docker-bootstrap.sh", "worker"]
+    env_file:
+      - path: docker/.env # default
+        required: true
+      - path: docker/.env-local # optional override
+        required: false
+    restart: unless-stopped
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    user: "root"
+    volumes: *superset-volumes
+    networks:
+      - wikistreams-net
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A superset.tasks.celery_app:app inspect ping -d celery@$$HOSTNAME",
+        ]
+  superset-worker-beat:
+    image: *superset-image
+    container_name: superset_worker_beat
+    command: ["/app/docker/docker-bootstrap.sh", "beat"]
+    env_file:
+      - path: docker/.env # default
+        required: true
+      - path: docker/.env-local # optional override
+        required: false
+    restart: unless-stopped
+    depends_on:
+      superset-init:
+        condition: service_completed_successfully
+    user: "root"
+    volumes: *superset-volumes
+    networks:
+      - wikistreams-net
+    healthcheck:
+      disable: true
