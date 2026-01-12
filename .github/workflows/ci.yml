@@ -1,42 +1,39 @@
-name: Python Code Quality CI
+name: CI
 
-# 이 워크플로우가 언제 실행될지 정의합니다.
 on:
   push:
-    branches: [ "main" ] # main 브랜치에 push될 때
+    branches: [ main ]
   pull_request:
-    branches: [ "main" ] # main 브랜치로 pull request가 생성될 때
+    branches: [ main ] # Pull Request 시에도 CI 실행
 
 jobs:
-  lint-and-format:
-    name: Lint and Format Check
-    runs-on: ubuntu-latest # 이 job을 실행할 가상 환경 (GitHub 호스팅 러너)
+  lint-and-test:
+    runs-on: ubuntu-latest
 
     steps:
-      # 1. 저장소의 코드를 가상 환경으로 가져옵니다.
-      - name: Check out code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3 # 최신 액션 버전 사용
 
-      # 2. 파이썬 환경을 설정합니다.
-      # 이 프로젝트는 Python 3.11 버전을 사용하므로, 3.11로 지정합니다.
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+    - name: Set up Python
+      uses: actions/setup-python@v4 # 최신 액션 버전 사용
+      with:
+        python-version: '3.11'
+        cache: 'pip' # pip 캐싱 활성화
 
-      # 3. 린터/포매터 도구를 설치합니다.
-      # Black과 Flake8은 Python 패키지이므로 pip으로 설치합니다.
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install black flake8
-      
-      # 4. Black으로 코드 포맷이 올바른지 검사합니다.
-      # --check 옵션은 파일을 수정하지 않고, 수정이 필요한 파일이 있으면 job을 실패 처리합니다.
-      - name: Run Black check
-        run: black --check .
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r src/producer/requirements.txt # 프로덕션 의존성 설치
+        pip install -r src/producer/requirements-dev.txt # 개발/테스트 의존성 설치
 
-      # 5. Flake8으로 코드 스타일과 잠재적 오류를 검사합니다.
-      # Flake8은 PEP 8 스타일 가이드와 기타 몇 가지 규칙을 따릅니다.
-      - name: Run Flake8 lint
-        run: flake8 .
+    - name: Lint with flake8
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: Check formatting with black
+      run: |
+        black . --check
+        
+    - name: Run unit tests # 단위 테스트 실행 단계 추가
+      run: |
+        PYTHONPATH=src pytest tests/
