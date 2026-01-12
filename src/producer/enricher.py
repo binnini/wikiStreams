@@ -9,6 +9,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+
 class WikidataEnricher:
     def __init__(self):
         pass
@@ -45,7 +46,9 @@ class WikidataEnricher:
                         or "-"
                     )
                     results[q_id] = {"label": label, "description": desc}
-                logging.info(f"Wikidata API로부터 {len(results)}개의 정보를 가져왔습니다.")
+                logging.info(
+                    f"Wikidata API로부터 {len(results)}개의 정보를 가져왔습니다."
+                )
                 return results
         except httpx.HTTPError as e:
             logging.error(f"❌ Wikidata API 오류: {e}")
@@ -70,7 +73,9 @@ class WikidataEnricher:
 
             newly_fetched_qids = {}
             if qids_to_fetch:
-                newly_fetched_qids = self.fetch_wikidata_info_in_bulk(list(qids_to_fetch))
+                newly_fetched_qids = self.fetch_wikidata_info_in_bulk(
+                    list(qids_to_fetch)
+                )
                 if newly_fetched_qids:
                     save_qids_to_cache(newly_fetched_qids)
 
@@ -84,7 +89,7 @@ class WikidataEnricher:
             if qid in all_qid_info:
                 event["wikidata_label"] = all_qid_info[qid]["label"]
                 event["wikidata_description"] = all_qid_info[qid]["description"]
-        
+
         new_api_calls = len(all_qid_info) - len(cached_qids) if q_ids_in_batch else 0
         logging.info(
             f"정보 보강 후 {len(events)}개의 이벤트를 전송했습니다. (신규 API 호출: {new_api_calls}개)"

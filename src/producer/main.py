@@ -1,7 +1,6 @@
 import os
 import logging
 import threading
-import time
 
 # 로컬 모듈 임포트
 from .cache import setup_database, close_db_connection
@@ -20,12 +19,13 @@ KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "wikimedia.recentchange")
 BATCH_SIZE = 500
 BATCH_TIMEOUT_SECONDS = 10.0
 
+
 def run_producer():
     """
     메인 프로듀서 함수: SSE 스트림에 연결하고 마이크로 배치로 메시지를 처리합니다.
     """
     setup_database()
-    
+
     enricher = WikidataEnricher()
     sender = KafkaSender(KAFKA_BROKER, KAFKA_TOPIC)
 
@@ -36,6 +36,7 @@ def run_producer():
     collector = WikimediaCollector(BATCH_SIZE, BATCH_TIMEOUT_SECONDS)
     collector.set_callback(process_batch)
     collector.run()
+
 
 if __name__ == "__main__":
     main_thread = threading.Thread(target=run_producer)

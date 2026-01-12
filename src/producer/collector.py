@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 import httpx
@@ -10,9 +9,11 @@ logging.basicConfig(
 )
 WIKIMEDIA_URL = "https://stream.wikimedia.org/v2/stream/recentchange"
 
+
 # 테스트 환경에서 무한 루프를 제어하기 위한 예외
 class StopCollector(Exception):
     pass
+
 
 class WikimediaCollector:
     def __init__(self, batch_size: int, batch_timeout_seconds: float):
@@ -40,7 +41,9 @@ class WikimediaCollector:
                 headers = {"User-Agent": "wikiStreams-project/0.3"}
                 with httpx.Client(timeout=None, headers=headers) as client:
                     with connect_sse(client, "GET", WIKIMEDIA_URL) as event_source:
-                        logging.info("✅ Wikimedia SSE 스트림에 성공적으로 연결되었습니다.")
+                        logging.info(
+                            "✅ Wikimedia SSE 스트림에 성공적으로 연결되었습니다."
+                        )
                         for sse in event_source.iter_sse():
                             if not sse.data:
                                 current_time = time.time()

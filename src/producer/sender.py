@@ -1,4 +1,3 @@
-import os
 import json
 import logging
 import time
@@ -7,6 +6,7 @@ from kafka import KafkaProducer
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
 
 class KafkaSender:
     def __init__(self, kafka_broker: str, kafka_topic: str):
@@ -27,11 +27,13 @@ class KafkaSender:
             except Exception as e:
                 logging.error(f"❌ Kafka Producer 연결 실패: {e}, 5초 후 재시도...")
                 time.sleep(5)
-    
+
     def send_events(self, events: list):
         if not events:
             return
         for event in events:
             self.producer.send(self.kafka_topic, value=event)
         self.producer.flush()
-        logging.info(f"{len(events)}개의 이벤트를 Kafka 토픽 '{self.kafka_topic}'으로 전송했습니다.")
+        logging.info(
+            f"{len(events)}개의 이벤트를 Kafka 토픽 '{self.kafka_topic}'으로 전송했습니다."
+        )
