@@ -25,8 +25,8 @@ project_root/
 ```
 
 -   **`tests/unit/`**: 각 모듈(함수, 클래스)을 외부 의존성(네트워크, DB 등)으로부터 완전히 분리(고립)하여 테스트합니다. 매우 빠르고 실패 원인을 명확하게 알 수 있습니다.
--   **`tests/integration/`**: 두 개 이상의 모듈이나 서비스(e.g., Sender와 실제 Kafka)를 연동하여 상호작용을 검증하는 테스트를 위치시킵니다.
--   **`tests/e2e/`**: 전체 시스템의 흐름을 사용자 관점에서 처음부터 끝까지 검증하는 테스트를 위치시킵니다.
+-   **`tests/integration/`**: 두 개 이상의 모듈이나 서비스(e.g., Sender와 실제 Kafka)를 연동하여 상호작용을 검증합니다. 실행을 위해 Docker 환경(Kafka)이 필요할 수 있습니다.
+-   **`tests/e2e/`**: (미래의) 전체 시스템의 흐름을 사용자 관점에서 처음부터 끝까지 검증하는 테스트를 위치시킵니다.
 -   **`conftest.py`**: 모든 테스트 파일에서 공용으로 사용할 수 있는 Pytest Fixture나 헬퍼 함수를 정의하는 곳입니다.
 
 ## 2. 테스트 실행 방법
@@ -38,10 +38,9 @@ project_root/
 프로젝트 루트 디렉토리에서 다음 명령어를 실행하면 `tests/` 디렉토리 하위의 모든 테스트를 실행할 수 있습니다.
 
 ```bash
-PYTHONPATH=src pytest tests/
+# PYTHONPATH를 설정하여 src 디렉토리를 모듈 검색 경로에 추가합니다.
+PYTHONPATH=src pytest
 ```
-
--   `PYTHONPATH=src`: `src` 디렉토리를 Python의 모듈 검색 경로에 추가하여, 테스트 코드에서 `from producer import ...`와 같은 import 구문을 올바르게 사용할 수 있도록 합니다.
 
 ### 특정 테스트만 실행
 
@@ -50,6 +49,9 @@ PYTHONPATH=src pytest tests/
 ```bash
 # 단위 테스트만 실행
 PYTHONPATH=src pytest tests/unit/
+
+# 통합 테스트만 실행 (Docker 환경 필요)
+PYTHONPATH=src pytest tests/integration/
 
 # collector 테스트만 실행
 PYTHONPATH=src pytest tests/unit/producer/test_collector.py

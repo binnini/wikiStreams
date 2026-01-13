@@ -2,7 +2,7 @@
 
 [![Python Code Quality CI](https://github.com/puding-development/wikiStreams/actions/workflows/ci.yml/badge.svg)](https://github.com/puding-development/wikiStreams/actions/workflows/ci.yml)
 
-**WikiStreams**는 전 세계 위키미디어(위키피디아, 위키데이터 등)의 실시간 변경 로그 스트림을 분석하여 트렌드를 파악하는 데이터 파이프라인 프로젝트입니다. M4 Mac Mini를 활용한 홈 랩(Home Lab) 환경에서 운영되며, 비용을 들이지 않고 현업 수준의 실시간 데이터 처리 아키텍처를 구축하는 것을 목표로 합니다.
+**WikiStreams**는 전 세계 위키미디어(위키피디아, 위키데이터 등)의 실시간 변경 로그 스트림을 분석하여 트렌드를 파악하는 데이터 파이프라인 프로젝트입니다. 홈 랩(Home Lab) 환경에서 운영되며, 비용을 들이지 않고 현업 수준의 실시간 데이터 처리 아키텍처를 구축하는 것을 목표로 합니다.
 
 현재 데이터 수집 및 보강 파이프라인이 완성되었으며, 최종 목표인 실시간 분석 대시보드를 **Apache Superset**으로 구축하는 단계를 진행하고 있습니다.
 
@@ -17,7 +17,7 @@ graph TD
         A[<fa:fa-globe> Wikimedia SSE]
     end
 
-    subgraph "M4 Mac Mini (Docker Host)"
+    subgraph "Docker Host"
         direction TB
         
         subgraph "Ingestion & Enrichment"
