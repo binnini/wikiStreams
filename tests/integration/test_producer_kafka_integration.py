@@ -21,21 +21,23 @@ def check_kafka_connection(address):
     """Kafka 브로커에 연결 가능한지 확인하는 헬퍼 함수"""
     try:
         from kafka import KafkaAdminClient
+
         client = KafkaAdminClient(bootstrap_servers=address)
         client.close()
         return True
     except Exception:
         return False
 
+
 @pytest.fixture(scope="module")
 def kafka_service(docker_ip, request):
     """
-    Kafka 서비스를 준비합니다. 
+    Kafka 서비스를 준비합니다.
     1. 먼저 localhost:9092에 이미 떠 있는지 확인합니다.
     2. 없다면 pytest-docker를 통해 기동을 시도하며, 이름 충돌(Conflict) 발생 시 기존 컨테이너를 사용합니다.
     """
     local_address = "localhost:9092"
-    
+
     # 1. 이미 로컬에 떠 있는지 확인
     if check_kafka_connection(local_address):
         return local_address
@@ -49,7 +51,9 @@ def kafka_service(docker_ip, request):
 
         # 서비스가 준비될 때까지 대기
         docker_services.wait_until_responsive(
-            timeout=30.0, pause=1.0, check=lambda: check_kafka_connection(broker_address)
+            timeout=30.0,
+            pause=1.0,
+            check=lambda: check_kafka_connection(broker_address),
         )
         return broker_address
     except Exception as e:
@@ -121,6 +125,8 @@ def test_producer_sends_to_kafka(
                     found = True
                     break
 
-    assert len(messages) > 0, f"Kafka Consumer가 제목이 '{test_title}'인 메시지를 수신하지 못했습니다."
+    assert (
+        len(messages) > 0
+    ), f"Kafka Consumer가 제목이 '{test_title}'인 메시지를 수신하지 못했습니다."
     assert messages[0]["id"] == test_id
     assert messages[0]["title"] == test_title
