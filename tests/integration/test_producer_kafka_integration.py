@@ -8,12 +8,14 @@ from producer.sender import KafkaSender
 # docker-compose.yml 파일이 있는 프로젝트 루트 경로 설정
 # 현재 파일 위치: tests/integration/test_producer_kafka_integration.py
 # 루트 위치: ../../
-COMPOSE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+COMPOSE_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
 
 @pytest.fixture(scope="session")
 def docker_compose_file(pytestconfig):
     """docker-compose.yml 파일의 경로를 pytest-docker에 알려줍니다."""
     return os.path.join(COMPOSE_PATH, "docker-compose.yml")
+
 
 @pytest.fixture(scope="module")
 def kafka_service(docker_ip, docker_services):
@@ -30,57 +32,62 @@ def kafka_service(docker_ip, docker_services):
     def check_kafka():
         try:
             from kafka import KafkaAdminClient
+
             client = KafkaAdminClient(bootstrap_servers=broker_address)
             client.close()
             return True
         except Exception:
             return False
 
-    docker_services.wait_until_responsive(
-        timeout=30.0, pause=1.0, check=check_kafka
-    )
+    docker_services.wait_until_responsive(timeout=30.0, pause=1.0, check=check_kafka)
 
     return broker_address
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture(scope="module")
 def kafka_topic():
     return "wikimedia.recentchange"
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture(scope="module")
 def kafka_producer_client(kafka_service, kafka_topic):
     # kafka_service는 이미 'host:port' 문자열을 반환함
     sender = KafkaSender(kafka_service, kafka_topic)
     return sender
 
-@pytest.fixture(scope='module')
+
+@pytest.fixture(scope="module")
 def kafka_consumer_client(kafka_service, kafka_topic):
     consumer = KafkaConsumer(
         kafka_topic,
         bootstrap_servers=[kafka_service],
-        group_id=f'test-consumer-group-{time.time()}',
-        auto_offset_reset='earliest',
+        group_id=f"test-consumer-group-{time.time()}",
+        auto_offset_reset="earliest",
         enable_auto_commit=False,
-        value_deserializer=lambda x: json.loads(x.decode('utf-8'))
+        value_deserializer=lambda x: json.loads(x.decode("utf-8")),
     )
     # Consumer가 연결될 수 있게 짧게 대기
     time.sleep(2)
     yield consumer
     consumer.close()
 
+
 @pytest.mark.integration
-def test_producer_sends_to_kafka(kafka_producer_client, kafka_consumer_client, kafka_topic):
+def test_producer_sends_to_kafka(
+    kafka_producer_client, kafka_consumer_client, kafka_topic
+):
     # Arrange
     test_message = {
-        'id': 1,
-        'meta': {'uri': 'https://test.wikimedia.org/wiki/Test_Page'},
-        'title': 'Test_Page',
-        'comment': 'Integration test message',
-        'timestamp': int(time.time())
+        "id": 1,
+        "meta": {"uri": "https://test.wikimedia.org/wiki/Test_Page"},
+        "title": "Test_Page",
+        "comment": "Integration test message",
+        "timestamp": int(time.time()),
     }
-    
+
     # Act
     kafka_producer_client.send_events([test_message])
-    
+
     # Assert
     messages = []
     start_time = time.time()
@@ -92,5 +99,5 @@ def test_producer_sends_to_kafka(kafka_producer_client, kafka_consumer_client, k
                 messages.append(record.value)
 
     assert len(messages) > 0, "Kafka Consumer가 메시지를 수신하지 못했습니다."
-    assert messages[0]['id'] == test_message['id']
-    assert messages[0]['title'] == test_message['title']
+    assert messages[0]["id"] == test_message["id"]
+    assert messages[0]["title"] == test_message["title"]
