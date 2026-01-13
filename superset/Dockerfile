@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir \
 # /app/pythonpath는 Superset이 설정을 로드하는 기본 경로 중 하나입니다.
 COPY superset_config.py /app/pythonpath/superset_config.py
 COPY init_superset.sh /app/init_superset.sh
+COPY datasources /app/datasources
 
 RUN chmod +x /app/init_superset.sh
 

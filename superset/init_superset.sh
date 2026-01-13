@@ -14,5 +14,9 @@ superset db upgrade
 # 3. 기본 역할 및 권한 설정
 superset init
 
-# 4. 서버 실행
+# 4. 데이터소스(DB 연결) 자동 임포트
+# YAML 파일에 정의된 설정을 로드합니다.
+superset import-datasources -p /app/datasources/druid.yaml
+
+# 5. 서버 실행
 /usr/bin/run-server.sh

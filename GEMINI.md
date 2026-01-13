@@ -28,6 +28,12 @@
 
 -   `druid/ingestion-spec.json`: Kafka 데이터를 Druid로 수집하기 위한 Ingestion Supervisor 설정 파일입니다.
 
+-   `superset/`: Apache Superset 설정 및 초기화 관련 파일들입니다.
+    -   `Dockerfile`: 드라이버 설치 등을 위한 커스텀 이미지 빌드 파일.
+    -   `superset_config.py`: 보안, DB 연동, 언어 설정 등.
+    -   `init_superset.sh`: 초기화(계정 생성, DB 마이그레이션) 스크립트.
+    -   `datasources/druid.yaml`: Druid 연결 정보 (IaC).
+
 -   `src/producer/`: 데이터 수집 및 보강을 담당하는 Python 애플리케이션입니다.
     -   `config.py`: **중앙 집중식 설정 관리 모듈**입니다. `pydantic-settings`를 사용하여 환경변수 및 `.env` 파일을 통해 시스템 설정을 관리합니다.
     -   `main.py`: 파이프라인 실행 엔트리 포인트입니다.
@@ -69,6 +75,7 @@
 ### 완료된 항목
 - [x] **테스트 격리 및 정리 (Test Isolation & Teardown)**: E2E 테스트 시 리소스 격리 및 자동 종료 구현.
 - [x] **설정 관리 (Configuration Management)**: `pydantic-settings` 도입 및 설정 중앙화.
+- [x] **Superset 통합 (Infrastructure Integration)**: Docker Compose에 Superset/Redis 추가 및 초기화 스크립트 구현.
 
 ### 진행 예정 항목
 - [ ] **예외 처리 및 복구 (Resilience & DLQ)**:
@@ -77,3 +84,18 @@
     -   현재의 동기식(Blocking) I/O 구조를 `asyncio`, `aiohttp`, `aiokafka` 등을 활용한 **비동기 파이프라인**으로 전환하여 처리량 증대.
 - [ ] **CI 파이프라인 최적화**:
     -   **Smoke Test** (PR 단계)와 **Full E2E Test** (Merge 단계)로 CI 단계를 이원화하여 빌드 시간 및 비용 최적화.
+
+## 9. 향후 과제 (Superset Visualization)
+
+다음 에이전트는 아래 항목들을 우선적으로 수행해야 합니다.
+
+1.  **Druid 데이터베이스 연결 완전 자동화**:
+    -   현재 `init_superset.sh`에서 `import-datasources`를 실행하지만, Druid Router 부팅 지연 등으로 인해 실패하는 경우가 있음.
+    -   `wait-for-it` 스크립트 등을 도입하여 Druid가 준비될 때까지 기다린 후 등록하도록 개선 필요.
+2.  **기본 데이터셋(Dataset) 및 지표(Metric) 생성**:
+    -   `wikimedia.recentchange` 테이블을 Superset Dataset으로 등록.
+    -   주요 지표(Edit Count, Added Length Sum 등)를 코드로 미리 정의(YAML).
+3.  **기초 대시보드 템플릿 작성 (Dashboard as Code)**:
+    -   실시간 트렌드를 보여주는 기본 대시보드(Chart + Dashboard)를 YAML 파일로 작성하여 컨테이너 기동 시 자동 임포트.
+4.  **영속성(Persistence) 검증**:
+    -   컨테이너 재시작 시 대시보드 및 설정이 유지되는지 확인.
