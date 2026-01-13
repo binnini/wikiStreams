@@ -1,8 +1,8 @@
-import os
 import logging
 import threading
 
 # 로컬 모듈 임포트
+from .config import settings
 from .cache import setup_database, close_db_connection
 from .collector import WikimediaCollector
 from .enricher import WikidataEnricher
@@ -10,15 +10,9 @@ from .sender import KafkaSender
 
 # --- 1. 설정값 불러오기 ---
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=getattr(logging, settings.log_level.upper(), logging.INFO), 
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
-KAFKA_BROKER = os.getenv("KAFKA_BROKER", "localhost:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "wikimedia.recentchange")
-
-# 마이크로 배치 설정
-BATCH_SIZE = 500
-BATCH_TIMEOUT_SECONDS = 10.0
-
 
 def run_producer():
     """
@@ -27,13 +21,13 @@ def run_producer():
     setup_database()
 
     enricher = WikidataEnricher()
-    sender = KafkaSender(KAFKA_BROKER, KAFKA_TOPIC)
+    sender = KafkaSender(settings.kafka_broker, settings.kafka_topic)
 
     def process_batch(events: list):
         enriched_events = enricher.enrich_events(events)
         sender.send_events(enriched_events)
 
-    collector = WikimediaCollector(BATCH_SIZE, BATCH_TIMEOUT_SECONDS)
+    collector = WikimediaCollector(settings.batch_size, settings.batch_timeout_seconds)
     collector.set_callback(process_batch)
     collector.run()
 

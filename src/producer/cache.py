@@ -1,11 +1,10 @@
 import sqlite3
 import threading
 import logging
+from .config import settings
 
 # 스레드 간에 SQLite 연결을 안전하게 공유하기 위해 Thread-local 데이터 사용
 local = threading.local()
-
-DATABASE_PATH = "/cache/wikidata_cache.db"
 
 
 def get_db_connection():
@@ -17,10 +16,10 @@ def get_db_connection():
         try:
             # check_same_thread=False는 이 예제처럼 간단한 스레딩 모델에서
             # 단일 스레드가 연결을 생성하고 사용을 보장할 때 허용됩니다.
-            db = sqlite3.connect(DATABASE_PATH, check_same_thread=False)
+            db = sqlite3.connect(settings.database_path, check_same_thread=False)
             db.row_factory = sqlite3.Row  # 결과를 딕셔너리처럼 접근 가능하게 함
             local._db = db
-            logging.info("새로운 SQLite 연결을 생성했습니다.")
+            logging.info(f"새로운 SQLite 연결을 생성했습니다. (Path: {settings.database_path})")
         except sqlite3.Error as e:
             logging.error(f"SQLite 연결 생성 실패: {e}")
             return None

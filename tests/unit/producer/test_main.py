@@ -1,38 +1,31 @@
 import pytest
-from unittest.mock import MagicMock, ANY
-
+import time
+import threading
+from unittest.mock import patch, MagicMock
 from producer import main
+from producer.config import settings
 
 
 @pytest.fixture
-def mock_dependencies(mocker):
-    """main 모듈이 의존하는 모든 외부 클래스와 함수를 모킹합니다."""
-    mock_setup_db = mocker.patch("producer.main.setup_database")
-    mock_close_db = mocker.patch("producer.main.close_db_connection")
+def mock_dependencies():
+    # 모든 의존성을 Mocking합니다.
+    with patch("producer.main.setup_database") as mock_setup, patch(
+        "producer.main.close_db_connection"
+    ) as mock_close, patch(
+        "producer.main.WikidataEnricher"
+    ) as MockEnricher, patch(
+        "producer.main.KafkaSender"
+    ) as MockSender, patch(
+        "producer.main.WikimediaCollector"
+    ) as MockCollector:
 
-    mock_collector_class = mocker.patch("producer.main.WikimediaCollector")
-    mock_enricher_class = mocker.patch("producer.main.WikidataEnricher")
-    mock_sender_class = mocker.patch("producer.main.KafkaSender")
-
-    # 클래스들의 인스턴스 반환값을 MagicMock으로 설정
-    mock_collector_instance = MagicMock()
-    mock_enricher_instance = MagicMock()
-    mock_sender_instance = MagicMock()
-
-    mock_collector_class.return_value = mock_collector_instance
-    mock_enricher_class.return_value = mock_enricher_instance
-    mock_sender_class.return_value = mock_sender_instance
-
-    return {
-        "setup_db": mock_setup_db,
-        "close_db": mock_close_db,
-        "Collector": mock_collector_class,
-        "Enricher": mock_enricher_class,
-        "Sender": mock_sender_class,
-        "collector_instance": mock_collector_instance,
-        "enricher_instance": mock_enricher_instance,
-        "sender_instance": mock_sender_instance,
-    }
+        yield {
+            "setup_db": mock_setup,
+            "close_db": mock_close,
+            "Enricher": MockEnricher,
+            "Sender": MockSender,
+            "Collector": MockCollector,
+        }
 
 
 def test_run_producer_initializes_and_runs_pipeline(mock_dependencies):
@@ -47,46 +40,45 @@ def test_run_producer_initializes_and_runs_pipeline(mock_dependencies):
     # 2. 각 클래스가 올바른 인자로 인스턴스화되었는지 확인
     mock_dependencies["Enricher"].assert_called_once_with()
     mock_dependencies["Sender"].assert_called_once_with(
-        main.KAFKA_BROKER, main.KAFKA_TOPIC
+        settings.kafka_broker, settings.kafka_topic
     )
     mock_dependencies["Collector"].assert_called_once_with(
-        main.BATCH_SIZE, main.BATCH_TIMEOUT_SECONDS
+        settings.batch_size, settings.batch_timeout_seconds
     )
 
-    # 3. 콜백 함수가 올바르게 설정되었는지 확인
-    mock_dependencies["collector_instance"].set_callback.assert_called_once_with(
-        ANY
-    )  # process_batch 함수
-
-    # 4. 파이프라인의 핵심인 run() 메서드가 호출되었는지 확인
-    mock_dependencies["collector_instance"].run.assert_called_once()
+    # 3. Collector가 실행되었는지 확인
+    collector_instance = mock_dependencies["Collector"].return_value
+    collector_instance.set_callback.assert_called_once()
+    collector_instance.run.assert_called_once()
 
 
 def test_process_batch_callback_flow(mock_dependencies):
     # Arrange
-    # collector.set_callback으로 전달된 실제 콜백 함수(process_batch)를 가져옵니다.
-    main.run_producer()  # run_producer를 실행하여 콜백이 설정되도록 함
+    # run_producer를 실행하여 내부의 process_batch 함수가 callback으로 등록되게 합니다.
+    main.run_producer()
 
-    # set_callback이 호출될 때 사용된 인자(콜백 함수)를 캡처
-    process_batch_callback = mock_dependencies[
-        "collector_instance"
-    ].set_callback.call_args[0][0]
+    # 등록된 콜백 함수 가져오기
+    collector_instance = mock_dependencies["Collector"].return_value
+    args, _ = collector_instance.set_callback.call_args
+    process_batch_callback = args[0]
 
-    test_events = [{"id": 1}, {"id": 2}]
-    enriched_events = [{"id": 1, "enriched": True}, {"id": 2, "enriched": True}]
+    # 테스트용 이벤트 데이터
+    raw_events = [{"title": "Event1"}, {"title": "Event2"}]
+    enriched_events = [{"title": "Event1", "label": "L1"}, {"title": "Event2"}]
 
-    # enricher와 sender의 동작을 미리 정의
-    mock_dependencies["enricher_instance"].enrich_events.return_value = enriched_events
+    # Mock 객체들의 동작 설정
+    enricher_instance = mock_dependencies["Enricher"].return_value
+    enricher_instance.enrich_events.return_value = enriched_events
+
+    sender_instance = mock_dependencies["Sender"].return_value
 
     # Act
-    # 캡처한 콜백 함수를 직접 실행합니다.
-    process_batch_callback(test_events)
+    # 콜백 함수 실행 (마치 Collector가 배치 처리를 완료하고 호출한 것처럼)
+    process_batch_callback(raw_events)
 
     # Assert
-    # 콜백 함수 내부의 흐름(enricher -> sender)이 올바른지 확인
-    mock_dependencies["enricher_instance"].enrich_events.assert_called_once_with(
-        test_events
-    )
-    mock_dependencies["sender_instance"].send_events.assert_called_once_with(
-        enriched_events
-    )
+    # Enricher가 호출되었는지 확인
+    enricher_instance.enrich_events.assert_called_once_with(raw_events)
+
+    # Sender가 보강된 데이터를 전송했는지 확인
+    sender_instance.send_events.assert_called_once_with(enriched_events)

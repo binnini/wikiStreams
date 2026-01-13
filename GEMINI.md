@@ -22,68 +22,42 @@
 
 ## 3. 주요 파일 및 디렉토리 설명
 
--   `.github/workflows/ci.yml`: GitHub Actions 워크플로우 파일입니다. `main` 브랜치에 코드가 푸시될 때마다 `black` 포매터와 `flake8` 린터를 실행하여 코드 품질을 검사합니다.
+-   `.github/workflows/ci.yml`: GitHub Actions 워크플로우 파일입니다. `Unit -> Integration -> E2E` 단계별 테스트와 `black`, `flake8` 검사를 수행합니다.
 
--   `detect_surge.py`: **독립 실행형 분석 스크립트**입니다. 실시간 파이프라인의 일부가 아니며, Druid에 직접 SQL 쿼리를 보내 특정 기간 동안 편집 횟수가 급증한 문서를 찾아내는 데 사용됩니다. `pandas`를 사용하여 결과를 터미널에 출력합니다.
+-   `detect_surge.py`: **독립 실행형 분석 스크립트**입니다. Druid에 SQL 쿼리를 보내 편집 급상승 문서를 찾아냅니다.
 
--   `docker-compose.yml`: 프로젝트의 모든 인프라(Kafka, Druid 클러스터, Producer)를 정의하고 실행하는 파일입니다. `docker compose up -d` 명령어로 모든 서비스를 시작할 수 있습니다.
+-   `druid/ingestion-spec.json`: Kafka 데이터를 Druid로 수집하기 위한 Ingestion Supervisor 설정 파일입니다.
 
--   `producer/`: 데이터 수집 및 보강을 담당하는 Python 애플리케이션입니다.
-    -   `main.py`: Wikimedia SSE 스트림에 연결하고, 이벤트를 마이크로 배치로 처리하며, 데이터를 보강한 후 Kafka로 전송하는 핵심 로직이 포함되어 있습니다.
-    -   `cache.py`: Wikidata API로부터 가져온 Q-ID 정보를 저장하고 조회하는 SQLite 캐시 관련 함수들이 정의되어 있습니다.
-    -   `Dockerfile`: 이 producer 애플리케이션을 위한 Docker 이미지를 빌드하는 방법을 정의합니다.
-    -   `requirements.txt`: producer 실행에 필요한 Python 라이브러리 목록입니다.
+-   `src/producer/`: 데이터 수집 및 보강을 담당하는 Python 애플리케이션입니다.
+    -   `config.py`: **중앙 집중식 설정 관리 모듈**입니다. `pydantic-settings`를 사용하여 환경변수 및 `.env` 파일을 통해 시스템 설정을 관리합니다.
+    -   `main.py`: 파이프라인 실행 엔트리 포인트입니다.
+    -   `cache.py`: Wikidata API 캐시(SQLite) 관련 함수들입니다.
+    -   `requirements.txt`: `pydantic-settings` 등 필요한 라이브러리 목록입니다.
 
-## 4. 주요 명령어
+## 4. 설정 및 환경 관리
 
--   **모든 서비스 시작**:
-    ```bash
-    docker compose up -d
-    ```
+프로젝트의 모든 설정은 `src/producer/config.py`의 `Settings` 클래스에서 관리됩니다.
+-   **환경변수 우선순위**: 1) 시스템 환경변수, 2) `.env` 파일, 3) 코드 내 기본값.
+-   주요 설정 항목: Kafka 브로커/토픽 주소, SQLite DB 경로, 배치 사이즈 등.
 
--   **Kafka 토픽 데이터 확인**:
-    ```bash
-    docker exec -it kafka-kraft kafka-console-consumer \
-    --bootstrap-server kafka-kraft:29092 \
-    --topic wikimedia.recentchange
-    ```
+## 5. 테스트 전략 (`pytest`)
 
--   **로컬 코드 품질 검사**:
-    ```bash
-    # Black으로 자동 포맷팅
-    black .
-    # Flake8으로 린트 검사
-    flake8 .
-    ```
+이 프로젝트는 강력한 자동화 테스트 체계를 갖추고 있습니다.
 
--   **테스트 실행**:
-    ```bash
-    # 모든 테스트 실행
-    pytest
-    # 단위 테스트만 실행
-    pytest tests/unit
-    # 통합 테스트만 실행 (Docker 환경 필요)
-    pytest tests/integration
-    ```
+-   **단위 테스트 (`tests/unit/`)**: 외부 의존성 없이 각 모듈의 로직을 독립적으로 검증합니다.
+-   **통합 테스트 (`tests/integration/`)**: 
+    -   **Enrichment Cache**: Wikidata API 모킹과 실제 SQLite 캐시 간의 상호작용을 검증합니다.
+    -   **Kafka Integration**: 실제 Kafka 브로커와의 메시지 송수신을 검증합니다. (이미 실행 중인 인프라 활용 가능)
+    -   **E2E Pipeline**: `Producer -> Kafka -> Druid` 전체 흐름을 검증합니다. 테스트마다 고유한 토픽과 데이터소스를 생성하여 **리소스 격리**를 보장하며, 테스트 종료 후 **Teardown(Supervisor 종료)**을 수행합니다.
 
--   **급상승 트렌드 분석 (예시)**:
-    ```bash
-    python detect_surge.py --recent-hours 1 --previous-hours 2 --min-edits 5
-    ```
+## 6. 주요 명령어
 
-## 5. Gemini 에이전트를 위한 가이드
+-   **모든 서비스 시작**: `docker compose up -d`
+-   **전체 테스트 실행**: `PYTHONPATH=src pytest tests/`
+-   **로컬 코드 품질 검사**: `black .` 및 `flake8 .`
 
--   **코드 수정 시**: 프로젝트는 `black`과 `flake8`을 사용하므로, 코드 변경 후에는 반드시 이 두 도구를 사용하여 코드 스타일을 일관성 있게 유지해야 합니다.
--   **의존성 추가 시**: `producer`에 새로운 라이브러리를 추가할 경우, `producer/requirements.txt` 파일에 명시해야 합니다.
--   **인프라 변경 시**: Kafka, Druid 등 서비스의 설정을 변경해야 할 경우, `docker-compose.yml` 파일을 수정해야 합니다.
+## 7. Gemini 에이전트를 위한 가이드
 
-## 6. 테스트 전략
-
-이 프로젝트는 `pytest`를 사용하여 코드의 안정성을 보장합니다.
-
--   **단위 테스트 (`tests/unit/`)**: 
-    -   외부 종속성(Kafka, API, DB) 없이 각 모듈의 로직을 독립적으로 검증합니다.
-    -   `enricher`, `collector`, `sender`, `cache` 등 각 컴포넌트별로 테스트 케이스가 구성되어 있습니다.
--   **통합 테스트 (`tests/integration/`)**:
-    -   실제 Docker 컨테이너(Kafka 등)와 연동하여 시스템 간의 상호작용을 검증합니다.
-    -   `pytest-docker`를 사용하여 테스트 실행 시 필요한 인프라를 자동으로 띄우고 내릴 수 있습니다.
+-   **설정 변경 시**: `src/producer/config.py`를 먼저 확인하고 필요한 경우 환경변수를 추가하십시오.
+-   **인프라 변경 시**: `docker-compose.yml`과 `druid/ingestion-spec.json`을 함께 확인해야 합니다.
+-   **테스트 추가 시**: E2E 테스트의 경우 `tests/integration/test_e2e_pipeline.py`의 `e2e_context` Fixture를 활용하여 리소스를 격리하십시오.

@@ -1,6 +1,7 @@
 import sqlite3
 import pytest
 from producer import cache
+from producer.config import settings
 
 
 @pytest.fixture
@@ -11,8 +12,9 @@ def temp_db(tmp_path, monkeypatch):
     """
     db_path = tmp_path / "test_cache.db"
 
-    # cache 모듈의 전역 변수인 DATABASE_PATH를 테스트용 DB 경로로 교체
-    monkeypatch.setattr(cache, "DATABASE_PATH", str(db_path))
+    # cache 모듈이 사용하는 설정 객체의 database_path 속성을 테스트용 DB 경로로 교체
+    # 주의: settings 객체 자체는 불변이 아니므로 속성을 직접 변경할 수 있습니다.
+    monkeypatch.setattr(settings, "database_path", str(db_path))
 
     # DB 초기화 및 연결/커서 객체 반환
     cache.setup_database()
@@ -23,7 +25,8 @@ def temp_db(tmp_path, monkeypatch):
 def test_setup_database(temp_db):
     # temp_db fixture가 실행되면 DB는 이미 설정된 상태
     # 연결 객체를 통해 테이블이 실제로 생성되었는지 확인
-    conn = sqlite3.connect(cache.DATABASE_PATH)
+    # settings.database_path를 사용하여 연결
+    conn = sqlite3.connect(settings.database_path)
     cursor = conn.cursor()
     cursor.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='wikidata_cache'"
