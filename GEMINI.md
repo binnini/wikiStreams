@@ -56,6 +56,16 @@
     flake8 .
     ```
 
+-   **테스트 실행**:
+    ```bash
+    # 모든 테스트 실행
+    pytest
+    # 단위 테스트만 실행
+    pytest tests/unit
+    # 통합 테스트만 실행 (Docker 환경 필요)
+    pytest tests/integration
+    ```
+
 -   **급상승 트렌드 분석 (예시)**:
     ```bash
     python detect_surge.py --recent-hours 1 --previous-hours 2 --min-edits 5
@@ -66,3 +76,14 @@
 -   **코드 수정 시**: 프로젝트는 `black`과 `flake8`을 사용하므로, 코드 변경 후에는 반드시 이 두 도구를 사용하여 코드 스타일을 일관성 있게 유지해야 합니다.
 -   **의존성 추가 시**: `producer`에 새로운 라이브러리를 추가할 경우, `producer/requirements.txt` 파일에 명시해야 합니다.
 -   **인프라 변경 시**: Kafka, Druid 등 서비스의 설정을 변경해야 할 경우, `docker-compose.yml` 파일을 수정해야 합니다.
+
+## 6. 테스트 전략
+
+이 프로젝트는 `pytest`를 사용하여 코드의 안정성을 보장합니다.
+
+-   **단위 테스트 (`tests/unit/`)**: 
+    -   외부 종속성(Kafka, API, DB) 없이 각 모듈의 로직을 독립적으로 검증합니다.
+    -   `enricher`, `collector`, `sender`, `cache` 등 각 컴포넌트별로 테스트 케이스가 구성되어 있습니다.
+-   **통합 테스트 (`tests/integration/`)**:
+    -   실제 Docker 컨테이너(Kafka 등)와 연동하여 시스템 간의 상호작용을 검증합니다.
+    -   `pytest-docker`를 사용하여 테스트 실행 시 필요한 인프라를 자동으로 띄우고 내릴 수 있습니다.
