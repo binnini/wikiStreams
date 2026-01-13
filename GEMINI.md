@@ -61,3 +61,19 @@
 -   **설정 변경 시**: `src/producer/config.py`를 먼저 확인하고 필요한 경우 환경변수를 추가하십시오.
 -   **인프라 변경 시**: `docker-compose.yml`과 `druid/ingestion-spec.json`을 함께 확인해야 합니다.
 -   **테스트 추가 시**: E2E 테스트의 경우 `tests/integration/test_e2e_pipeline.py`의 `e2e_context` Fixture를 활용하여 리소스를 격리하십시오.
+
+## 8. 개선 로드맵 (Tech Lead Feedback)
+
+다음은 프로젝트의 안정성과 확장성을 높이기 위해 제안된 기술 개선 사항들입니다.
+
+### 완료된 항목
+- [x] **테스트 격리 및 정리 (Test Isolation & Teardown)**: E2E 테스트 시 리소스 격리 및 자동 종료 구현.
+- [x] **설정 관리 (Configuration Management)**: `pydantic-settings` 도입 및 설정 중앙화.
+
+### 진행 예정 항목
+- [ ] **예외 처리 및 복구 (Resilience & DLQ)**:
+    -   데이터 처리 실패 시 로그만 남기는 대신 **Dead Letter Queue (DLQ)** 패턴을 도입하여 실패한 메시지를 별도 저장/재처리.
+- [ ] **아키텍처 확장성 (AsyncIO 리팩토링)**:
+    -   현재의 동기식(Blocking) I/O 구조를 `asyncio`, `aiohttp`, `aiokafka` 등을 활용한 **비동기 파이프라인**으로 전환하여 처리량 증대.
+- [ ] **CI 파이프라인 최적화**:
+    -   **Smoke Test** (PR 단계)와 **Full E2E Test** (Merge 단계)로 CI 단계를 이원화하여 빌드 시간 및 비용 최적화.
