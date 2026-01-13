@@ -19,7 +19,9 @@ def get_db_connection():
             db = sqlite3.connect(settings.database_path, check_same_thread=False)
             db.row_factory = sqlite3.Row  # 결과를 딕셔너리처럼 접근 가능하게 함
             local._db = db
-            logging.info(f"새로운 SQLite 연결을 생성했습니다. (Path: {settings.database_path})")
+            logging.info(
+                f"새로운 SQLite 연결을 생성했습니다. (Path: {settings.database_path})"
+            )
         except sqlite3.Error as e:
             logging.error(f"SQLite 연결 생성 실패: {e}")
             return None

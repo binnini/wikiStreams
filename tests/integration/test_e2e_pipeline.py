@@ -14,9 +14,11 @@ logger = logging.getLogger(__name__)
 DRUID_COORDINATOR_URL = "http://localhost:8081/druid/indexer/v1/supervisor"
 DRUID_ROUTER_URL = "http://localhost:8888/druid/v2/sql"
 
+
 @pytest.fixture(scope="module")
 def kafka_broker():
     return "localhost:9092"
+
 
 @pytest.fixture(scope="function")
 def e2e_context(kafka_broker):
@@ -27,24 +29,28 @@ def e2e_context(kafka_broker):
     test_run_id = str(uuid.uuid4())[:8]
     topic_name = f"test_topic_{test_run_id}"
     datasource_name = f"test_datasource_{test_run_id}"
-    
-    logger.info(f"Setting up E2E context: Topic={topic_name}, DataSource={datasource_name}")
+
+    logger.info(
+        f"Setting up E2E context: Topic={topic_name}, DataSource={datasource_name}"
+    )
 
     # 2. Ingestion Spec 로드 및 수정
-    spec_path = os.path.join(os.path.dirname(__file__), "../../druid/ingestion-spec.json")
+    spec_path = os.path.join(
+        os.path.dirname(__file__), "../../druid/ingestion-spec.json"
+    )
     with open(spec_path, "r") as f:
         spec = json.load(f)
-    
+
     # Spec 내용 동적 변경 (격리)
     spec["spec"]["dataSchema"]["dataSource"] = datasource_name
     spec["spec"]["ioConfig"]["topic"] = topic_name
-    
+
     # 3. Druid Supervisor 등록
     try:
         response = requests.post(
             DRUID_COORDINATOR_URL,
             headers={"Content-Type": "application/json"},
-            data=json.dumps(spec)
+            data=json.dumps(spec),
         )
         if response.status_code != 200:
             pytest.fail(f"Failed to register supervisor: {response.text}")
@@ -53,11 +59,7 @@ def e2e_context(kafka_broker):
         pytest.fail(f"Error connecting to Druid: {e}")
 
     # 4. 테스트 실행 (Context 전달)
-    yield {
-        "topic": topic_name,
-        "datasource": datasource_name,
-        "run_id": test_run_id
-    }
+    yield {"topic": topic_name, "datasource": datasource_name, "run_id": test_run_id}
 
     # 5. Teardown: Supervisor 종료 (데이터소스 삭제는 Druid 정책에 따름)
     logger.info(f"Tearing down E2E context for {datasource_name}...")
@@ -79,33 +81,32 @@ def wait_for_druid_ingestion(datasource_name, unique_id, timeout=120, interval=5
     FROM "{datasource_name}"
     WHERE "comment" = '{unique_id}'
     """
-    
-    payload = {
-        "query": query,
-        "context": {"sqlTimeZone": "Asia/Seoul"}
-    }
-    
+
+    payload = {"query": query, "context": {"sqlTimeZone": "Asia/Seoul"}}
+
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
             response = requests.post(
-                DRUID_ROUTER_URL, 
+                DRUID_ROUTER_URL,
                 headers={"Content-Type": "application/json"},
-                data=json.dumps(payload)
+                data=json.dumps(payload),
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
-                if data and data[0]['cnt'] > 0:
+                if data and data[0]["cnt"] > 0:
                     return True
             else:
-                logger.info(f"Druid Status: {response.status_code} - Waiting for data... ({response.text[:100]})")
-                
+                logger.info(
+                    f"Druid Status: {response.status_code} - Waiting for data... ({response.text[:100]})"
+                )
+
         except requests.exceptions.RequestException as e:
             logger.warning(f"Connection Error: {e}")
-            
+
         time.sleep(interval)
-        
+
     return False
 
 
@@ -117,10 +118,10 @@ def test_e2e_data_pipeline(kafka_broker, e2e_context):
     """
     topic = e2e_context["topic"]
     datasource = e2e_context["datasource"]
-    
+
     # 1. 테스트용 Kafka Sender 생성
     sender = KafkaSender(kafka_broker, topic)
-    
+
     # 2. 테스트 이벤트 생성
     test_id = str(uuid.uuid4())
     test_event = {
@@ -134,7 +135,7 @@ def test_e2e_data_pipeline(kafka_broker, e2e_context):
         "server_name": "ko.wikipedia.org",
         "bot": False,
         "minor": False,
-        "length": {"old": 100, "new": 150}
+        "length": {"old": 100, "new": 150},
     }
 
     # 3. Kafka로 이벤트 전송
@@ -146,5 +147,7 @@ def test_e2e_data_pipeline(kafka_broker, e2e_context):
     is_ingested = wait_for_druid_ingestion(datasource, test_id)
 
     # 5. 결과 검증
-    assert is_ingested, f"데이터 파이프라인 실패: Datasource '{datasource}'에서 이벤트를 찾을 수 없습니다."
+    assert (
+        is_ingested
+    ), f"데이터 파이프라인 실패: Datasource '{datasource}'에서 이벤트를 찾을 수 없습니다."
     logger.info(f"[Success] E2E Pipeline Verified! (Datasource: {datasource})")

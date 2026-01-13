@@ -10,9 +10,10 @@ from .sender import KafkaSender
 
 # --- 1. 설정값 불러오기 ---
 logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO), 
-    format="%(asctime)s - %(levelname)s - %(message)s"
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s - %(levelname)s - %(message)s",
 )
+
 
 def run_producer():
     """

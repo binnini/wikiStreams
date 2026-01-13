@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+
 
 class Settings(BaseSettings):
     # Kafka Settings
@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     # Collector Settings
     batch_size: int = 500
     batch_timeout_seconds: float = 10.0
-    
+
     # Logging
     log_level: str = "INFO"
 
@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         env_file = ".env"
         env_file_encoding = "utf-8"
         extra = "ignore"  # 정의되지 않은 환경변수는 무시
+
 
 # 전역 설정 객체 생성
 settings = Settings()

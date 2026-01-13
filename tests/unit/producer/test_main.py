@@ -1,7 +1,5 @@
 import pytest
-import time
-import threading
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from producer import main
 from producer.config import settings
 
@@ -11,9 +9,7 @@ def mock_dependencies():
     # 모든 의존성을 Mocking합니다.
     with patch("producer.main.setup_database") as mock_setup, patch(
         "producer.main.close_db_connection"
-    ) as mock_close, patch(
-        "producer.main.WikidataEnricher"
-    ) as MockEnricher, patch(
+    ) as mock_close, patch("producer.main.WikidataEnricher") as MockEnricher, patch(
         "producer.main.KafkaSender"
     ) as MockSender, patch(
         "producer.main.WikimediaCollector"

@@ -8,36 +8,21 @@ from producer.cache import setup_database, close_db_connection
 
 
 @pytest.fixture
-
-
 def mock_db_path(tmp_path):
-
 
     # 임시 디렉토리에 DB 파일 경로 생성
 
-
     db_file = tmp_path / "test_wikidata_cache.db"
-
-
-    
-
 
     # producer.config.settings 객체의 database_path 속성을 패치
 
-
     with patch("producer.config.settings.database_path", str(db_file)):
 
-
-        setup_database() # 테이블 생성
-
+        setup_database()  # 테이블 생성
 
         yield str(db_file)
 
-
         close_db_connection()
-
-
-
 
 
 @pytest.fixture

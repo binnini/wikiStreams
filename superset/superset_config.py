@@ -9,14 +9,14 @@ POSTGRES_USER = os.getenv("POSTGRES_USER", "druid")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "FoolishPassword")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST", "postgres")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-POSTGRES_DB = "superset" # Superset 전용 DB 사용 권장
+POSTGRES_DB = "superset"  # Superset 전용 DB 사용 권장
 
 SQLALCHEMY_DATABASE_URI = f"postgresql+psycopg2://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
 
 # 언어 및 시간대 설정
 BABEL_DEFAULT_LOCALE = "en"
 # Druid는 UTC로 저장되지만 화면에서는 서울 시간으로 볼 수 있게 설정 가능
-# DRUID_IS_KST = True 
+# DRUID_IS_KST = True
 
 # 기타 기본 설정
 ROW_LIMIT = 5000
