@@ -7,6 +7,8 @@ volumes:
   router_var: {}
   druid_shared: {}
   producer_cache: {}
+  superset_home: {}
+
 services:
   kafka-kraft:
     image: confluentinc/cp-kafka:8.1.1
@@ -47,10 +49,34 @@ services:
       - "5432:5432"
     volumes:
       - metadata_data:/var/lib/postgresql
+      # Superset DB를 자동으로 생성하기 위한 스크립트 주입
+      - ./superset/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql
     environment:
       - POSTGRES_PASSWORD=FoolishPassword
       - POSTGRES_USER=druid
       - POSTGRES_DB=druid
+
+  redis:
+    image: redis:latest
+    container_name: redis
+    restart: always
+
+  superset:
+    build: ./superset
+    container_name: superset
+    ports:
+      - "8088:8088"
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      - POSTGRES_USER=druid
+      - POSTGRES_PASSWORD=FoolishPassword
+      - POSTGRES_DB=superset
+      - REDIS_HOST=redis
+    volumes:
+      - superset_home:/app/superset_home
+    restart: always
 
   # Need 3.5 or later for container nodes
   zookeeper:
