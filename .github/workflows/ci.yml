@@ -33,7 +33,17 @@ jobs:
     - name: Check formatting with black
       run: |
         black . --check
-        
-    - name: Run unit tests # 단위 테스트 실행 단계 추가
+
+    - name: Start services (Kafka, Druid)
       run: |
-        PYTHONPATH=src pytest tests/
+        docker compose up -d
+        echo "Waiting for services to start..."
+        sleep 60 # 서비스 부팅 대기 (Druid 초기화 등)
+
+    - name: Run unit tests
+      run: |
+        PYTHONPATH=src pytest tests/unit/
+
+    - name: Run integration & E2E tests
+      run: |
+        PYTHONPATH=src pytest tests/integration/
