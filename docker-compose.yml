@@ -169,3 +169,9 @@ services:
       - router
     env_file:
       - environment
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8888 && echo -e \"GET /status/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && cat <&3 | grep \"HTTP/1.1 200 OK\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
