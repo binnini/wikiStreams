@@ -3,8 +3,5 @@ databases:
     sqlalchemy_uri: druid://router:8888/druid/v2/sql
     expose_in_sqllab: true
     allow_run_async: true
-    extra:
-      engine_params:
-        connect_args:
-          context:
-            sqlTimeZone: "Asia/Seoul"
+    extra: >-
+      {"engine_params": {"connect_args": {"context": {"sqlTimeZone": "Asia/Seoul"}}}}
