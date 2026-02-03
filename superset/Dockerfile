@@ -13,6 +13,7 @@ RUN pip install --no-cache-dir \
 COPY superset_config.py /app/pythonpath/superset_config.py
 COPY init_superset.sh /app/init_superset.sh
 COPY datasources /app/datasources
+COPY dashboards /app/dashboards
 
 RUN chmod +x /app/init_superset.sh
 

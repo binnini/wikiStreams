@@ -1,0 +1,71 @@
+table_name: wikimedia.recentchange
+main_dttm_col: __time
+description: "Real-time Wikimedia recent changes ingested from Kafka"
+default_endpoint: null
+offset: 0
+cache_timeout: null
+schema: druid
+sql: null
+params: null
+template_params: null
+filter_select_enabled: true
+fetch_values_predicate: null
+extra: null
+uuid: null
+metrics:
+  - metric_name: count
+    verbose_name: "Edit Count"
+    metric_type: count
+    expression: "COUNT(*)"
+    description: "Number of edits"
+    d3format: null
+    extra: null
+    warning_text: null
+columns:
+  - column_name: __time
+    verbose_name: "Time"
+    is_dttm: true
+    is_active: true
+    type: TIMESTAMP
+    groupby: true
+    filterable: true
+    expression: null
+    description: null
+    python_date_format: null
+  - column_name: title
+    verbose_name: "Page Title"
+    is_dttm: false
+    is_active: true
+    type: STRING
+    groupby: true
+    filterable: true
+  - column_name: user
+    verbose_name: "User"
+    is_dttm: false
+    is_active: true
+    type: STRING
+    groupby: true
+    filterable: true
+  - column_name: bot
+    verbose_name: "Is Bot"
+    is_dttm: false
+    is_active: true
+    type: STRING
+    groupby: true
+    filterable: true
+  - column_name: server_name
+    verbose_name: "Wiki Server"
+    is_dttm: false
+    is_active: true
+    type: STRING
+    groupby: true
+    filterable: true
+  - column_name: wikidata_label
+    verbose_name: "Wikidata Label"
+    is_dttm: false
+    is_active: true
+    type: STRING
+    groupby: true
+    filterable: true
+database_uuid: null
+database_name: druid
