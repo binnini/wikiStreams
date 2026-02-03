@@ -68,9 +68,9 @@ def e2e_context(kafka_broker):
         terminate_url = f"{DRUID_COORDINATOR_URL}/{datasource_name}/terminate"
         requests.post(terminate_url)
         logger.info(f"Terminated supervisor: {datasource_name}")
-        
+
         # 잠깐 대기 후 잔여 Task 확인 및 종료
-        time.sleep(1) 
+        time.sleep(1)
         tasks_url = "http://localhost:8888/druid/indexer/v1/tasks?state=running"
         tasks_resp = requests.get(tasks_url)
         if tasks_resp.status_code == 200:
@@ -78,7 +78,9 @@ def e2e_context(kafka_broker):
                 if task.get("dataSource") == datasource_name:
                     task_id = task.get("id")
                     logger.warning(f"Force killing remaining task: {task_id}")
-                    requests.post(f"http://localhost:8888/druid/indexer/v1/task/{task_id}/shutdown")
+                    requests.post(
+                        f"http://localhost:8888/druid/indexer/v1/task/{task_id}/shutdown"
+                    )
 
     except Exception as e:
         logger.warning(f"Failed to clean up Druid resources: {e}")

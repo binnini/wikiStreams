@@ -1,13 +1,15 @@
 import requests
-import json
 import logging
 
 # 로깅 설정
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger(__name__)
 
 DRUID_COORDINATOR_URL = "http://localhost:8081/druid/indexer/v1/supervisor"
 DRUID_DATASOURCE_URL = "http://localhost:8081/druid/coordinator/v1/datasources"
+
 
 def cleanup_zombies():
     """
@@ -15,6 +17,7 @@ def cleanup_zombies():
     """
     cleanup_supervisors()
     cleanup_datasources()
+
 
 def cleanup_supervisors():
     try:
@@ -30,15 +33,16 @@ def cleanup_supervisors():
         # 2. 'test_datasource_'로 시작하는 Supervisor 종료
         for sup in supervisors:
             sup_id = sup
-            if isinstance(sup, dict): # 상세 정보가 포함된 경우
+            if isinstance(sup, dict):  # 상세 정보가 포함된 경우
                 sup_id = sup.get("id")
-            
+
             if sup_id and sup_id.startswith("test_datasource_"):
                 logger.info(f"Terminating zombie supervisor: {sup_id}")
                 terminate_url = f"{DRUID_COORDINATOR_URL}/{sup_id}/terminate"
                 requests.post(terminate_url)
     except Exception as e:
         logger.error(f"Error during supervisor cleanup: {e}")
+
 
 def cleanup_datasources():
     try:
@@ -62,10 +66,13 @@ def cleanup_datasources():
                 if resp.status_code == 200:
                     logger.info(f"Successfully disabled datasource: {ds}")
                 else:
-                    logger.warning(f"Failed to disable datasource {ds}: {resp.status_code} - {resp.text}")
+                    logger.warning(
+                        f"Failed to disable datasource {ds}: {resp.status_code} - {resp.text}"
+                    )
 
     except Exception as e:
         logger.error(f"Error during datasource cleanup: {e}")
+
 
 if __name__ == "__main__":
     cleanup_zombies()

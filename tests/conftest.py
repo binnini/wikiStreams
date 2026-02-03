@@ -10,8 +10,11 @@ logger = logging.getLogger(__name__)
 
 DRUID_COORDINATOR_URL = "http://localhost:8081/druid/indexer/v1/supervisor"
 DRUID_TASK_URL = "http://localhost:8081/druid/indexer/v1/task"
-DRUID_METADATA_DS_URL = "http://localhost:8081/druid/coordinator/v1/metadata/datasources"
+DRUID_METADATA_DS_URL = (
+    "http://localhost:8081/druid/coordinator/v1/metadata/datasources"
+)
 DRUID_DS_URL = "http://localhost:8081/druid/coordinator/v1/datasources"
+
 
 @pytest.fixture(scope="session", autouse=True)
 def cleanup_orphaned_druid_tasks():
@@ -20,7 +23,7 @@ def cleanup_orphaned_druid_tasks():
     (Self-Healing)
     """
     logger.info("🧹 [Global Setup] Checking for orphaned Druid resources...")
-    
+
     # 1. 좀비 Supervisor 정리
     try:
         response = requests.get(DRUID_COORDINATOR_URL)
@@ -36,7 +39,9 @@ def cleanup_orphaned_druid_tasks():
 
     # 2. 좀비 Task 정리
     try:
-        response = requests.get("http://localhost:8081/druid/indexer/v1/tasks?state=running")
+        response = requests.get(
+            "http://localhost:8081/druid/indexer/v1/tasks?state=running"
+        )
         if response.status_code == 200:
             tasks = response.json()
             for task in tasks:
@@ -59,7 +64,5 @@ def cleanup_orphaned_druid_tasks():
                     requests.delete(f"{DRUID_DS_URL}/{ds}")
     except Exception as e:
         logger.warning(f"Failed to cleanup datasources: {e}")
-    
+
     logger.info("✨ [Global Setup] Cleanup complete.")
-
-
