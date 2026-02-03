@@ -61,15 +61,27 @@ def e2e_context(kafka_broker):
     # 4. 테스트 실행 (Context 전달)
     yield {"topic": topic_name, "datasource": datasource_name, "run_id": test_run_id}
 
-    # 5. Teardown: Supervisor 종료 (데이터소스 삭제는 Druid 정책에 따름)
+    # 5. Teardown: Supervisor 종료 및 잔여 Task 강제 종료
     logger.info(f"Tearing down E2E context for {datasource_name}...")
     try:
         # Supervisor 종료 API 호출
         terminate_url = f"{DRUID_COORDINATOR_URL}/{datasource_name}/terminate"
         requests.post(terminate_url)
         logger.info(f"Terminated supervisor: {datasource_name}")
+        
+        # 잠깐 대기 후 잔여 Task 확인 및 종료
+        time.sleep(1) 
+        tasks_url = "http://localhost:8888/druid/indexer/v1/tasks?state=running"
+        tasks_resp = requests.get(tasks_url)
+        if tasks_resp.status_code == 200:
+            for task in tasks_resp.json():
+                if task.get("dataSource") == datasource_name:
+                    task_id = task.get("id")
+                    logger.warning(f"Force killing remaining task: {task_id}")
+                    requests.post(f"http://localhost:8888/druid/indexer/v1/task/{task_id}/shutdown")
+
     except Exception as e:
-        logger.warning(f"Failed to terminate supervisor: {e}")
+        logger.warning(f"Failed to clean up Druid resources: {e}")
 
 
 def wait_for_druid_ingestion(datasource_name, unique_id, timeout=120, interval=5):
