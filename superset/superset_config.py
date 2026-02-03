@@ -21,7 +21,7 @@ BABEL_DEFAULT_LOCALE = "en"
 # 기타 기본 설정
 ROW_LIMIT = 5000
 FEATURE_FLAGS = {
-    "DYNAMIC_PLUGINS": True,
+    "DYNAMIC_PLUGINS": False,
 }
 
 # 로컬 환경 설정 (HTTP 접속 허용)
