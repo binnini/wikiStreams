@@ -66,7 +66,7 @@ def kafka_service(docker_ip, request):
 
 @pytest.fixture(scope="module")
 def kafka_topic():
-    return "wikimedia.recentchange"
+    return f"test-topic-{int(time.time())}"
 
 
 @pytest.fixture(scope="module")
