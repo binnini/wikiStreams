@@ -75,7 +75,9 @@
 ### 완료된 항목
 - [x] **테스트 격리 및 정리 (Test Isolation & Teardown)**: E2E 테스트 시 리소스 격리 및 자동 종료 구현.
 - [x] **설정 관리 (Configuration Management)**: `pydantic-settings` 도입 및 설정 중앙화.
-- [x] **Superset 통합 (Infrastructure Integration)**: Docker Compose에 Superset/Redis 추가 및 초기화 스크립트 구현.
+- [x] **Superset 통합 및 최적화**: 
+    - Docker Compose에 Superset/Redis 추가 및 초기화 스크립트 구현.
+    - 파이썬 기반의 Druid 상태 체크 도입 및 대시보드(.zip) 자동 임포트 최적화.
 
 ### 진행 예정 항목
 - [ ] **예외 처리 및 복구 (Resilience & DLQ)**:
@@ -89,13 +91,24 @@
 
 다음 에이전트는 아래 항목들을 우선적으로 수행해야 합니다.
 
-1.  **Druid 데이터베이스 연결 완전 자동화**:
-    -   현재 `init_superset.sh`에서 `import-datasources`를 실행하지만, Druid Router 부팅 지연 등으로 인해 실패하는 경우가 있음.
-    -   `wait-for-it` 스크립트 등을 도입하여 Druid가 준비될 때까지 기다린 후 등록하도록 개선 필요.
-2.  **기본 데이터셋(Dataset) 및 지표(Metric) 생성**:
-    -   `wikimedia.recentchange` 테이블을 Superset Dataset으로 등록.
-    -   주요 지표(Edit Count, Added Length Sum 등)를 코드로 미리 정의(YAML).
-3.  **기초 대시보드 템플릿 작성 (Dashboard as Code)**:
-    -   실시간 트렌드를 보여주는 기본 대시보드(Chart + Dashboard)를 YAML 파일로 작성하여 컨테이너 기동 시 자동 임포트.
-4.  **영속성(Persistence) 검증**:
+1.  **기초 대시보드 템플릿 작성 (Dashboard as Code)**:
+    -   현재 `wikimedia_dashboard.zip`을 통해 기본적인 시각화가 자동 구성됨.
+    -   추가적인 지표(Metric) 및 필터 최적화 필요.
+2.  **영속성(Persistence) 검증**:
     -   컨테이너 재시작 시 대시보드 및 설정이 유지되는지 확인.
+
+## 10. Superset 대시보드 관리 (Dashboard as Code)
+
+이 프로젝트는 대시보드를 코드로 관리하며, 컨테이너 기동 시 자동으로 최신 설정을 반영합니다.
+
+- **자동 임포트 메커니즘**:
+    - `superset/dashboards/wikimedia_dashboard.zip` 파일을 진실의 원천(Source of Truth)으로 사용합니다.
+    - `init_superset.sh` 실행 시 `superset import-dashboards` 명령어를 통해 자동으로 로드됩니다.
+- **UUID 기반 동기화**:
+    - Superset은 내부적으로 각 리소스(Dashboard, Chart, Dataset)를 고유한 UUID로 식별합니다.
+    - 동일한 UUID가 이미 존재할 경우, 파일의 내용으로 **덮어쓰기(Overwrite)**를 수행하여 설정을 동기화합니다.
+- **권장 워크플로우**:
+    1. **수정**: Superset UI에서 대시보드를 자유롭게 수정 및 테스트합니다.
+    2. **내보내기**: 수정이 완료되면 UI의 **Export** 기능을 사용하여 `.zip` 파일을 다운로드합니다.
+    3. **반영**: 다운로드한 파일을 `superset/dashboards/wikimedia_dashboard.zip` 이름으로 프로젝트에 저장하고 Git에 커밋합니다.
+    - **주의**: UI에서만 수정하고 Export하지 않으면, 컨테이너 재시작 시 Git에 저장된 구버전 파일로 덮어씌워져 작업 내용이 사라질 수 있습니다.
