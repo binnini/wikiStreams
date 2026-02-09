@@ -71,8 +71,8 @@ def kafka_topic(kafka_service):
 
     # Teardown: Remove the topic after test
     try:
-        from kafka.admin import KafkaAdminClient, NewTopic
-        
+        from kafka.admin import KafkaAdminClient
+
         # kafka_service is "host:port" string
         admin_client = KafkaAdminClient(bootstrap_servers=kafka_service)
         admin_client.delete_topics([topic_name])
