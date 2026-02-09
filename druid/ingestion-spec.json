@@ -46,6 +46,10 @@
       "taskCount": 1,
       "replicas": 1,
       "useEarliestOffset": true
+    },
+    "tuningConfig": {
+      "type": "kafka",
+      "resetOffsetAutomatically": true
     }
   }
 }
