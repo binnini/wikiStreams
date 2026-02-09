@@ -65,8 +65,21 @@ def kafka_service(docker_ip, request):
 
 
 @pytest.fixture(scope="module")
-def kafka_topic():
-    return f"test-topic-{int(time.time())}"
+def kafka_topic(kafka_service):
+    topic_name = f"test-topic-{int(time.time())}"
+    yield topic_name
+
+    # Teardown: Remove the topic after test
+    try:
+        from kafka.admin import KafkaAdminClient, NewTopic
+        
+        # kafka_service is "host:port" string
+        admin_client = KafkaAdminClient(bootstrap_servers=kafka_service)
+        admin_client.delete_topics([topic_name])
+        admin_client.close()
+        print(f"🧹 Deleted temporary topic: {topic_name}")
+    except Exception as e:
+        print(f"⚠️ Failed to delete topic {topic_name}: {e}")
 
 
 @pytest.fixture(scope="module")
