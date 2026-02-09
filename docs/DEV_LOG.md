@@ -58,5 +58,23 @@
         - **Big Numbers (KPIs)**: 총 편집 수, 활성 사용자 수, 신규 문서 생성 수 배치 (Trendline 및 전일/전시간 대비 증감률 포함).
         - **Editing Type Breakdown**: Sunburst 차트를 사용하여 편집 유형과 강도의 계층적 분포 가시화.
 
----
-*Next Step: 필터 박스 추가 및 대시보드 최종 레이아웃 최적화*
+## 2026-02-10
+
+### 1. Superset 초기화 프로세스 최적화 및 자동화
+- **이슈**: Druid Router의 부팅 지연으로 인해 Superset 초기화 시 DB 연결 임포트가 실패하는 현상이 간헐적으로 발생함.
+- **작업**:
+    - **상태 확인 로직 강화**: `init_superset.sh`의 `curl` 기반 체크를 파이썬(`urllib`) 스크립트로 교체. 최대 5분간 대기하며 연결 안정성 확보.
+    - **Dashboard as Code (Export/Import)**: 
+        - 최신 Superset 대시보드 내보내기 형식인 `.zip` 아카이브 구조 도입.
+        - 컨테이너 기동 시 `wikimedia_dashboard.zip`을 자동으로 임포트하도록 설정하여 수동 설정 과정 제거.
+- **결과**: 인프라 기동 후 별도의 조작 없이 즉시 완성된 실시간 대시보드 확인 가능.
+
+### 2. Kafka 통합 테스트 안정화 (Test Isolation & Cleanup)
+- **이슈**: `test_producer_kafka_integration.py` 실행 시 타임아웃 에러 발생.
+- **원인**: 
+    - 공유 토픽(`wikimedia.recentchange`)에 수십만 개의 데이터가 쌓여 있어, 테스트 메시지를 찾기 위해 Consumer가 이전 데이터를 읽는 과정에서 20초 타임아웃 초과.
+- **해결**:
+    - **테스트 격리(Isolation)**: 각 테스트 모듈 실행 시마다 고유한 임시 토픽(`test-topic-{timestamp}`)을 생성하여 사용하도록 수정.
+    - **자동 정리(Cleanup)**: `kafka_topic` 피처에 `KafkaAdminClient`를 연동하여 테스트 종료 후 생성된 임시 토픽을 즉시 삭제하도록 보강.
+- **결과**: 기존 데이터 규모와 상관없이 테스트 실행 속도 및 성공률 대폭 향상 (약 5초 내외 완료).
+
