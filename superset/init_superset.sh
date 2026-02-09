@@ -54,8 +54,8 @@ if [ -f "/app/datasources/datasets/Druid/wikimedia_recentchange.yaml" ]; then
 fi
 
 # 대시보드 임포트
-if [ -f "/app/dashboards/wikimedia_dashboard.json" ]; then
-    superset import-dashboards -p /app/dashboards/wikimedia_dashboard.json
+if [ -f "/app/dashboards/wikimedia_dashboard.zip" ]; then
+    superset import-dashboards -p /app/dashboards/wikimedia_dashboard.zip
 fi
 
 # 7. 서버 실행
