@@ -78,11 +78,15 @@
 - [x] **Superset 통합 및 최적화**: 
     - Docker Compose에 Superset/Redis 추가 및 초기화 스크립트 구현.
     - 파이썬 기반의 Druid 상태 체크 도입 및 대시보드(.zip) 자동 임포트 최적화.
+- [x] **중앙 집중식 로깅 및 모니터링 (Loki & Grafana)**:
+    -   Loki(로그 수집)와 Grafana(시각화) 도입을 통한 통합 로그 관리.
+    -   **전용 대시보드 4종 구축**:
+        -   `Error Monitor`: 전체 시스템 에러 로그 실시간 추적.
+        -   `Producer Performance`: 처리량(Throughput) 및 캐시 적중률(Cache Hit Rate) 시각화.
+        -   `Druid Monitor`: 데이터 수집 지연(Lag), 쿼리 성능(Latency) 및 세그먼트 핸드오프 감시.
+        -   `Resources Monitor`: `docker-stats-logger` 사이드카를 통한 컨테이너별 CPU/Memory 실시간 사용량 시각화.
 
 ### 진행 예정 항목
-- [ ] **중앙 집중식 로깅 및 모니터링 (Loki & Grafana)**:
-    -   장시간 시스템 운영 시 오류 추적 및 성능 모니터링을 위해 Loki(로그 수집)와 Grafana(시각화) 도입.
-    -   Producer, Kafka, Druid 등 모든 컨테이너 로그 통합 관리.
 - [ ] **예외 처리 및 복구 (Resilience & DLQ)**:
     -   데이터 처리 실패 시 로그만 남기는 대신 **Dead Letter Queue (DLQ)** 패턴을 도입하여 실패한 메시지를 별도 저장/재처리.
 - [ ] **아키텍처 확장성 (AsyncIO 리팩토링)**:
@@ -90,14 +94,16 @@
 - [ ] **CI 파이프라인 최적화**:
     -   **Smoke Test** (PR 단계)와 **Full E2E Test** (Merge 단계)로 CI 단계를 이원화하여 빌드 시간 및 비용 최적화.
 
-## 9. 향후 과제 (Superset Visualization)
+## 9. 향후 과제 (Monitoring & Visualization)
 
 다음 에이전트는 아래 항목들을 우선적으로 수행해야 합니다.
 
 1.  **기초 대시보드 템플릿 작성 (Dashboard as Code)**:
     -   현재 `wikimedia_dashboard.zip`을 통해 기본적인 시각화가 자동 구성됨.
     -   추가적인 지표(Metric) 및 필터 최적화 필요.
-2.  **영속성(Persistence) 검증**:
+2.  **모니터링 알람(Alerting) 설정**:
+    -   Grafana Alerting을 사용하여 에러 급증이나 리소스 부족 시 알림 송신 기능 추가.
+3.  **영속성(Persistence) 검증**:
     -   컨테이너 재시작 시 대시보드 및 설정이 유지되는지 확인.
 
 ## 10. Superset 대시보드 관리 (Dashboard as Code)
