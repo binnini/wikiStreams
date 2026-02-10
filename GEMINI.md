@@ -24,8 +24,6 @@
 
 -   `.github/workflows/ci.yml`: GitHub Actions 워크플로우 파일입니다. `Unit -> Integration -> E2E` 단계별 테스트와 `black`, `flake8` 검사를 수행합니다.
 
--   `detect_surge.py`: **독립 실행형 분석 스크립트**입니다. Druid에 SQL 쿼리를 보내 편집 급상승 문서를 찾아냅니다.
-
 -   `druid/ingestion-spec.json`: Kafka 데이터를 Druid로 수집하기 위한 Ingestion Supervisor 설정 파일입니다.
 
 -   `superset/`: Apache Superset 설정 및 초기화 관련 파일들입니다.
@@ -121,3 +119,27 @@
     2. **내보내기**: 수정이 완료되면 UI의 **Export** 기능을 사용하여 `.zip` 파일을 다운로드합니다.
     3. **반영**: 다운로드한 파일을 `superset/dashboards/wikimedia_dashboard.zip` 이름으로 프로젝트에 저장하고 Git에 커밋합니다.
     - **주의**: UI에서만 수정하고 Export하지 않으면, 컨테이너 재시작 시 Git에 저장된 구버전 파일로 덮어씌워져 작업 내용이 사라질 수 있습니다.
+
+## 11. 포트폴리오 완성도 향상을 위한 과제 (Next Steps)
+
+현재 프로젝트의 완성도를 높이고 채용 과정에서 경쟁력을 갖추기 위해 다음 항목들을 우선적으로 진행하는 것을 권장합니다.
+
+### 1. 확장성 검증 (Scalability)
+-   **목표**: 대용량 트래픽 처리가 가능한지 검증하고 병목 구간을 파악합니다.
+-   **액션**: `k6` 또는 `Locust`를 사용하여 초당 수천 건의 가상 트래픽을 Producer에 주입하고, Kafka와 Druid의 처리 한계(Throughput)를 측정하여 리포트로 작성합니다.
+
+### 2. 고가용성 아키텍처 (HA & Reliability)
+-   **목표**: 단일 장애점(SPOF)을 제거합니다.
+-   **액션**:
+    -   Producer의 로컬 `SQLite` 캐시를 `Redis`로 교체하여 여러 Producer가 캐시를 공유하도록 개선합니다.
+    -   Producer 컨테이너를 2개 이상 실행(Scale-out)하여 부하 분산 및 장애 대응 능력을 검증합니다.
+
+### 3. 데이터 품질 관리 (Data Quality)
+-   **목표**: 잘못된 데이터로 인한 파이프라인 중단을 방지합니다.
+-   **액션**:
+    -   Pydantic 등을 활용한 데이터 스키마 검증 로직을 추가합니다.
+    -   검증 실패 또는 처리 불가능한 메시지는 별도의 Kafka 토픽(**Dead Letter Queue**)으로 격리하여 후처리할 수 있는 구조를 만듭니다.
+
+### 4. 클라우드 배포 경험 (CD)
+-   **목표**: 로컬 환경을 넘어 실제 운영 환경에 대한 이해도를 증명합니다.
+-   **액션**: AWS 프리티어 등을 활용하여 EC2에 배포하거나, 간단한 CD 파이프라인(GitHub Actions -> AWS)을 구축해봅니다.
