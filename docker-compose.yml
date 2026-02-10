@@ -141,7 +141,7 @@ services:
     command:
       - coordinator
     env_file:
-      - environment
+      - druid/environment
 
   broker:
     image: apache/druid:35.0.0
@@ -157,7 +157,7 @@ services:
     command:
       - broker
     env_file:
-      - environment
+      - druid/environment
 
   historical:
     image: apache/druid:35.0.0
@@ -174,7 +174,7 @@ services:
     command:
       - historical
     env_file:
-      - environment
+      - druid/environment
 
   middlemanager:
     image: apache/druid:35.0.0
@@ -192,7 +192,7 @@ services:
     command:
       - middleManager
     env_file:
-      - environment
+      - druid/environment
 
   router:
     image: apache/druid:35.0.0
@@ -208,7 +208,7 @@ services:
     command:
       - router
     env_file:
-      - environment
+      - druid/environment
     healthcheck:
       test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8888 && echo -e \"GET /status/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && cat <&3 | grep \"HTTP/1.1 200 OK\""]
       interval: 10s
