@@ -215,3 +215,12 @@ services:
       timeout: 5s
       retries: 10
       start_period: 30s
+
+  docker-stats-logger:
+    image: docker:cli
+    container_name: docker-stats-logger
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./monitoring/collect_docker_stats.sh:/collect_docker_stats.sh
+    entrypoint: ["/bin/sh", "/collect_docker_stats.sh"]
+    restart: always
