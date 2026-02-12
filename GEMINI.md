@@ -145,5 +145,9 @@
 -   **액션**: AWS 프리티어 등을 활용하여 EC2에 배포하거나, 간단한 CD 파이프라인(GitHub Actions -> AWS)을 구축해봅니다.
 
 ### 5. 원천 시스템 평가 (Data Sources)
--   **목표**: Data Source의 특징, 생성 속도 등의 특징을 평가한다.
+-   **목표**: Data Source의 특징, 생성 속도 등의 특징을 평가합니다.
 -   **액션**: Data Source의 특징을 반영하여 여러 지표를 평가한 후, 목표 성능에 달성 가능한지 Monitoring 합니다.
+
+### 6. 스토리지 시스템 평가 (Storage System)
+-   **목표**: 선택한 Data Warehouse storage system과 database가 본 프로젝트의 목표에 적합한지 평가합니다.
+-   **액션**: Storage System이 Over Engineering을 유발하지 않는지, architecture에서 요구하는 읽기 쓰기 속도와 맞는지 등을 평가합니다.
