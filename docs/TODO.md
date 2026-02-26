@@ -6,7 +6,7 @@
   - [x] 실패 메시지를 별도 Kafka 토픽(`wikimedia.recentchange.dlq`)으로 라우팅
   - [x] DLQ 메시지에 `error`, `failed_at`, `source_topic`, `retry_count` 메타데이터 포함
   - [x] Grafana Error Monitor에 DLQ Events/min, DLQ Total 패널 추가
-  - [ ] DLQ 컨슈머 서비스 구성 (재처리 또는 알림)
+  - [x] DLQ 컨슈머 서비스 구성 (재처리 또는 알림) *(2026-02-26 완료)*
 
 - [ ] **입력 데이터 스키마 검증**
   - Wikimedia SSE 이벤트를 Pydantic 모델로 정의
