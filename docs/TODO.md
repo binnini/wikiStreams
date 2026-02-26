@@ -2,7 +2,7 @@
 
 ## 우선순위 높음
 
-- [x] **Dead Letter Queue (DLQ) 도입** *(2026-02-26 부분 완료)*
+- [x] **Dead Letter Queue (DLQ) 도입** *(2026-02-26 완료)*
   - [x] 실패 메시지를 별도 Kafka 토픽(`wikimedia.recentchange.dlq`)으로 라우팅
   - [x] DLQ 메시지에 `error`, `failed_at`, `source_topic`, `retry_count` 메타데이터 포함
   - [x] Grafana Error Monitor에 DLQ Events/min, DLQ Total 패널 추가
@@ -24,12 +24,12 @@
   - `asyncio` + `httpx` (이미 사용 중) + `aiokafka`로 전환
   - 처리량(Throughput) 및 10초 타임아웃 의존도 개선 기대
 
-- [x] **캐시 TTL 도입** *(2026-02-26 부분 완료)*
-  - [x] `CACHE_TTL_SECONDS` 설정 추가 (기본값 86400초 / 24시간)
+- [x] **캐시 TTL 도입** *(2026-02-26 완료)*
+  - [x] `CACHE_TTL_SECONDS` 설정 추가 (기본값 2592000초 / 30일)
   - [x] `get_qids_from_cache()`에 TTL 만료 필터링 추가 (lazy expiry)
-  - [ ] Wikidata `"missing"` 응답 구분 및 차등 TTL 적용
-    - 정상 enrichment 성공: 긴 TTL (예: 30일)
-    - `"missing"` 응답 (엔티티 미존재): 짧은 TTL (예: 24시간)
+  - [x] Wikidata `"missing"` 응답 구분 및 차등 TTL 적용 *(2026-02-26 완료)*
+    - 정상 enrichment 성공: 긴 TTL (30일, `CACHE_TTL_SECONDS`)
+    - `"missing"` 응답 (엔티티 미존재): 짧은 TTL (24시간, `CACHE_MISSING_TTL_SECONDS`)
 
 - [ ] **SQLite 캐시를 Redis로 교체**
   - 현재 SQLite는 단일 프로세스에서만 유효 (Producer scale-out 불가)

@@ -144,3 +144,25 @@
     ```
   - Lazy expiry 방식: 만료된 항목은 DB에 남고 조회 시 무시됨. 다음 API 호출 후 `INSERT OR REPLACE`로 timestamp 갱신.
 - **테스트**: 만료 항목 미반환, TTL 이내 항목 반환, 혼합 케이스 (7/7 통과, 전체 26/26).
+
+### 4. DLQ 컨슈머 서비스 구현
+- **배경**: DLQ 라우팅은 구현됐으나 DLQ 토픽을 소비하는 서비스가 없어 실패 이벤트가 영구 적체됨.
+- **작업**:
+  - `src/dlq_consumer/` 신규 모듈 생성 (`config.py`, `consumer.py`, `main.py`, `Dockerfile`, `requirements.txt`).
+  - 재시도 전략: `retry_count < MAX_RETRIES(3)` → 메인 토픽 재전송, 실패 시 `retry_count + 1`로 DLQ 재큐잉. `retry_count >= MAX_RETRIES` → CRITICAL 로그 후 폐기.
+  - `docker-compose.yml`에 `dlq-consumer` 서비스 추가 (`kafka-kraft` 의존, `on-failure` 재시작).
+- **테스트**: 재시도 성공, 재시도 실패→재큐잉, 최대 재시도 초과→폐기, 마지막 재시도 실패→`retry_count=3` 재큐잉 (4/4 통과).
+
+### 5. Wikidata `"missing"` 응답 차등 TTL 및 TTL 만료 모니터링
+- **배경**: 정상 엔티티와 존재하지 않는(`"missing"`) 엔티티를 동일한 TTL로 캐싱하여 비효율 발생.
+- **작업**:
+  - `cache.py` 스키마에 `is_missing INTEGER DEFAULT 0` 컬럼 추가. 기존 DB 마이그레이션 처리(`ALTER TABLE ... ADD COLUMN`, 중복 시 무시).
+  - `get_qids_from_cache()` 조회 쿼리를 차등 TTL로 변경:
+    - 정상 엔티티: `CACHE_TTL_SECONDS` (기본값 30일)
+    - `"missing"` 엔티티: `CACHE_MISSING_TTL_SECONDS` (기본값 24시간)
+  - `enricher.py`에서 `"missing" in entity`로 누락 엔티티 감지 후 `is_missing=True` 플래그를 캐시에 전달.
+  - TTL 만료 건수를 `(TTL 만료: N개)` 형식으로 로그에 추가 (Loki 파싱 가능).
+  - `wikistreams-producer.json`에 패널 2개 추가:
+    - **TTL Expired (Per Minute)**: 분당 만료 건수 시계열.
+    - **Total TTL Expired**: 선택 기간 내 누적 만료 건수 stat.
+- **테스트**: 차등 TTL 시나리오 3개, TTL 만료 로그 검증, missing 엔티티 저장 플래그 검증 (신규 5개 포함 전체 통과).

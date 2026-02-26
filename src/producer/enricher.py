@@ -35,17 +35,25 @@ class WikidataEnricher:
                 results = {}
                 entities = data.get("entities", {})
                 for q_id, entity in entities.items():
-                    label = (
-                        entity.get("labels", {}).get("ko", {}).get("value")
-                        or entity.get("labels", {}).get("en", {}).get("value")
-                        or "-"
-                    )
-                    desc = (
-                        entity.get("descriptions", {}).get("ko", {}).get("value")
-                        or entity.get("descriptions", {}).get("en", {}).get("value")
-                        or "-"
-                    )
-                    results[q_id] = {"label": label, "description": desc}
+                    is_missing = "missing" in entity
+                    if is_missing:
+                        label, desc = "-", "-"
+                    else:
+                        label = (
+                            entity.get("labels", {}).get("ko", {}).get("value")
+                            or entity.get("labels", {}).get("en", {}).get("value")
+                            or "-"
+                        )
+                        desc = (
+                            entity.get("descriptions", {}).get("ko", {}).get("value")
+                            or entity.get("descriptions", {}).get("en", {}).get("value")
+                            or "-"
+                        )
+                    results[q_id] = {
+                        "label": label,
+                        "description": desc,
+                        "is_missing": is_missing,
+                    }
                 logging.info(
                     f"Wikidata API로부터 {len(results)}개의 정보를 가져왔습니다."
                 )

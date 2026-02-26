@@ -53,10 +53,18 @@ def setup_database():
                     q_id TEXT PRIMARY KEY,
                     label TEXT,
                     description TEXT,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    is_missing INTEGER DEFAULT 0
                 )
                 """
             )
+            # 기존 DB 마이그레이션: is_missing 컬럼이 없으면 추가
+            try:
+                cursor.execute(
+                    "ALTER TABLE wikidata_cache ADD COLUMN is_missing INTEGER DEFAULT 0"
+                )
+            except sqlite3.OperationalError:
+                pass  # 이미 존재하는 컬럼
             conn.commit()
             logging.info("✅ Wikidata 캐시 테이블이 성공적으로 준비되었습니다.")
         except sqlite3.Error as e:
@@ -75,24 +83,40 @@ def get_qids_from_cache(q_ids: list) -> dict:
         return {}
 
     found_qids = {}
+    expired_count = 0
     try:
         placeholders = ", ".join("?" for _ in q_ids)
-        query = (
-            f"SELECT q_id, label, description FROM wikidata_cache "
-            f"WHERE q_id IN ({placeholders}) "
-            f"AND timestamp > datetime('now', '-{settings.cache_ttl_seconds} seconds')"
+        ttl = settings.cache_ttl_seconds
+        missing_ttl = settings.cache_missing_ttl_seconds
+        ttl_condition = (
+            f"(is_missing = 0 AND timestamp > datetime('now', '-{ttl} seconds')) "
+            f"OR "
+            f"(is_missing = 1 AND timestamp > datetime('now', '-{missing_ttl} seconds'))"
         )
 
         cursor = conn.cursor()
-        cursor.execute(query, q_ids)
-        rows = cursor.fetchall()
-
-        for row in rows:
+        cursor.execute(
+            f"SELECT q_id, label, description FROM wikidata_cache "
+            f"WHERE q_id IN ({placeholders}) AND ({ttl_condition})",
+            q_ids,
+        )
+        for row in cursor.fetchall():
             found_qids[row["q_id"]] = {
                 "label": row["label"],
                 "description": row["description"],
             }
-        logging.info(f"캐시에서 {len(found_qids)}/{len(q_ids)}개의 Q-ID를 찾았습니다.")
+
+        cursor.execute(
+            f"SELECT COUNT(*) FROM wikidata_cache "
+            f"WHERE q_id IN ({placeholders}) AND NOT ({ttl_condition})",
+            q_ids,
+        )
+        expired_count = cursor.fetchone()[0]
+
+        logging.info(
+            f"캐시에서 {len(found_qids)}/{len(q_ids)}개의 Q-ID를 찾았습니다. "
+            f"(TTL 만료: {expired_count}개)"
+        )
     except sqlite3.Error as e:
         logging.error(f"캐시 조회 실패: {e}")
 
@@ -111,13 +135,14 @@ def save_qids_to_cache(qids_data: dict):
         return
 
     to_save = [
-        (q_id, data["label"], data["description"]) for q_id, data in qids_data.items()
+        (q_id, data["label"], data["description"], int(data.get("is_missing", False)))
+        for q_id, data in qids_data.items()
     ]
 
     try:
         cursor = conn.cursor()
         cursor.executemany(
-            "INSERT OR REPLACE INTO wikidata_cache (q_id, label, description) VALUES (?, ?, ?)",
+            "INSERT OR REPLACE INTO wikidata_cache (q_id, label, description, is_missing) VALUES (?, ?, ?, ?)",
             to_save,
         )
         conn.commit()
