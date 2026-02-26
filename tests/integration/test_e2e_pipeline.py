@@ -134,7 +134,7 @@ def test_e2e_data_pipeline(kafka_broker, e2e_context):
     datasource = e2e_context["datasource"]
 
     # 1. 테스트용 Kafka Sender 생성
-    sender = KafkaSender(kafka_broker, topic)
+    sender = KafkaSender(kafka_broker, topic, dlq_topic=f"{topic}-dlq")
 
     # 2. 테스트 이벤트 생성
     test_id = str(uuid.uuid4())

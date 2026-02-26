@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from kafka import KafkaProducer
 
 logging.basicConfig(
@@ -53,14 +53,14 @@ class KafkaSender:
         if failed:
             logging.warning(f"⚠️ {failed}개의 이벤트를 DLQ로 라우팅했습니다.")
 
-    def _send_to_dlq(self, event: dict, error: str):
+    def _send_to_dlq(self, event: dict, error: str, retry_count: int = 0):
         dlq_message = {
             "original_event": event,
             "dlq_metadata": {
                 "error": error,
-                "failed_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(timezone.utc).isoformat(),
                 "source_topic": self.kafka_topic,
-                "retry_count": 0,
+                "retry_count": retry_count,
             },
         }
         try:

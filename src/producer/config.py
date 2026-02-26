@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     batch_size: int = 500
     batch_timeout_seconds: float = 10.0
 
+    # DLQ Settings
+    dlq_max_retries: int = 3
+
     # Logging
     log_level: str = "INFO"
 
