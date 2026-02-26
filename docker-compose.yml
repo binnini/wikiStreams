@@ -82,6 +82,7 @@ services:
     environment:
       KAFKA_BROKER: 'kafka-kraft:29092'
       KAFKA_TOPIC: 'wikimedia.recentchange'
+      KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
   postgres:
     container_name: postgres
     image: postgres:latest

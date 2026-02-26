@@ -5,6 +5,7 @@ class Settings(BaseSettings):
     # Kafka Settings
     kafka_broker: str = "localhost:9092"
     kafka_topic: str = "wikimedia.recentchange"
+    kafka_dlq_topic: str = "wikimedia.recentchange.dlq"
 
     # Cache Settings
     # 기본값은 기존과 동일하게 설정하되, 테스트나 로컬 개발 시 변경 가능하도록 함
