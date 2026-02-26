@@ -22,7 +22,9 @@ def run_producer():
     setup_database()
 
     enricher = WikidataEnricher()
-    sender = KafkaSender(settings.kafka_broker, settings.kafka_topic)
+    sender = KafkaSender(
+        settings.kafka_broker, settings.kafka_topic, settings.kafka_dlq_topic
+    )
 
     def process_batch(events: list):
         enriched_events = enricher.enrich_events(events)

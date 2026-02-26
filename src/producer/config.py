@@ -5,10 +5,13 @@ class Settings(BaseSettings):
     # Kafka Settings
     kafka_broker: str = "localhost:9092"
     kafka_topic: str = "wikimedia.recentchange"
+    kafka_dlq_topic: str = "wikimedia.recentchange.dlq"
 
     # Cache Settings
     # 기본값은 기존과 동일하게 설정하되, 테스트나 로컬 개발 시 변경 가능하도록 함
     database_path: str = "/cache/wikidata_cache.db"
+    cache_ttl_seconds: int = 2592000  # 정상 엔티티: 30일
+    cache_missing_ttl_seconds: int = 86400  # "missing" 엔티티: 24시간
 
     # Collector Settings
     batch_size: int = 500

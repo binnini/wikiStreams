@@ -205,3 +205,26 @@ def test_enrich_scenarios(
         mock_save_cache.assert_not_called()
     else:
         mock_save_cache.assert_called_once()
+
+
+def test_missing_entity_flagged_and_saved(mocker, enricher):
+    """Wikidata "missing" 엔티티는 is_missing=True로 저장되어야 한다."""
+    mocker.patch("producer.enricher.get_qids_from_cache", return_value={})
+    mock_save_cache = mocker.patch("producer.enricher.save_qids_to_cache")
+    mock_response = MagicMock()
+    mock_response.raise_for_status.return_value = None
+    mock_response.json.return_value = {
+        "entities": {"Q9999999": {"id": "Q9999999", "missing": ""}}
+    }
+    mocker.patch("httpx.Client.get", return_value=mock_response)
+
+    result = enricher.enrich_events([{"title": "Q9999999"}])
+
+    # 이벤트에는 "-"로 채워져야 함
+    assert result == [
+        {"title": "Q9999999", "wikidata_label": "-", "wikidata_description": "-"}
+    ]
+
+    # is_missing=True로 캐시에 저장되어야 함
+    saved_data = mock_save_cache.call_args[0][0]
+    assert saved_data["Q9999999"]["is_missing"] is True

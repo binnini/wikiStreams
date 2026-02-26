@@ -36,7 +36,7 @@ def test_run_producer_initializes_and_runs_pipeline(mock_dependencies):
     # 2. 각 클래스가 올바른 인자로 인스턴스화되었는지 확인
     mock_dependencies["Enricher"].assert_called_once_with()
     mock_dependencies["Sender"].assert_called_once_with(
-        settings.kafka_broker, settings.kafka_topic
+        settings.kafka_broker, settings.kafka_topic, settings.kafka_dlq_topic
     )
     mock_dependencies["Collector"].assert_called_once_with(
         settings.batch_size, settings.batch_timeout_seconds
