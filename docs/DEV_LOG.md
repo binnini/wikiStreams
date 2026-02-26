@@ -98,6 +98,7 @@
 - **결과**: 전체 시스템 로그를 한곳에서 검색 및 필터링 가능하며, 이슈 발생 시 타임라인 기반의 신속한 디버깅 환경 확보.
 
 ### 5. 모니터링 고도화 및 리소스 감시 체계 구축
+
 - **작업**: 단순 로그 조회를 넘어 성능 지표 시각화 및 시스템 자원 모니터링 대시보드 구축.
 - **해결**:
     - **전용 대시보드 세분화**: 
@@ -113,3 +114,33 @@
     - **해결**: LogQL에서 `logfmt` 파싱 후 명시적으로 `by (target_container)`를 사용하여 시리즈를 분리하고, `avg_over_time`과 `sum`을 조합하여 올바른 전체 사용량 도출.
 - **결과**: 인프라와 애플리케이션 양쪽의 건강 상태를 수치화된 지표로 실시간 감시할 수 있는 완성도 높은 운영 환경 구축.
 
+## 2026-02-26
+
+### 1. Dead Letter Queue (DLQ) 구현
+- **배경**: Kafka `send()` 실패 시 이벤트가 로그에만 기록되고 영구 소실되는 문제.
+- **작업**:
+  - `config.py`에 `KAFKA_DLQ_TOPIC` 설정 추가 (기본값: `wikimedia.recentchange.dlq`).
+  - `sender.py`를 Future 기반으로 재작성: 모든 이벤트를 `send()` 후 `flush()`, 이후 각 Future의 결과를 확인하여 실패 이벤트만 DLQ로 라우팅.
+  - DLQ 메시지에 `original_event` + `dlq_metadata(error, failed_at, source_topic, retry_count)` 포함.
+  - `docker-compose.yml` producer 서비스에 `KAFKA_DLQ_TOPIC` env 추가.
+- **테스트**: DLQ 라우팅, 부분 실패(3개 중 1개), DLQ 전송 자체 실패 시 CRITICAL 로그 케이스 포함 (7/7 통과).
+- **결과**: 실패 이벤트가 DLQ 토픽에 보존되어 추후 재처리 가능. 정상 이벤트 처리에는 영향 없음.
+
+### 2. DLQ 모니터링 패널 추가 (Grafana Error Monitor)
+- **배경**: DLQ에 얼마나 쌓이는지 대시보드에서 확인 필요.
+- **작업**:
+  - `monitoring/dashboards/wikistreams-errors.json`에 패널 2개 추가:
+    - **DLQ Events/min**: LogQL `count_over_time`으로 분당 DLQ 라우팅 건수 시계열 표시.
+    - **DLQ Total**: 선택 기간 내 누적 DLQ 이벤트 수 (0=녹색 / 1~99=주황 / 100+=빨강).
+  - 기존 `producer` 대시보드의 stat 패널 UI 패턴(`colorMode: value`, `graphMode: area`)에 맞춰 일관성 유지.
+
+### 3. Wikidata 캐시 TTL 도입
+- **배경**: `timestamp` 컬럼이 있었으나 만료 검증 없이 캐시가 무기한 유효하게 유지됨.
+- **작업**:
+  - `config.py`에 `CACHE_TTL_SECONDS` 설정 추가 (기본값: 86400초 / 24시간).
+  - `cache.py`의 `get_qids_from_cache()`에 TTL WHERE 절 추가:
+    ```sql
+    AND timestamp > datetime('now', '-{ttl} seconds')
+    ```
+  - Lazy expiry 방식: 만료된 항목은 DB에 남고 조회 시 무시됨. 다음 API 호출 후 `INSERT OR REPLACE`로 timestamp 갱신.
+- **테스트**: 만료 항목 미반환, TTL 이내 항목 반환, 혼합 케이스 (7/7 통과, 전체 26/26).
