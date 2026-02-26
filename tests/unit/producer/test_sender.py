@@ -90,7 +90,8 @@ def test_send_events_routes_to_dlq_on_failure(mock_kafka_producer):
 
     # Assert: DLQ 토픽으로 전송됐는지 확인
     dlq_calls = [
-        call for call in sender.producer.send.call_args_list
+        call
+        for call in sender.producer.send.call_args_list
         if call.args[0] == TEST_DLQ_TOPIC
     ]
     assert len(dlq_calls) == 1
@@ -124,11 +125,13 @@ def test_send_events_partial_failure(mock_kafka_producer):
 
     # Assert: 메인 토픽 3회 + DLQ 1회
     main_calls = [
-        call for call in sender.producer.send.call_args_list
+        call
+        for call in sender.producer.send.call_args_list
         if call.args[0] == TEST_TOPIC
     ]
     dlq_calls = [
-        call for call in sender.producer.send.call_args_list
+        call
+        for call in sender.producer.send.call_args_list
         if call.args[0] == TEST_DLQ_TOPIC
     ]
     assert len(main_calls) == 3
@@ -148,6 +151,7 @@ def test_dlq_send_failure_logs_critical(mock_kafka_producer, caplog):
 
     # Act
     import logging
+
     with caplog.at_level(logging.CRITICAL, logger="root"):
         sender.send_events([event])
 

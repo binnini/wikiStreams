@@ -49,9 +49,7 @@ class KafkaSender:
                 self._send_to_dlq(event, str(e))
                 failed += 1
 
-        logging.info(
-            f"{success}개의 이벤트를 '{self.kafka_topic}'으로 전송했습니다."
-        )
+        logging.info(f"{success}개의 이벤트를 '{self.kafka_topic}'으로 전송했습니다.")
         if failed:
             logging.warning(f"⚠️ {failed}개의 이벤트를 DLQ로 라우팅했습니다.")
 

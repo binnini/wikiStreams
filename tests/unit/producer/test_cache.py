@@ -105,7 +105,9 @@ def test_expired_entry_not_returned(temp_db, monkeypatch):
 def test_valid_entry_within_ttl_returned(temp_db, monkeypatch):
     # Arrange: TTL을 60초로 설정하고, 정상 저장 (방금 저장 = 만료 안 됨)
     monkeypatch.setattr(settings, "cache_ttl_seconds", 60)
-    cache.save_qids_to_cache({"Q123": {"label": "Fresh Label", "description": "Fresh Desc"}})
+    cache.save_qids_to_cache(
+        {"Q123": {"label": "Fresh Label", "description": "Fresh Desc"}}
+    )
 
     # Act
     result = cache.get_qids_from_cache(["Q123"])

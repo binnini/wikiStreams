@@ -1,6 +1,6 @@
 import logging
 import pytest
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock
 
 from dlq_consumer.consumer import DLQConsumer
 
