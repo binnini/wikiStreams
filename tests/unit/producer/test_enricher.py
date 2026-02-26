@@ -221,7 +221,9 @@ def test_missing_entity_flagged_and_saved(mocker, enricher):
     result = enricher.enrich_events([{"title": "Q9999999"}])
 
     # 이벤트에는 "-"로 채워져야 함
-    assert result == [{"title": "Q9999999", "wikidata_label": "-", "wikidata_description": "-"}]
+    assert result == [
+        {"title": "Q9999999", "wikidata_label": "-", "wikidata_description": "-"}
+    ]
 
     # is_missing=True로 캐시에 저장되어야 함
     saved_data = mock_save_cache.call_args[0][0]

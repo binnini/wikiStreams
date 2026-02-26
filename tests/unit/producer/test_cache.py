@@ -4,7 +4,9 @@ from producer import cache
 from producer.config import settings
 
 
-def _insert_with_old_timestamp(db_path: str, q_id: str, seconds_ago: int, is_missing: int = 0):
+def _insert_with_old_timestamp(
+    db_path: str, q_id: str, seconds_ago: int, is_missing: int = 0
+):
     """테스트용: 특정 시간 전에 저장된 것처럼 직접 timestamp를 조작해 삽입"""
     conn = sqlite3.connect(db_path)
     conn.execute(
@@ -134,7 +136,9 @@ def test_missing_entry_expires_with_short_ttl(temp_db, monkeypatch):
     # Arrange: 정상 TTL=3600초, missing TTL=30초, 31초 전에 missing으로 저장
     monkeypatch.setattr(settings, "cache_ttl_seconds", 3600)
     monkeypatch.setattr(settings, "cache_missing_ttl_seconds", 30)
-    _insert_with_old_timestamp(settings.database_path, "Q_missing", seconds_ago=31, is_missing=1)
+    _insert_with_old_timestamp(
+        settings.database_path, "Q_missing", seconds_ago=31, is_missing=1
+    )
 
     # Act
     result = cache.get_qids_from_cache(["Q_missing"])
@@ -146,7 +150,9 @@ def test_missing_entry_expires_with_short_ttl(temp_db, monkeypatch):
 def test_missing_entry_returned_within_missing_ttl(temp_db, monkeypatch):
     # Arrange: missing TTL=3600초, 방금 저장
     monkeypatch.setattr(settings, "cache_missing_ttl_seconds", 3600)
-    cache.save_qids_to_cache({"Q_missing": {"label": "-", "description": "-", "is_missing": True}})
+    cache.save_qids_to_cache(
+        {"Q_missing": {"label": "-", "description": "-", "is_missing": True}}
+    )
 
     # Act
     result = cache.get_qids_from_cache(["Q_missing"])
@@ -158,6 +164,7 @@ def test_missing_entry_returned_within_missing_ttl(temp_db, monkeypatch):
 def test_expired_count_logged(temp_db, monkeypatch, caplog):
     # Arrange: TTL=60초, 정상 항목과 만료 항목 혼재
     import logging
+
     monkeypatch.setattr(settings, "cache_ttl_seconds", 60)
     _insert_with_old_timestamp(settings.database_path, "Q_expired", seconds_ago=61)
     cache.save_qids_to_cache({"Q_fresh": {"label": "Fresh", "description": "Desc"}})
@@ -174,7 +181,9 @@ def test_normal_entry_survives_past_missing_ttl(temp_db, monkeypatch):
     # Arrange: 정상 TTL=3600초, missing TTL=30초, 31초 전에 정상(is_missing=0)으로 저장
     monkeypatch.setattr(settings, "cache_ttl_seconds", 3600)
     monkeypatch.setattr(settings, "cache_missing_ttl_seconds", 30)
-    _insert_with_old_timestamp(settings.database_path, "Q_normal", seconds_ago=31, is_missing=0)
+    _insert_with_old_timestamp(
+        settings.database_path, "Q_normal", seconds_ago=31, is_missing=0
+    )
 
     # Act
     result = cache.get_qids_from_cache(["Q_normal"])
