@@ -4,6 +4,18 @@ from producer import cache
 from producer.config import settings
 
 
+def _insert_with_old_timestamp(db_path: str, q_id: str, seconds_ago: int):
+    """테스트용: 특정 시간 전에 저장된 것처럼 직접 timestamp를 조작해 삽입"""
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "INSERT OR REPLACE INTO wikidata_cache (q_id, label, description, timestamp) "
+        "VALUES (?, ?, ?, datetime('now', ? || ' seconds'))",
+        (q_id, "Old Label", "Old Desc", f"-{seconds_ago}"),
+    )
+    conn.commit()
+    conn.close()
+
+
 @pytest.fixture
 def temp_db(tmp_path, monkeypatch):
     """
@@ -76,3 +88,41 @@ def test_partial_cache_hit(temp_db):
 
     # Assert
     assert result == qids_to_save  # 캐시에 있는 것만 반환되어야 함
+
+
+def test_expired_entry_not_returned(temp_db, monkeypatch):
+    # Arrange: TTL을 60초로 설정하고, 61초 전에 저장된 항목 삽입
+    monkeypatch.setattr(settings, "cache_ttl_seconds", 60)
+    _insert_with_old_timestamp(settings.database_path, "Q999", seconds_ago=61)
+
+    # Act
+    result = cache.get_qids_from_cache(["Q999"])
+
+    # Assert: 만료됐으므로 캐시 미스
+    assert result == {}
+
+
+def test_valid_entry_within_ttl_returned(temp_db, monkeypatch):
+    # Arrange: TTL을 60초로 설정하고, 정상 저장 (방금 저장 = 만료 안 됨)
+    monkeypatch.setattr(settings, "cache_ttl_seconds", 60)
+    cache.save_qids_to_cache({"Q123": {"label": "Fresh Label", "description": "Fresh Desc"}})
+
+    # Act
+    result = cache.get_qids_from_cache(["Q123"])
+
+    # Assert
+    assert result == {"Q123": {"label": "Fresh Label", "description": "Fresh Desc"}}
+
+
+def test_mixed_expired_and_valid(temp_db, monkeypatch):
+    # Arrange: TTL 60초, Q_expired는 만료, Q_fresh는 유효
+    monkeypatch.setattr(settings, "cache_ttl_seconds", 60)
+    _insert_with_old_timestamp(settings.database_path, "Q_expired", seconds_ago=61)
+    cache.save_qids_to_cache({"Q_fresh": {"label": "Fresh", "description": "Desc"}})
+
+    # Act
+    result = cache.get_qids_from_cache(["Q_expired", "Q_fresh"])
+
+    # Assert: 유효한 것만 반환
+    assert "Q_fresh" in result
+    assert "Q_expired" not in result

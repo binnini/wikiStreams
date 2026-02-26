@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     # Cache Settings
     # 기본값은 기존과 동일하게 설정하되, 테스트나 로컬 개발 시 변경 가능하도록 함
     database_path: str = "/cache/wikidata_cache.db"
+    cache_ttl_seconds: int = 86400  # 24시간
 
     # Collector Settings
     batch_size: int = 500

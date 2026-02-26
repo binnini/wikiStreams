@@ -77,7 +77,11 @@ def get_qids_from_cache(q_ids: list) -> dict:
     found_qids = {}
     try:
         placeholders = ", ".join("?" for _ in q_ids)
-        query = f"SELECT q_id, label, description FROM wikidata_cache WHERE q_id IN ({placeholders})"
+        query = (
+            f"SELECT q_id, label, description FROM wikidata_cache "
+            f"WHERE q_id IN ({placeholders}) "
+            f"AND timestamp > datetime('now', '-{settings.cache_ttl_seconds} seconds')"
+        )
 
         cursor = conn.cursor()
         cursor.execute(query, q_ids)
