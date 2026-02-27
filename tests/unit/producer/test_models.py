@@ -56,7 +56,11 @@ def test_wikimedia_event_enrichment_fields_default_none():
 
 
 def test_wikimedia_event_enrichment_fields_set():
-    enriched = {**VALID_EVENT, "wikidata_label": "대한민국", "wikidata_description": "동아시아 국가"}
+    enriched = {
+        **VALID_EVENT,
+        "wikidata_label": "대한민국",
+        "wikidata_description": "동아시아 국가",
+    }
     event = WikimediaEvent.model_validate(enriched)
     assert event.wikidata_label == "대한민국"
 
