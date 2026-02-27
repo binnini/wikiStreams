@@ -1,11 +1,14 @@
 import logging
 import threading
 
+from pydantic import ValidationError
+
 # 로컬 모듈 임포트
 from .config import settings
 from .cache import setup_database, close_db_connection
 from .collector import WikimediaCollector
 from .enricher import WikidataEnricher
+from .models import WikimediaEvent
 from .sender import KafkaSender
 
 # --- 1. 설정값 불러오기 ---
@@ -27,7 +30,16 @@ def run_producer():
     )
 
     def process_batch(events: list):
-        enriched_events = enricher.enrich_events(events)
+        valid_events = []
+        for event in events:
+            try:
+                WikimediaEvent.model_validate(event)
+                valid_events.append(event)
+            except ValidationError as e:
+                logging.warning(f"⚠️ 스키마 검증 실패, DLQ로 격리: {e}")
+                sender.send_to_dlq(event, f"Schema validation error: {e}")
+
+        enriched_events = enricher.enrich_events(valid_events)
         sender.send_events(enriched_events)
 
     collector = WikimediaCollector(settings.batch_size, settings.batch_timeout_seconds)

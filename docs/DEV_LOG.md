@@ -166,3 +166,25 @@
     - **TTL Expired (Per Minute)**: 분당 만료 건수 시계열.
     - **Total TTL Expired**: 선택 기간 내 누적 만료 건수 stat.
 - **테스트**: 차등 TTL 시나리오 3개, TTL 만료 로그 검증, missing 엔티티 저장 플래그 검증 (신규 5개 포함 전체 통과).
+
+## 2026-02-27
+
+### 1. 입력 데이터 스키마 검증 도입 (Pydantic + DLQ 격리)
+- **배경**: Wikimedia SSE 스트림에서 수신한 raw dict이 검증 없이 파이프라인을 통과하여 Kafka에 적재됨. 필수 필드 누락이나 타입 불일치 이벤트가 하류 시스템(Druid)에서 오류를 유발할 가능성이 있었음.
+- **작업**:
+  - `src/producer/models.py`에 `WikimediaEvent` Pydantic 모델 정의 (필수 필드: `title`, `server_name`, `type`, `namespace`, `timestamp`, `user`, `bot`; `extra="allow"`로 미정의 필드 보존).
+  - `WikidataApiResponse` 모델 추가 (`entities` 키 필수 보장, 나머지 필드는 허용).
+  - `main.py`의 `process_batch()`에 이벤트별 검증 루프 추가: `WikimediaEvent.model_validate()` 실패 시 즉시 DLQ로 격리, 성공한 이벤트만 enricher로 전달.
+  - `enricher.py`의 `_fetch_chunk()`에서 API 응답을 `WikidataApiResponse`로 검증: 스키마 불일치 시 빈 dict 반환 후 graceful 처리.
+  - `sender.py`의 `_send_to_dlq()` → `send_to_dlq()`로 공개 메서드화 (main.py에서 직접 호출 가능하도록).
+- **테스트**: `tests/unit/producer/test_models.py` 신규 작성 (9개), `test_main.py`에 DLQ 격리 케이스 2개 추가 — 전체 13/13 통과.
+- **결과**: 스키마 불일치 이벤트가 파이프라인 초입에서 차단·보존되며, 정상 이벤트 처리에는 영향 없음.
+
+### 2. Wikidata API ID 수 제한 버그 수정 (50개 청크 처리)
+- **배경**: 한 배치의 Q-ID를 전부 한 번의 API 요청에 담아 보내고 있었으나, Wikidata API의 익명 사용자 제한(`lowlimit: 50`)을 초과하면 `toomanyvalues` 에러 응답(HTTP 200)이 반환됨. 응답에 `entities` 키가 없어 enrichment 결과가 항상 0개였음.
+- **원인**: `fetch_wikidata_info_in_bulk()`가 q_ids 전체를 `"|".join(q_ids)`로 단일 요청에 전송. 실제 운영에서 배치당 Q-ID가 90~110개로 제한(50개)을 초과.
+- **해결**:
+  - `fetch_wikidata_info_in_bulk()`를 청크 오케스트레이터로, 실제 HTTP 호출은 `_fetch_chunk()`로 분리.
+  - `WIKIDATA_API_BATCH_SIZE = 50` 상수로 청크 크기 명시.
+  - Q-ID를 50개씩 나눠 순차 요청 후 결과를 병합.
+- **결과**: `Wikidata API로부터 총 102개의 정보를 가져왔습니다.` — enrichment 정상 동작 확인.

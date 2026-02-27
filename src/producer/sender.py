@@ -46,14 +46,14 @@ class KafkaSender:
                 future.get(timeout=10)
                 success += 1
             except Exception as e:
-                self._send_to_dlq(event, str(e))
+                self.send_to_dlq(event, str(e))
                 failed += 1
 
         logging.info(f"{success}개의 이벤트를 '{self.kafka_topic}'으로 전송했습니다.")
         if failed:
             logging.warning(f"⚠️ {failed}개의 이벤트를 DLQ로 라우팅했습니다.")
 
-    def _send_to_dlq(self, event: dict, error: str, retry_count: int = 0):
+    def send_to_dlq(self, event: dict, error: str, retry_count: int = 0):
         dlq_message = {
             "original_event": event,
             "dlq_metadata": {

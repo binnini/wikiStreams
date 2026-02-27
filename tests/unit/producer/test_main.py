@@ -3,6 +3,16 @@ from unittest.mock import patch
 from producer import main
 from producer.config import settings
 
+VALID_EVENT = {
+    "title": "South Korea",
+    "server_name": "en.wikipedia.org",
+    "type": "edit",
+    "namespace": 0,
+    "timestamp": 1700000000,
+    "user": "TestUser",
+    "bot": False,
+}
+
 
 @pytest.fixture
 def mock_dependencies():
@@ -58,8 +68,11 @@ def test_process_batch_callback_flow(mock_dependencies):
     args, _ = collector_instance.set_callback.call_args
     process_batch_callback = args[0]
 
-    # 테스트용 이벤트 데이터
-    raw_events = [{"title": "Event1"}, {"title": "Event2"}]
+    # 테스트용 이벤트 데이터 (필수 필드를 모두 갖춘 유효한 이벤트)
+    raw_events = [
+        {**VALID_EVENT, "title": "Event1"},
+        {**VALID_EVENT, "title": "Event2"},
+    ]
     enriched_events = [{"title": "Event1", "label": "L1"}, {"title": "Event2"}]
 
     # Mock 객체들의 동작 설정
@@ -78,3 +91,50 @@ def test_process_batch_callback_flow(mock_dependencies):
 
     # Sender가 보강된 데이터를 전송했는지 확인
     sender_instance.send_events.assert_called_once_with(enriched_events)
+
+
+def test_process_batch_invalid_events_routed_to_dlq(mock_dependencies):
+    """필수 필드가 누락된 이벤트는 DLQ로 격리되어야 한다."""
+    main.run_producer()
+
+    collector_instance = mock_dependencies["Collector"].return_value
+    args, _ = collector_instance.set_callback.call_args
+    process_batch_callback = args[0]
+
+    invalid_events = [{"title": "no_required_fields"}]
+
+    enricher_instance = mock_dependencies["Enricher"].return_value
+    enricher_instance.enrich_events.return_value = []
+    sender_instance = mock_dependencies["Sender"].return_value
+
+    process_batch_callback(invalid_events)
+
+    sender_instance.send_to_dlq.assert_called_once()
+    call_kwargs = sender_instance.send_to_dlq.call_args
+    assert call_kwargs[0][0] == invalid_events[0]
+    assert "Schema validation error" in call_kwargs[0][1]
+
+    enricher_instance.enrich_events.assert_called_once_with([])
+
+
+def test_process_batch_mixed_valid_and_invalid(mock_dependencies):
+    """유효한 이벤트만 enricher로 전달되고, 무효한 이벤트는 DLQ로 격리된다."""
+    main.run_producer()
+
+    collector_instance = mock_dependencies["Collector"].return_value
+    args, _ = collector_instance.set_callback.call_args
+    process_batch_callback = args[0]
+
+    valid_event = {**VALID_EVENT, "title": "ValidEvent"}
+    invalid_event = {"title": "no_required_fields"}
+    mixed_events = [valid_event, invalid_event]
+
+    enricher_instance = mock_dependencies["Enricher"].return_value
+    enricher_instance.enrich_events.return_value = [valid_event]
+    sender_instance = mock_dependencies["Sender"].return_value
+
+    process_batch_callback(mixed_events)
+
+    enricher_instance.enrich_events.assert_called_once_with([valid_event])
+    sender_instance.send_to_dlq.assert_called_once()
+    sender_instance.send_events.assert_called_once_with([valid_event])

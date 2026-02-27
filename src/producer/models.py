@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-from typing import Optional
+from typing import Any, Dict, Optional
 
 
 class WikimediaEvent(BaseModel):
@@ -21,5 +21,16 @@ class WikimediaEvent(BaseModel):
     # Enricher에서 추가되는 필드 (선택)
     wikidata_label: Optional[str] = None
     wikidata_description: Optional[str] = None
+
+    model_config = ConfigDict(extra="allow")
+
+
+class WikidataApiResponse(BaseModel):
+    """Wikidata API (wbgetentities) 응답 최상위 스키마.
+
+    entities 키의 존재를 보장하며, 알 수 없는 추가 필드는 허용한다.
+    """
+
+    entities: Dict[str, Any]
 
     model_config = ConfigDict(extra="allow")
