@@ -85,7 +85,7 @@ def kafka_topic(kafka_service):
 @pytest.fixture(scope="module")
 def kafka_producer_client(kafka_service, kafka_topic):
     # kafka_service는 이미 'host:port' 문자열을 반환함
-    sender = KafkaSender(kafka_service, kafka_topic)
+    sender = KafkaSender(kafka_service, kafka_topic, dlq_topic=f"{kafka_topic}-dlq")
     return sender
 
 

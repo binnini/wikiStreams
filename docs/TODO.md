@@ -8,10 +8,14 @@
   - [x] Grafana Error Monitor에 DLQ Events/min, DLQ Total 패널 추가
   - [x] DLQ 컨슈머 서비스 구성 (재처리 또는 알림) *(2026-02-26 완료)*
 
-- [ ] **입력 데이터 스키마 검증**
-  - Wikimedia SSE 이벤트를 Pydantic 모델로 정의
-  - 필수 필드 누락 또는 타입 불일치 시 DLQ로 격리
-  - Wikidata API 응답도 동일하게 검증
+- [x] **입력 데이터 스키마 검증** *(2026-02-27 완료)*
+  - [x] Wikimedia SSE 이벤트를 Pydantic 모델로 정의 (`WikimediaEvent`)
+  - [x] 필수 필드 누락 또는 타입 불일치 시 DLQ로 격리
+  - [x] Wikidata API 응답도 동일하게 검증 (`WikidataApiResponse`)
+
+- [ ] **Mac Mini로 마이그레이션**
+
+
 
 ## 우선순위 중간
 

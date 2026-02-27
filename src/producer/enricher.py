@@ -1,9 +1,11 @@
 import logging
 import httpx
+from pydantic import ValidationError
 from .cache import (
     get_qids_from_cache,
     save_qids_to_cache,
 )
+from .models import WikidataApiResponse
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -14,14 +16,28 @@ class WikidataEnricher:
     def __init__(self):
         pass
 
+    WIKIDATA_API_BATCH_SIZE = 50  # 익명 사용자 기준 Wikidata API 최대 ID 수
+
     def fetch_wikidata_info_in_bulk(self, q_ids: list) -> dict:
         if not q_ids:
             return {}
+
+        results = {}
+        chunks = [
+            q_ids[i : i + self.WIKIDATA_API_BATCH_SIZE]
+            for i in range(0, len(q_ids), self.WIKIDATA_API_BATCH_SIZE)
+        ]
+        for chunk in chunks:
+            results.update(self._fetch_chunk(chunk))
+
+        logging.info(f"Wikidata API로부터 총 {len(results)}개의 정보를 가져왔습니다.")
+        return results
+
+    def _fetch_chunk(self, q_ids: list) -> dict:
         api_endpoint = "https://www.wikidata.org/w/api.php"
-        ids_string = "|".join(q_ids)
         params = {
             "action": "wbgetentities",
-            "ids": ids_string,
+            "ids": "|".join(q_ids),
             "props": "labels|descriptions",
             "languages": "ko|en",
             "format": "json",
@@ -32,8 +48,13 @@ class WikidataEnricher:
                 response = client.get(api_endpoint, params=params, headers=headers)
                 response.raise_for_status()
                 data = response.json()
+                try:
+                    validated = WikidataApiResponse.model_validate(data)
+                    entities = validated.entities
+                except ValidationError as e:
+                    logging.error(f"❌ Wikidata API 응답 스키마 불일치: {e}")
+                    return {}
                 results = {}
-                entities = data.get("entities", {})
                 for q_id, entity in entities.items():
                     is_missing = "missing" in entity
                     if is_missing:
@@ -54,9 +75,6 @@ class WikidataEnricher:
                         "description": desc,
                         "is_missing": is_missing,
                     }
-                logging.info(
-                    f"Wikidata API로부터 {len(results)}개의 정보를 가져왔습니다."
-                )
                 return results
         except httpx.HTTPError as e:
             logging.error(f"❌ Wikidata API 오류: {e}")
