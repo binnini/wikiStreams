@@ -14,6 +14,43 @@
   - [x] Wikidata API 응답도 동일하게 검증 (`WikidataApiResponse`)
 
 - [ ] **Mac Mini로 마이그레이션**
+  - [ ] **1단계: Mac Mini 환경 준비**
+    - [ ] Docker Desktop for Mac 설치 (Apple Silicon이면 arm64 빌드)
+    - [ ] Docker Desktop 리소스 설정 — 메모리 최소 12GB, CPU 4코어 이상 할당 (Druid가 메모리를 많이 소비)
+    - [ ] Git 설치 및 리포지토리 클론
+
+  - [ ] **2단계: Apple Silicon 아키텍처 호환성 확인**
+    - [ ] `apache/druid:35.0.0` arm64 이미지 지원 여부 확인 (미지원 시 `platform: linux/amd64` 명시)
+    - [ ] `confluentinc/cp-kafka:8.1.1` arm64 지원 여부 확인
+    - [ ] `zookeeper:3.5.10` arm64 지원 여부 확인
+    - [ ] arm64 미지원 이미지에 `platform: linux/amd64`를 `docker-compose.yml`에 추가
+
+  - [ ] **3단계: Promtail 컨테이너 로그 경로 수정 (필수)**
+    - macOS에서 `/var/lib/docker/containers`는 Docker Desktop 내부 VM 경로 → 호스트에서 직접 마운트 불가
+    - [ ] `monitoring/promtail-config.yaml`을 Docker socket API 기반 수집(`docker_sd_configs`)으로 변경하거나
+    - [ ] Promtail 대신 Grafana Alloy(구 Agent) 등 macOS 친화적 로그 수집기로 교체 검토
+
+  - [ ] **4단계: 데이터 볼륨 마이그레이션**
+    - [ ] PostgreSQL 데이터 덤프 및 복원 (`pg_dump` → `pg_restore`)
+    - [ ] Grafana 대시보드/설정 볼륨 내보내기 (`docker cp` 또는 `docker run --volumes-from`)
+    - [ ] Druid 세그먼트는 재수집이 가능하므로 마이그레이션 생략 가능 (재기동 후 자동 재인제스천)
+    - [ ] SQLite 캐시(`producer_cache`)는 복사 시 30일치 캐시 유지 가능, 생략 시 초기 API 호출 증가
+
+  - [ ] **5단계: 서비스 자동 시작 설정**
+    - [ ] Docker Desktop → "Start Docker Desktop when you log in" 활성화
+    - [ ] macOS 재부팅 시 `docker compose up -d` 자동 실행 설정
+      - `launchd` plist 작성 (`~/Library/LaunchAgents/`) 또는
+      - macOS 로그인 항목(Login Items)에 셸 스크립트 등록
+
+  - [ ] **6단계: 네트워크 설정**
+    - [ ] Mac Mini에 고정 IP 할당 (공유기 DHCP 예약 또는 macOS 수동 IP 설정)
+    - [ ] (선택) 외부 접근을 위한 공유기 포트포워딩 설정 (8088 Superset, 3000 Grafana 등)
+
+  - [ ] **7단계: 검증**
+    - [ ] `docker compose up -d` 후 전체 서비스 정상 기동 확인
+    - [ ] `PYTHONPATH=src pytest tests/unit/` 통과 확인
+    - [ ] Grafana 대시보드에 실시간 데이터 수신 확인 (Events/min 패널)
+    - [ ] Superset 대시보드 접속 및 쿼리 정상 확인
 
 
 
@@ -41,6 +78,16 @@
   - 여러 Producer 인스턴스가 캐시를 공유하게 되어 API 중복 호출 제거
 
 ## 우선순위 낮음
+
+- [ ] **중복 이벤트 제거 (Deduplication)**
+  - SSE 재연결 시 중복 이벤트 수신 가능 (Exactly-once 미보장)
+  - Kafka 메시지 키를 이벤트 고유 ID로 설정하거나 Druid 레벨 중복 필터링 검토
+  - 현재 `rollup=false` 설정으로 Druid가 중복 이벤트를 그대로 저장
+
+- [ ] **이상 감지 알림 (Anomaly Detection)**
+  - 처리량(Events/min)이 평소 대비 급감하거나 DLQ 급증 시 자동 알림 미구현
+  - Grafana Alert 또는 Loki Alert Rule 설정으로 임계치 기반 알림 추가
+  - 파이프라인 자체가 성공하더라도 데이터 이상을 조기 감지하는 방어선 필요
 
 - [ ] **CI 파이프라인 이원화**
   - 현재: 모든 테스트(Unit + Integration + E2E)를 PR마다 실행
