@@ -45,7 +45,7 @@ services:
     restart: always
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8
+    image: clickhouse/clickhouse-server:25.8
     container_name: clickhouse
     ports:
       - "8123:8123"  # HTTP interface
@@ -53,6 +53,7 @@ services:
     volumes:
       - clickhouse_data:/var/lib/clickhouse
       - ./clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./clickhouse/override-users.xml:/etc/clickhouse-server/users.d/override-users.xml
     depends_on:
       - kafka-kraft
     restart: always
