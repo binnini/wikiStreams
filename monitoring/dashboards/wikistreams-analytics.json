@@ -71,7 +71,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT count() AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
           "refId": "A"
         }
@@ -115,7 +115,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT uniq(user) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
           "refId": "A"
         }
@@ -159,7 +159,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT count() AS value FROM wikimedia.events WHERE wiki_type = 'new' AND $__timeFilter(event_time)",
           "refId": "A"
         }
@@ -208,7 +208,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT round(100.0 * countIf(bot = 1) / count(), 1) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
           "refId": "A"
         }
@@ -267,7 +267,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "time_series",
+          "format": 1,
           "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL $__interval_s second) AS time, countIf(bot = 0) AS \"Human Edits\", countIf(bot = 1) AS \"Bot Edits\" FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
           "refId": "A"
         }
@@ -325,7 +325,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT server_name, count() AS edits FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY server_name ORDER BY edits DESC LIMIT 10",
           "refId": "A"
         }
@@ -362,7 +362,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT wiki_type, count() AS count FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY wiki_type ORDER BY count DESC",
           "refId": "A"
         }
@@ -428,7 +428,7 @@
             "type": "grafana-clickhouse-datasource",
             "uid": "ClickHouse"
           },
-          "format": "table",
+          "format": 0,
           "rawSql": "SELECT if(wikidata_label != '', wikidata_label, title) AS label, title, wikidata_description AS description, server_name, count() AS edits FROM wikimedia.events WHERE $__timeFilter(event_time) AND namespace = 0 AND bot = 0 GROUP BY title, wikidata_label, wikidata_description, server_name ORDER BY edits DESC LIMIT 20",
           "refId": "A"
         }
