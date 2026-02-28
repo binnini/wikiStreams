@@ -4,11 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**WikiStreams** is a real-time data pipeline that monitors Wikimedia (Wikipedia, Wikidata) edit streams, enriches events with Wikidata labels/descriptions, and visualizes trends via Apache Superset. It uses a Kappa Architecture (stream-only, no batch layer) with all infrastructure managed via Docker Compose.
+**WikiStreams** is a real-time data pipeline that monitors Wikimedia (Wikipedia, Wikidata) edit streams, enriches events with Wikidata labels/descriptions, and visualizes trends via Grafana. It uses a Kappa Architecture (stream-only, no batch layer) with all infrastructure managed via Docker Compose.
 
 **Data Flow:**
 ```
-Wikimedia SSE Stream → Producer (Python) → Apache Kafka → Apache Druid → Apache Superset
+Wikimedia SSE Stream → Producer (Python) → Apache Kafka → ClickHouse → Grafana
 ```
 
 The Producer enriches events: if an event title is a Wikidata Q-ID (e.g. `Q12345`), it fetches the label and description from the Wikidata API and caches results in a local SQLite DB.
@@ -32,7 +32,7 @@ PYTHONPATH=src pytest tests/
 # Unit tests only (no external dependencies)
 PYTHONPATH=src pytest tests/unit/
 
-# Integration tests (requires running Kafka/Druid)
+# Integration tests (requires running Kafka/ClickHouse)
 PYTHONPATH=src pytest tests/integration/ -m integration
 
 # Single test file
@@ -67,46 +67,42 @@ All pipeline logic lives here. Modules are orchestrated by `main.py`:
 - **`sender.py`** — Future-based Kafka publishing. On send failure, routes failed events to the DLQ topic (`KAFKA_DLQ_TOPIC`) with error metadata. Falls back to CRITICAL log if DLQ send also fails.
 
 **When changing configuration**, update `src/producer/config.py` and add env vars there.
-**When changing infrastructure**, update `docker-compose.yml` and `druid/ingestion-spec.json` together.
+**When changing infrastructure**, update `docker-compose.yml` and `clickhouse/init-db.sql` together.
 
 ### Tests (`tests/`)
 
-Three tiers with explicit isolation:
+Two tiers with explicit isolation:
 - **`tests/unit/`** — Fully mocked, no external dependencies. Uses `pytest-mock`, `tmp_path` fixtures.
-- **`tests/integration/`** — Real SQLite + mocked Wikidata API (`test_enrichment_cache.py`), real Kafka broker (`test_producer_kafka_integration.py`), full Producer→Kafka→Druid flow (`test_e2e_pipeline.py`).
+- **`tests/integration/`** — Real SQLite + mocked Wikidata API (`test_enrichment_cache.py`), real Kafka broker (`test_producer_kafka_integration.py`), full Producer→Kafka→ClickHouse flow (`test_e2e_pipeline.py`).
 
-**E2E test isolation**: Each E2E test creates unique Kafka topics and Druid datasources, and tears them down after. Use the `e2e_context` fixture in `tests/conftest.py` for any new E2E tests.
+**E2E test isolation**: Each E2E test sends a uniquely-identified event to the real `wikimedia.recentchange` topic and polls ClickHouse HTTP API until the event appears.
 
 ### Infrastructure (`docker-compose.yml`)
 
-15 services in total. Key services and ports:
-- `kafka-kraft` :9092 — Message broker (KRaft mode, no Zookeeper for Kafka)
-- `druid-router` :8888 — Unified Druid query interface
-- `druid-broker` :8082 — Druid query layer
-- `superset` :8088 — Visualization
-- `grafana` :3000 — Monitoring dashboards
+8 services in total. Key services and ports:
+- `kafka-kraft` :9092 — Message broker (KRaft mode, no ZooKeeper)
+- `clickhouse` :8123 — HTTP query interface, :9000 Native TCP
+- `grafana` :3000 — Analytics dashboards + monitoring
 - `loki` :3100 — Log aggregation
 
-Druid ingestion config is in `druid/ingestion-spec.json` — subscribes to the `wikimedia.recentchange` Kafka topic with hourly segment granularity.
+ClickHouse schema is defined in `clickhouse/init-db.sql` — Kafka engine table subscribes to `wikimedia.recentchange`, Materialized View streams data into the `wikimedia.events` MergeTree table.
 
 ### Monitoring (`monitoring/`)
 
 Four Grafana dashboards auto-provisioned at startup:
 - **Error Monitor** — System-wide error logs via Loki
 - **Producer Performance** — Throughput (Events/Min) and Cache Hit Rate
-- **Druid Monitor** — Query latency and segment handoff
 - **Resources Monitor** — Per-container CPU/Memory via `docker-stats-logger` sidecar
+- **WikiStreams Analytics** — Edit trends, top wikis, edit type distribution, top pages (ClickHouse)
 
-### Superset Dashboard Management
+### Grafana Dashboard Management
 
-Dashboards are managed as code. The source of truth is `superset/dashboards/wikimedia_dashboard.zip`, which is auto-imported on container startup via `superset/init_superset.sh`. Superset uses UUID-based deduplication (same UUID = overwrite).
+Dashboards are managed as code in `monitoring/dashboards/`. They are auto-provisioned via `monitoring/grafana-dashboards.yaml` on container startup.
 
-**To update a dashboard**: Edit in Superset UI → Export as `.zip` → replace `superset/dashboards/wikimedia_dashboard.zip` → commit.
-**Warning**: UI changes not exported will be lost on container restart.
+**To update a dashboard**: Edit in Grafana UI → Export as JSON → replace the corresponding `.json` file in `monitoring/dashboards/` → commit.
 
 ## Roadmap (Pending Items)
 
-- **DLQ Consumer**: DLQ routing is implemented; a consumer service for retry/reprocessing is pending.
-- **Cache TTL (missing entities)**: Basic TTL is implemented; differential TTL for Wikidata `"missing"` responses is pending.
 - **AsyncIO refactoring**: Current pipeline is synchronous; migrating to `asyncio`/`aiokafka` would improve throughput.
 - **CI optimization**: Split into Smoke Tests (PR) and Full E2E (merge) stages.
+- **Promtail macOS fix**: `/var/lib/docker/containers` mount does not work on macOS Docker Desktop; switch to Docker socket API-only log collection.
