@@ -222,3 +222,50 @@
   - `WIKIDATA_API_BATCH_SIZE = 50` 상수로 청크 크기 명시.
   - Q-ID를 50개씩 나눠 순차 요청 후 결과를 병합.
 - **결과**: `Wikidata API로부터 총 102개의 정보를 가져왔습니다.` — enrichment 정상 동작 확인.
+
+### 3. ClickHouse 도입 및 파이프라인 구성
+
+- **작업**: Druid 대체재로 ClickHouse 단일 컨테이너 도입.
+  - `docker-compose.yml`에 ClickHouse 서비스 추가 (arm64 네이티브, `clickhouse/clickhouse-server:25.8`).
+  - Kafka 테이블 엔진(`wikimedia.recentchange`)으로 Kafka 토픽을 직접 구독.
+  - Materialized View로 Kafka 테이블 → MergeTree(`wikimedia.events`) 자동 저장 파이프라인 구성.
+  - `wikimedia.events` 스키마: `event_time`, `title`, `server_name`, `wiki_type`, `namespace`, `user`, `bot`, `minor`, `comment`, `wikidata_label`, `wikidata_description`.
+- **트러블슈팅 — Kafka 비트랜잭션 토픽**:
+  - ClickHouse 24.8에서 `"Kafka topic wikimedia.recentchange is not transactional"` 에러 발생.
+  - ClickHouse 25.8 LTS로 업그레이드 후 해소.
+- **결과**: 서비스 수 15개 → 8개, 메모리 요구사항 12GB+ → ~4GB 수준으로 감소.
+
+### 4. Grafana Analytics 대시보드 신규 구축
+
+- **작업**: Superset 대체 대시보드 `wikistreams-analytics.json` 작성.
+  - Overview 섹션: Total Edits, Active Users, New Articles, Bot Traffic %, Anonymous Edit %, Revert Rate % (6개 stat).
+  - 시계열: Human/Bot Edits Over Time.
+  - 분포: Top 10 Wikis (bar), Edit Type (pie).
+  - 테이블: Top Edited Pages.
+  - **Vandalism Monitor 섹션**: 총 Revert 수, Revert Rate %, Bot/Human Revert 분류 stat 4종; Editor Types Over Time 스택 시계열; Vandalism Pressure 오버레이; Top Reverted Articles 테이블.
+  - **Real-time Trends 섹션**: Edit Velocity stats 4종 (고정 5분 창); Edit Velocity Trend 시계열 (edits/min 정규화); Trending Articles (spike_ratio: 최근 15분 vs 이전 60분); Cross-wiki Trending.
+
+### 5. Grafana 대시보드 전반 개선 및 버그 수정
+
+- **Producer Performance 대시보드 개편**:
+  - 기존 단일 페이지 → Row 구조 (Overview / Throughput / Cache / Logs)로 재편.
+  - Cache Hit Rate Trend 시계열, DLQ Events stat 추가.
+  - 로그 패널을 핵심 이벤트 키워드 필터링으로 변경 (배치 완료, DLQ, 오류, TTL 만료 등).
+
+- **x축 과밀(Dense X-axis) 수정**:
+  - 이슈: 1시간 범위에서 `$__interval_s`가 3~5초로 계산되어 수백 개의 얇은 막대 생성.
+  - ClickHouse 쿼리: `INTERVAL $__interval_s second` → `INTERVAL greatest($__interval_s, 60) second` (최소 60초 버킷 보장).
+  - Loki 바 차트 패널: `maxDataPoints: 60` 추가 (Grafana 패널 레벨 제한).
+
+- **Top Reverted Articles SQL 버그 수정**:
+  - 원인: `HAVING reverts > 0 GROUP BY ...` — ClickHouse가 표준 SQL 순서(`WHERE → GROUP BY → HAVING → ORDER BY`)를 엄격히 요구.
+  - 수정: `GROUP BY ... HAVING reverts > 0 ORDER BY ...` 순서로 변경.
+
+- **Cross-wiki Trending 데이터 없음 버그 수정**:
+  - 원인: `wikidata_label` 기준 그룹핑 + `wikidata_label != ''` 필터 사용. Producer enrichment는 Wikidata Q-ID 타이틀에만 적용되므로 Wikipedia 언어판 이벤트는 `wikidata_label`이 항상 비어 있어 `wiki_count`가 항상 1.
+  - 수정: 그룹핑 키를 `wikidata_label` → `title`로 변경, 공백 필터 제거.
+
+- **Wikidata 레이블 `"-"` 정규화**:
+  - 원인: `enricher.py`에서 레이블 미존재 시 `"-"` 폴백 사용. SQLite 캐시에 9,821개 항목이 `"-"`로 저장.
+  - 수정: 폴백 값 `"-"` → `""` 빈 문자열로 변경; 기존 캐시 항목 일괄 업데이트.
+  - Grafana 쿼리에도 `NOT IN ('', '-')` 방어 로직 추가.
