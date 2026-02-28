@@ -114,6 +114,40 @@
     - **해결**: LogQL에서 `logfmt` 파싱 후 명시적으로 `by (target_container)`를 사용하여 시리즈를 분리하고, `avg_over_time`과 `sum`을 조합하여 올바른 전체 사용량 도출.
 - **결과**: 인프라와 애플리케이션 양쪽의 건강 상태를 수치화된 지표로 실시간 감시할 수 있는 완성도 높은 운영 환경 구축.
 
+## 2026-02-28
+
+### 1. 아키텍처 간소화 결정: Druid + Superset 제거 → ClickHouse + Grafana 전환
+
+- **배경**:
+  - Mac Mini로의 인프라 이전을 준비하는 과정에서 현 스택의 플랫폼 호환성 및 리소스 효율성을 재검토.
+  - 두 가지 근본적인 문제가 드러나 아키텍처 변경을 결정.
+
+- **문제 1 — 과도한 엔지니어링 (Over-engineering)**:
+  - Apache Druid는 수십억 건/일 규모의 OLAP 워크로드를 위해 설계된 시스템. WikiStreams의 실제 처리량은 수천 건/분 수준으로, Druid가 제공하는 분산 아키텍처의 이점을 전혀 활용하지 못하고 있었음.
+  - Druid 단독으로 5개 컨테이너(coordinator, broker, historical, middlemanager, router)와 ZooKeeper가 필요하여 전체 15개 서비스 중 절반에 가까운 리소스를 차지.
+  - 메모리 요구사항이 12GB 이상으로, 개인 운영 환경에서 부담이 컸음.
+  - Superset은 Druid와의 호환성을 이유로 도입됐으나, 동일한 시각화 기능을 Grafana(이미 스택에 포함)가 제공 가능. 두 도구가 중복됨.
+  - Druid에서 발생한 운영 이슈들(OffsetOutOfRangeException, Supervisor 좀비 리소스, 타임존 불일치 등)이 모두 Druid 자체의 복잡성에서 기인했음.
+
+- **문제 2 — macOS 호환성**:
+  - `apache/druid:35.0.0`은 공식 arm64 이미지를 제공하지 않아 Apple Silicon Mac에서 `platform: linux/amd64` 에뮬레이션이 필수. Rosetta 에뮬레이션 시 성능 손실 발생.
+  - Promtail이 `/var/lib/docker/containers`를 호스트 경로로 직접 마운트하나, macOS Docker Desktop은 Docker를 내부 Linux VM에서 실행하므로 해당 경로가 호스트에 존재하지 않음.
+  - 위 두 이슈 모두 Druid 의존 구조에서 비롯된 문제임.
+
+- **결정**:
+  - Druid 5개 서비스, ZooKeeper, Superset을 스택에서 제거.
+  - 대체재로 **ClickHouse** 도입: 단일 컨테이너, arm64 네이티브 지원, Kafka 테이블 엔진 내장, Grafana 공식 지원.
+  - 시각화는 **Grafana**로 통합 — 모니터링과 데이터 분석 대시보드를 단일 도구로 운영.
+  - 기존 아키텍처는 `archive/druid-superset` 브랜치에 보존.
+
+- **예상 효과**:
+  - 서비스 수: 15개 → 약 8~9개
+  - 메모리 요구사항: 12GB+ → 4~6GB 수준
+  - arm64 호환성 문제 해소
+  - 운영 복잡도 대폭 감소
+
+---
+
 ## 2026-02-26
 
 ### 1. Dead Letter Queue (DLQ) 구현

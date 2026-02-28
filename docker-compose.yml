@@ -1,13 +1,5 @@
 volumes:
-  metadata_data: {}
-  middle_var: {}
-  historical_var: {}
-  broker_var: {}
-  coordinator_var: {}
-  router_var: {}
-  druid_shared: {}
   producer_cache: {}
-  superset_home: {}
   grafana_data: {}
 
 services:
@@ -71,6 +63,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_JMX_PORT: 9101
       KAFKA_JMX_HOSTNAME: localhost
+
   producer:
     build: ./src/producer
     container_name: producer
@@ -95,139 +88,6 @@ services:
       KAFKA_TOPIC: 'wikimedia.recentchange'
       KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
       DLQ_MAX_RETRIES: '3'
-  postgres:
-    container_name: postgres
-    image: postgres:latest
-    ports:
-      - "5432:5432"
-    volumes:
-      - metadata_data:/var/lib/postgresql
-      # Superset DB를 자동으로 생성하기 위한 스크립트 주입
-      - ./superset/init_postgres.sql:/docker-entrypoint-initdb.d/init_postgres.sql
-    environment:
-      - POSTGRES_PASSWORD=FoolishPassword
-      - POSTGRES_USER=druid
-      - POSTGRES_DB=druid
-
-  redis:
-    image: redis:latest
-    container_name: redis
-    restart: always
-
-  superset:
-    build: ./superset
-    container_name: superset
-    ports:
-      - "8088:8088"
-    depends_on:
-      - postgres
-      - redis
-    environment:
-      - POSTGRES_USER=druid
-      - POSTGRES_PASSWORD=FoolishPassword
-      - POSTGRES_DB=superset
-      - REDIS_HOST=redis
-    volumes:
-      - superset_home:/app/superset_home
-    restart: always
-
-  # Need 3.5 or later for container nodes
-  zookeeper:
-    container_name: zookeeper
-    image: zookeeper:3.5.10
-    ports:
-      - "2181:2181"
-    environment:
-      - ZOO_MY_ID=1
-
-  coordinator:
-    image: apache/druid:35.0.0
-    container_name: coordinator
-    volumes:
-      - druid_shared:/opt/shared
-      - coordinator_var:/opt/druid/var
-    depends_on:
-      - zookeeper
-      - postgres
-    ports:
-      - "8081:8081"
-    command:
-      - coordinator
-    env_file:
-      - druid/environment
-
-  broker:
-    image: apache/druid:35.0.0
-    container_name: broker
-    volumes:
-      - broker_var:/opt/druid/var
-    depends_on:
-      - zookeeper
-      - postgres
-      - coordinator
-    ports:
-      - "8082:8082"
-    command:
-      - broker
-    env_file:
-      - druid/environment
-
-  historical:
-    image: apache/druid:35.0.0
-    container_name: historical
-    volumes:
-      - druid_shared:/opt/shared
-      - historical_var:/opt/druid/var
-    depends_on: 
-      - zookeeper
-      - postgres
-      - coordinator
-    ports:
-      - "8083:8083"
-    command:
-      - historical
-    env_file:
-      - druid/environment
-
-  middlemanager:
-    image: apache/druid:35.0.0
-    container_name: middlemanager
-    volumes:
-      - druid_shared:/opt/shared
-      - middle_var:/opt/druid/var
-    depends_on: 
-      - zookeeper
-      - postgres
-      - coordinator
-    ports:
-      - "8091:8091"
-      - "8100-8105:8100-8105"
-    command:
-      - middleManager
-    env_file:
-      - druid/environment
-
-  router:
-    image: apache/druid:35.0.0
-    container_name: router
-    volumes:
-      - router_var:/opt/druid/var
-    depends_on:
-      - zookeeper
-      - postgres
-      - coordinator
-    ports:
-      - "8888:8888"
-    command:
-      - router
-    env_file:
-      - druid/environment
-    healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8888 && echo -e \"GET /status/health HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3 && cat <&3 | grep \"HTTP/1.1 200 OK\""]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 30s
 
   docker-stats-logger:
     image: docker:cli

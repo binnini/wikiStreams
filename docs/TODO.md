@@ -1,5 +1,45 @@
 # TODO
 
+## 아키텍처 개편: Druid + Superset → ClickHouse + Grafana
+
+> 기존 아키텍처(Druid + Superset)는 `archive/druid-superset` 브랜치에 보존됨
+
+**배경**: Druid 5컨테이너 + ZooKeeper + Superset은 이 프로젝트 규모(수천 건/분)에 과도한 인프라.
+Grafana가 이미 스택에 포함되어 있으므로, ClickHouse + Grafana로 단일화하여 서비스 수 및 리소스 대폭 절감.
+
+```
+변경 전: Kafka → Druid(5컨테이너) + ZooKeeper → Superset  +  Grafana(모니터링)
+변경 후: Kafka → ClickHouse(1컨테이너)                     →  Grafana(시각화 + 모니터링 통합)
+```
+
+- [x] **1단계: 기존 서비스 제거** *(2026-02-28 완료)*
+  - [x] `docker-compose.yml`에서 Druid 5개 서비스 제거 (coordinator, broker, historical, middlemanager, router)
+  - [x] `docker-compose.yml`에서 ZooKeeper, Postgres, Redis 제거 (Druid/Superset 전용 의존성)
+  - [x] `docker-compose.yml`에서 Superset 제거
+  - [x] `druid/` 디렉토리 제거 (ingestion-spec.json, environment)
+  - [x] `superset/` 디렉토리 제거 (Dockerfile, dashboards, init 스크립트 등)
+  - [x] `monitoring/dashboards/wikistreams-druid.json` 제거
+  - [x] `tests/cleanup_druid.py`, `tests/integration/test_e2e_pipeline.py` 제거
+  - [x] `tests/conftest.py`에서 Druid 좀비 정리 픽스처 제거
+
+- [ ] **2단계: ClickHouse 도입**
+  - [ ] `docker-compose.yml`에 ClickHouse 서비스 추가 (단일 컨테이너)
+  - [ ] ClickHouse Kafka 테이블 엔진 설정 — `wikimedia.recentchange` 토픽 직접 구독
+  - [ ] ClickHouse Materialized View로 Kafka → 저장 테이블 파이프라인 구성
+  - [ ] ClickHouse 스키마 정의 (`wiki_events` 테이블: timestamp, title, wiki, user, namespace 등)
+
+- [ ] **3단계: Grafana 시각화 확장**
+  - [ ] Grafana ClickHouse 데이터소스 추가 (`grafana-datasources.yaml`)
+  - [ ] Superset 대체 대시보드 작성 — 편집 트렌드, 위키별 분포, 네임스페이스 분석 등
+  - [ ] 기존 Producer Performance 대시보드와 데이터 대시보드 통합 정리
+
+- [ ] **4단계: 테스트 및 문서 업데이트**
+  - [ ] E2E 테스트에서 Druid 의존 부분 제거 및 ClickHouse 검증으로 교체
+  - [ ] `CLAUDE.md` 아키텍처 설명 업데이트
+  - [ ] `README.md` 업데이트 (서비스 목록, 포트 정보 등)
+
+---
+
 ## 우선순위 높음
 
 - [x] **Dead Letter Queue (DLQ) 도입** *(2026-02-26 완료)*
@@ -14,10 +54,10 @@
   - [x] Wikidata API 응답도 동일하게 검증 (`WikidataApiResponse`)
 
 - [ ] **Mac Mini로 마이그레이션**
-  - [ ] **1단계: Mac Mini 환경 준비**
-    - [ ] Docker Desktop for Mac 설치 (Apple Silicon이면 arm64 빌드)
-    - [ ] Docker Desktop 리소스 설정 — 메모리 최소 12GB, CPU 4코어 이상 할당 (Druid가 메모리를 많이 소비)
-    - [ ] Git 설치 및 리포지토리 클론
+  - [x] **1단계: Mac Mini 환경 준비**
+    - [x] Docker Desktop for Mac 설치 (Apple Silicon이면 arm64 빌드)
+    - [x] Docker Desktop 리소스 설정 — 메모리 최소 12GB, CPU 4코어 이상 할당 (Druid가 메모리를 많이 소비)
+    - [x] Git 설치 및 리포지토리 클론
 
   - [ ] **2단계: Apple Silicon 아키텍처 호환성 확인**
     - [ ] `apache/druid:35.0.0` arm64 이미지 지원 여부 확인 (미지원 시 `platform: linux/amd64` 명시)
