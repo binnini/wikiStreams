@@ -9,3 +9,13 @@ datasources:
     isDefault: true
     jsonData:
       derivedFields: []
+
+  - name: ClickHouse
+    type: grafana-clickhouse-datasource
+    uid: ClickHouse
+    jsonData:
+      host: clickhouse
+      port: 9000
+      username: default
+      defaultDatabase: wikimedia
+      protocol: native
