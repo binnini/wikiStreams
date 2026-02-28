@@ -223,7 +223,9 @@
   - Q-ID를 50개씩 나눠 순차 요청 후 결과를 병합.
 - **결과**: `Wikidata API로부터 총 102개의 정보를 가져왔습니다.` — enrichment 정상 동작 확인.
 
-### 3. ClickHouse 도입 및 파이프라인 구성
+## 2026-02-28
+
+### 1. ClickHouse 도입 및 파이프라인 구성
 
 - **작업**: Druid 대체재로 ClickHouse 단일 컨테이너 도입.
   - `docker-compose.yml`에 ClickHouse 서비스 추가 (arm64 네이티브, `clickhouse/clickhouse-server:25.8`).
@@ -235,7 +237,7 @@
   - ClickHouse 25.8 LTS로 업그레이드 후 해소.
 - **결과**: 서비스 수 15개 → 8개, 메모리 요구사항 12GB+ → ~4GB 수준으로 감소.
 
-### 4. Grafana Analytics 대시보드 신규 구축
+### 2. Grafana Analytics 대시보드 신규 구축
 
 - **작업**: Superset 대체 대시보드 `wikistreams-analytics.json` 작성.
   - Overview 섹션: Total Edits, Active Users, New Articles, Bot Traffic %, Anonymous Edit %, Revert Rate % (6개 stat).
@@ -245,7 +247,7 @@
   - **Vandalism Monitor 섹션**: 총 Revert 수, Revert Rate %, Bot/Human Revert 분류 stat 4종; Editor Types Over Time 스택 시계열; Vandalism Pressure 오버레이; Top Reverted Articles 테이블.
   - **Real-time Trends 섹션**: Edit Velocity stats 4종 (고정 5분 창); Edit Velocity Trend 시계열 (edits/min 정규화); Trending Articles (spike_ratio: 최근 15분 vs 이전 60분); Cross-wiki Trending.
 
-### 5. Grafana 대시보드 전반 개선 및 버그 수정
+### 3. Grafana 대시보드 전반 개선 및 버그 수정
 
 - **Producer Performance 대시보드 개편**:
   - 기존 단일 페이지 → Row 구조 (Overview / Throughput / Cache / Logs)로 재편.
