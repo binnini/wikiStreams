@@ -34,13 +34,14 @@
           "color": { "mode": "thresholds" },
           "decimals": 1,
           "mappings": [],
+          "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "red", "value": 20 }
+              { "color": "yellow", "value": 30 },
+              { "color": "red", "value": 60 }
             ]
           },
           "unit": "percent"
@@ -50,26 +51,24 @@
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
       "id": 3,
       "options": {
-        "displayMode": "gradient",
-        "minVizHeight": 10,
-        "minVizWidth": 0,
-        "orientation": "horizontal",
+        "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "showUnfilled": true,
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
         "text": {}
       },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
           "editorMode": "code",
-          "expr": "last_over_time({container=\"docker-stats-logger\"} | logfmt | unwrap cpu_pct [2m]) by (target_container)",
-          "legendFormat": "{{target_container}}",
+          "expr": "sum(last_over_time({container=\"docker-stats-logger\"} | logfmt | unwrap cpu_pct [2m]) by (target_container))",
+          "legendFormat": "Total CPU",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "CPU Usage by Container (current %)",
-      "type": "bargauge"
+      "title": "Total CPU Usage (all containers)",
+      "type": "gauge"
     },
     {
       "datasource": { "type": "loki", "uid": "Loki" },
@@ -78,13 +77,14 @@
           "color": { "mode": "thresholds" },
           "decimals": 1,
           "mappings": [],
+          "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "red", "value": 20 }
+              { "color": "yellow", "value": 25 },
+              { "color": "red", "value": 50 }
             ]
           },
           "unit": "percent"
@@ -94,26 +94,24 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
       "id": 4,
       "options": {
-        "displayMode": "gradient",
-        "minVizHeight": 10,
-        "minVizWidth": 0,
-        "orientation": "horizontal",
+        "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "showUnfilled": true,
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
         "text": {}
       },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "Loki" },
           "editorMode": "code",
-          "expr": "last_over_time({container=\"docker-stats-logger\"} | logfmt | unwrap mem_pct [2m]) by (target_container)",
-          "legendFormat": "{{target_container}}",
+          "expr": "sum(last_over_time({container=\"docker-stats-logger\"} | logfmt | unwrap mem_pct [2m]) by (target_container))",
+          "legendFormat": "Total Memory",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "Memory Usage by Container (current %)",
-      "type": "bargauge"
+      "title": "Total Memory Usage (all containers)",
+      "type": "gauge"
     },
     {
       "collapsed": false,
@@ -459,6 +457,6 @@
   "timezone": "",
   "title": "WikiStreams Resources Monitor",
   "uid": "wikistreams-resources",
-  "version": 3,
+  "version": 10,
   "weekStart": ""
 }
