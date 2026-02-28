@@ -438,7 +438,7 @@
       "targets": [
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
-          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL $__interval_s second) AS time, count() AS events FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
+          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL greatest($__interval_s, 60) second) AS time, count() AS events FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
           "refId": "A",
           "format": 1
         }
