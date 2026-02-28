@@ -34,14 +34,13 @@
           "color": { "mode": "thresholds" },
           "decimals": 1,
           "mappings": [],
-          "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 50 },
-              { "color": "red", "value": 80 }
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
             ]
           },
           "unit": "percent"
@@ -79,14 +78,13 @@
           "color": { "mode": "thresholds" },
           "decimals": 1,
           "mappings": [],
-          "max": 100,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 50 },
-              { "color": "red", "value": 80 }
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 20 }
             ]
           },
           "unit": "percent"
@@ -153,7 +151,7 @@
             "mode": "absolute",
             "steps": [
               { "color": "transparent", "value": null },
-              { "color": "red", "value": 80 }
+              { "color": "red", "value": 20 }
             ]
           },
           "unit": "percent"
@@ -239,7 +237,7 @@
             "mode": "absolute",
             "steps": [
               { "color": "transparent", "value": null },
-              { "color": "red", "value": 80 }
+              { "color": "red", "value": 20 }
             ]
           },
           "unit": "percent"
