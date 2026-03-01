@@ -98,6 +98,7 @@ def claude_response_json():
         "numbers": "오늘의 통계 수치입니다.",
         "featured": "특집 문서 소개입니다.",
         "news_keywords": [["Alan Turing", "AI"], ["파이썬", "programming"], ["Test"]],
+        "descriptions": {},
     }
 
 
@@ -357,14 +358,6 @@ class TestBuildReport:
         create_kwargs = mock_client.messages.create.call_args.kwargs
         assert create_kwargs["model"] == "claude-haiku-4-5-20251001"
 
-    def test_max_tokens_is_1800(self, mocker, sample_data, claude_response_json):
-        mock_client = _mock_claude(mocker, claude_response_json)
-
-        build_report(sample_data)
-
-        create_kwargs = mock_client.messages.create.call_args.kwargs
-        assert create_kwargs["max_tokens"] == 1800
-
     def test_missing_news_keywords_field_returns_empty_list(self, mocker, sample_data):
         """If Claude omits news_keywords, return empty list without error."""
         response_without_keywords = {
@@ -398,3 +391,76 @@ class TestBuildReport:
         _, news_keywords = build_report(sample_data)
 
         assert news_keywords == []
+
+    def test_descriptions_applied_to_pages_missing_desc(self, mocker, sample_data):
+        """Claude-generated descriptions fill in pages with empty description."""
+        # sample_data index 2 has description="" (label="테스트")
+        response = {
+            "selected_indices": [0, 1, 2, 3, 4],
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+            "descriptions": {"2": "소프트웨어 테스트 기법"},
+        }
+        _mock_claude(mocker, response)
+
+        build_report(sample_data)
+
+        # After selected_indices=[0,1,2,3,4] filtering, top_pages[2] is the "테스트" page
+        assert sample_data.top_pages[2].description == "소프트웨어 테스트 기법"
+
+    def test_descriptions_not_overwrite_existing(self, mocker, sample_data):
+        """Claude descriptions must not overwrite pages that already have one."""
+        existing_desc = sample_data.top_pages[0].description  # "British mathematician"
+        response = {
+            "selected_indices": [0, 1, 2, 3, 4],
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+            "descriptions": {"0": "덮어쓰면 안 되는 설명"},
+        }
+        _mock_claude(mocker, response)
+
+        build_report(sample_data)
+
+        assert sample_data.top_pages[0].description == existing_desc
+
+    def test_missing_descriptions_field_handled_gracefully(self, mocker, sample_data):
+        """If Claude omits descriptions field, no error is raised."""
+        response = {
+            "selected_indices": [0, 1, 2, 3, 4],
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+        }
+        _mock_claude(mocker, response)
+
+        sections, _ = build_report(sample_data)
+
+        assert "headline" in sections
+
+    def test_descriptions_not_in_sections(self, mocker, sample_data, claude_response_json):
+        """descriptions must be extracted and not passed through to sections dict."""
+        claude_response_json["descriptions"] = {"2": "테스트"}
+        _mock_claude(mocker, claude_response_json)
+
+        sections, _ = build_report(sample_data)
+
+        assert "descriptions" not in sections
+
+    def test_max_tokens_is_2000(self, mocker, sample_data, claude_response_json):
+        mock_client = _mock_claude(mocker, claude_response_json)
+
+        build_report(sample_data)
+
+        create_kwargs = mock_client.messages.create.call_args.kwargs
+        assert create_kwargs["max_tokens"] == 2000
