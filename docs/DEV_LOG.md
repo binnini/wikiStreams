@@ -368,3 +368,15 @@
   - 기존: 문서별 현황 2-3문장 나열 → 신규: 분야/주제 공통 맥락 1-2문장 도입부만 작성 (개별 수치 언급 금지 — structured field로 별도 표시)
 
 - **테스트**: `test_embed_order` 숫자 브리핑 제목 검사 업데이트 → **89개 전부 통과**.
+
+### 6. 전체 단위 테스트 스위트 정상화 (`PYTHONPATH=src pytest tests/unit/`)
+
+- **이슈 1 — pytest 모듈명 충돌**: `tests/unit/producer/test_main.py`와 `tests/unit/reporter/test_main.py`가 동일한 모듈명으로 충돌하여 컬렉션 오류 발생.
+  - **원인**: 테스트 디렉터리에 `__init__.py`가 없으면 pytest가 파일명만으로 모듈을 식별 → 중복 시 `import file mismatch` 에러.
+  - **해결**: `tests/`, `tests/unit/`, `tests/unit/producer/`, `tests/unit/dlq_consumer/`, `tests/unit/reporter/`, `tests/integration/` 모든 디렉터리에 `__init__.py` 추가.
+
+- **이슈 2 — enricher 테스트 기대값 불일치**: `test_enricher.py`의 4개 케이스가 `wikidata_label: "-"` / `wikidata_description: "-"` 를 기대했으나 실제 enricher가 `""` 반환.
+  - **원인**: 2026-02-28 ClickHouse 마이그레이션 시 enricher의 누락 값 폴백을 `"-"` → `""` 빈 문자열로 정규화했으나 테스트 기대값은 갱신되지 않음.
+  - **해결**: 4개 케이스 기대값 `"-"` → `""` 수정.
+
+- **결과**: **135개 전부 통과** (producer 44 + dlq_consumer 4 + reporter 87).
