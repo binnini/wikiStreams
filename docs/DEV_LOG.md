@@ -381,7 +381,43 @@
 
 - **결과**: **135개 전부 통과** (producer 44 + dlq_consumer 4 + reporter 87).
 
-### 7. `collector.py` 개선 (지수 백오프 + 로깅 정리)
+### 7. Top 5 다양성 개선: Q-ID 중복 제거 + LLM 주제 그룹핑 (feat/top5-diversity)
+
+- **배경**: Top 5가 `ORDER BY edits DESC LIMIT 10`으로 단순 선정되어, 동일 사건(예: 이스라엘-이란 공습)의 영어판·러시아어판·스페인어판·아랍어판이 여러 슬롯을 차지하는 중복 문제 발생. 두 가지 개선으로 해결.
+
+- **개선 1 — Q-ID 기반 중복 제거**:
+  - ClickHouse 쿼리를 `LIMIT 10` → `LIMIT 20`으로 확장하여 더 많은 후보 확보.
+  - `_fetch_qid(server_name, title)`: Wikipedia REST API(`/api/rest_v1/page/summary/{title}`)의 `wikibase_item` 필드로 Wikidata Q-ID 조회. Wikidata 문서면 타이틀 자체(`Q\d+`)를 반환, HTTP 오류 시 `None`.
+  - `ThreadPoolExecutor(max_workers=10)`으로 모든 후보 페이지의 Q-ID를 병렬 조회.
+  - `_deduplicate_by_qid()`: 동일 Q-ID의 첫 번째(편집 수 최다) 페이지만 유지. Q-ID 없는 페이지는 고유 fallback 키(`_{server_name}/{title}`)로 처리하여 항상 보존.
+  - 실제 데이터 기준: `LIMIT 20` 후보 → 약 12개 고유 주제로 압축 (8개 중복 제거).
+
+- **개선 2 — LLM 주제 그룹핑 (selected_indices)**:
+  - `_build_context()` 수정: 상위 5개 대신 **전체 후보**를 `[0]`, `[1]`, … 0-based 인덱스 형식으로 표시. 스파이크(⚡)·다국어(🌍) 배지 포함.
+  - `build_report()` 프롬프트에 `selected_indices` 지시 추가: Claude가 같은 사건/인물 중복 배제, 스파이크·다국어 우선, 분야 다양성을 기준으로 5개 인덱스 선택.
+  - 응답 파싱 후 `data.top_pages`를 선택된 인덱스 순으로 재구성. 인덱스 범위 초과·비리스트·빈 배열 등 모든 비정상 응답에 대해 `[:5]` fallback 적용.
+  - `max_tokens` 1400 → 1800 (후보 목록 증가 대응).
+  - 썸네일 fetch를 `fetch_report_data()` 내부 Step 9에서 제거 → `main.py`의 `build_report()` 직후로 이동하여 LLM이 최종 선택한 1위 문서의 썸네일을 표시.
+
+- **결과**: `After Q-ID dedup: 12 unique topic candidates` → `LLM selected indices: [0, 1, 3, 4, 6]` 로그 확인. 단위 테스트 89개 → **115개 전부 통과**.
+
+### 8. 다언어판 편집 수 표시 및 뉴스 주제별 3건 개선
+
+- **배경**: Q-ID 중복 제거 후 대표 페이지 하나만 표시되어, 묶인 언어판들의 편집 수 정보가 소실됨. 뉴스 스크래핑도 전체 5건 상한으로 주제별 불균형 발생.
+
+- **언어판별 편집 수 + 합계 표시**:
+  - `LangEdition(server_name, edits)` 데이터클래스 신규 추가.
+  - `TopPage.lang_editions: list[LangEdition]` 필드 추가 (기본값 빈 리스트).
+  - `_deduplicate_by_qid()` 개선: 첫 번째 중복 발견 시 대표 페이지 자체를 `lang_editions[0]`으로, 이후 중복들을 순서대로 추가. 단일 언어판 페이지는 `lang_editions = []` 유지.
+  - `publisher._build_top5_embed()`: `lang_editions`가 비어 있으면 기존 단일 포맷(`🇺🇸 EN · 450회 편집`), 2개 이상이면 `🇺🇸 EN 450회 · 🇷🇺 RU 320회 · 🇪🇸 ES 280회 | 합계 1,050회` 포맷으로 분기.
+
+- **뉴스 주제별 3건**:
+  - `fetch_news_with_keywords()`: `_fetch_news(max_items=2)` → `max_items=3`, 전체 `[:5]` 상한 제거.
+  - 3개 주제 × 최대 3건 = 최대 9건. 실제 운영에서 "News fetched: 7 items" 확인.
+
+- **테스트**: `TestDeduplicateByQid`에 `lang_editions` 검증 케이스 4개, `TestBuildTop5Embed`에 다언어판·단일 포맷 분기 테스트 2개, `TestFetchNewsWithKeywords`에 `max_items=3` 검증 2개 추가 → **115개 전부 통과**.
+
+### 9. `collector.py` 개선 (지수 백오프 + 로깅 정리)
 
 - **배경**: 재연결 대기가 고정 10초로 하드코딩되어 있고, 모듈 레벨 `logging.basicConfig()` 호출이 앱 진입점(`main.py`)과 중복되는 문제.
 
