@@ -2,6 +2,7 @@ volumes:
   producer_cache: {}
   grafana_data: {}
   clickhouse_data: {}
+  resource_monitor_data: {}
 
 services:
   loki:
@@ -106,13 +107,16 @@ services:
       KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
       DLQ_MAX_RETRIES: '3'
 
-  docker-stats-logger:
-    image: docker:cli
-    container_name: docker-stats-logger
+  resource-monitor:
+    build: ./src/resource_monitor
+    container_name: resource-monitor
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./monitoring/collect_docker_stats.sh:/collect_docker_stats.sh
-    entrypoint: ["/bin/sh", "/collect_docker_stats.sh"]
+      - resource_monitor_data:/data
+    environment:
+      MONITOR_TARGETS: 'producer,clickhouse'
+      DISCORD_WEBHOOK_URL: '${DISCORD_WEBHOOK_URL}'
+      BASELINE_DB_PATH: '/data/resource_monitor_baseline.db'
     restart: always
 
   reporter:
