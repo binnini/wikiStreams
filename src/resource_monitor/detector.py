@@ -1,4 +1,5 @@
 """z-score 기반 이상 감지."""
+
 import math
 from dataclasses import dataclass
 

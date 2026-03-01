@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from resource_monitor.collector import (
     DockerStatsCollector,
@@ -64,7 +64,9 @@ def test_calc_cpu_zero_sys_delta():
 
 def test_calc_mem_basic():
     usage, limit = _calc_mem(
-        _make_raw_stats(mem_usage=512 * 1024 * 1024, mem_limit=2048 * 1024 * 1024, cache=0)
+        _make_raw_stats(
+            mem_usage=512 * 1024 * 1024, mem_limit=2048 * 1024 * 1024, cache=0
+        )
     )
     assert usage == pytest.approx(512 * 1024 * 1024)
     assert limit == pytest.approx(2048 * 1024 * 1024)
@@ -73,7 +75,9 @@ def test_calc_mem_basic():
 def test_calc_mem_subtracts_cache():
     cache = 100 * 1024 * 1024
     usage, _ = _calc_mem(
-        _make_raw_stats(mem_usage=600 * 1024 * 1024, mem_limit=2048 * 1024 * 1024, cache=cache)
+        _make_raw_stats(
+            mem_usage=600 * 1024 * 1024, mem_limit=2048 * 1024 * 1024, cache=cache
+        )
     )
     assert usage == pytest.approx(500 * 1024 * 1024)
 
@@ -127,7 +131,7 @@ def test_collect_returns_none_on_exception(collector):
 
 
 def test_block_io_delta(collector):
-    raw1 = _make_raw_stats(blkio_bytes=1024 * 1024)   # 2 MB total
+    raw1 = _make_raw_stats(blkio_bytes=1024 * 1024)  # 2 MB total
     raw2 = _make_raw_stats(blkio_bytes=2 * 1024 * 1024)  # 4 MB total → delta 2 MB
 
     mock_container = MagicMock()
@@ -137,8 +141,8 @@ def test_block_io_delta(collector):
     m1 = collector.collect("clickhouse")
     m2 = collector.collect("clickhouse")
 
-    assert m1.block_io_mb == pytest.approx(0.0)   # 첫 번째: prev 없음 → 0
-    assert m2.block_io_mb == pytest.approx(2.0)   # delta = 4 - 2 = 2 MB
+    assert m1.block_io_mb == pytest.approx(0.0)  # 첫 번째: prev 없음 → 0
+    assert m2.block_io_mb == pytest.approx(2.0)  # delta = 4 - 2 = 2 MB
 
 
 def test_collect_all(collector, mocker):

@@ -1,4 +1,5 @@
 """Discord Embed 이상 알림 + 1시간 cooldown."""
+
 import logging
 import time
 from typing import Optional

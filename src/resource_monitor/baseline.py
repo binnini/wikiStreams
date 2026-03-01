@@ -1,4 +1,5 @@
 """SQLite 기반 컨테이너 × 시간대별 EMA + Welford 분산 저장."""
+
 import sqlite3
 import threading
 from dataclasses import dataclass
@@ -67,7 +68,9 @@ class BaselineStore:
             m2=row["m2"],
         )
 
-    def update(self, container: str, metric: str, hour: int, value: float) -> BaselineRecord:
+    def update(
+        self, container: str, metric: str, hour: int, value: float
+    ) -> BaselineRecord:
         """새 값으로 EMA와 Welford 분산을 업데이트하고 저장."""
         with self._lock, self._connect() as conn:
             row = conn.execute(

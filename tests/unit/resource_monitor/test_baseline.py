@@ -1,4 +1,3 @@
-import math
 import pytest
 from resource_monitor.baseline import BaselineStore
 

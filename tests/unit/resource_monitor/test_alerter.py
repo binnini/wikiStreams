@@ -1,12 +1,14 @@
 import time
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from resource_monitor.alerter import Alerter
 from resource_monitor.detector import AnomalyResult
 
 
-def _anomaly(container="producer", metric="cpu_pct", z=3.5, value=80.0, ema=50.0, hour=10):
+def _anomaly(
+    container="producer", metric="cpu_pct", z=3.5, value=80.0, ema=50.0, hour=10
+):
     return AnomalyResult(
         container=container,
         metric=metric,
@@ -69,7 +71,9 @@ def test_cooldown_expires(mock_httpx, mocker):
     alerter = Alerter("https://discord.example/webhook", cooldown_seconds=1)
     alerter.send(_anomaly())
     # monotonic을 냉각 시간 이후로 이동
-    mocker.patch("resource_monitor.alerter.time.monotonic", return_value=time.monotonic() + 2)
+    mocker.patch(
+        "resource_monitor.alerter.time.monotonic", return_value=time.monotonic() + 2
+    )
     alerter.send(_anomaly())
     assert mock_httpx.post.call_count == 2
 

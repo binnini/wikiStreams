@@ -1,4 +1,5 @@
 """Docker SDK를 통한 컨테이너 메트릭 수집."""
+
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -22,7 +23,9 @@ class DockerStatsCollector:
     def __init__(self) -> None:
         self._client = docker.from_env()
         # 블록 I/O delta 계산을 위한 이전 누적값 저장
-        self._prev_blkio: dict[str, float] = field(default_factory=dict) if False else {}
+        self._prev_blkio: dict[str, float] = (
+            field(default_factory=dict) if False else {}
+        )
 
     def collect(self, container_name: str) -> Optional[ContainerMetrics]:
         try:

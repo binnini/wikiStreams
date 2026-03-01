@@ -1,4 +1,5 @@
 """Resource Monitor 메인 루프."""
+
 import logging
 import time
 from datetime import datetime
@@ -36,7 +37,9 @@ def run() -> None:
     logger.info("Resource Monitor started. Targets: %s", settings.targets)
 
     store = BaselineStore(settings.baseline_db_path, alpha=settings.ema_alpha)
-    alerter = Alerter(settings.resource_monitor_discord_webhook_url, settings.alert_cooldown_seconds)
+    alerter = Alerter(
+        settings.resource_monitor_discord_webhook_url, settings.alert_cooldown_seconds
+    )
     collector = DockerStatsCollector()
 
     while True:
