@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     # 최소 학습 샘플 수 (미만이면 감지 억제)
     min_samples: int = 30
 
-    # 같은 컨테이너·메트릭 재발송 억제 시간 (초, 기본 1시간)
-    alert_cooldown_seconds: int = 3600
+    # 같은 컨테이너·메트릭 재발송 억제 시간 (초, 기본 15분)
+    alert_cooldown_seconds: int = 900
 
     # 수집 간격 (초)
     collect_interval_seconds: int = 10
