@@ -380,3 +380,20 @@
   - **해결**: 4개 케이스 기대값 `"-"` → `""` 수정.
 
 - **결과**: **135개 전부 통과** (producer 44 + dlq_consumer 4 + reporter 87).
+
+### 7. `collector.py` 개선 (지수 백오프 + 로깅 정리)
+
+- **배경**: 재연결 대기가 고정 10초로 하드코딩되어 있고, 모듈 레벨 `logging.basicConfig()` 호출이 앱 진입점(`main.py`)과 중복되는 문제.
+
+- **변경 1 — 지수 백오프 도입**:
+  - 기존: `time.sleep(10)` 고정
+  - 변경: 초기 2초에서 시작해 실패할 때마다 2배씩 증가, 최대 60초 상한 (`_RETRY_BASE_DELAY = 2.0`, `_RETRY_MAX_DELAY = 60.0`)
+  - 연결 성공 시 `retry_delay`를 `_RETRY_BASE_DELAY`로 초기화
+  - `httpx.HTTPError`와 그 외 예외 양쪽 모두 동일한 백오프 적용
+
+- **변경 2 — 모듈 레벨 로깅 제거**:
+  - `logging.basicConfig(...)` 제거 → `logger = logging.getLogger(__name__)`
+  - 로깅 설정 책임을 앱 진입점(`main.py`)으로 일원화
+  - f-string 로그 메시지 → `%s` lazy 포맷으로 변경 (불필요한 문자열 생성 방지)
+
+- **테스트**: `test_exponential_backoff` 추가 — HTTP 오류 2회 연속 발생 시 `sleep(2.0)` → `sleep(4.0)` 순서로 호출되는지 검증 → **136개 전부 통과**.
