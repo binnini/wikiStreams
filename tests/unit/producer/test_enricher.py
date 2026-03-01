@@ -72,7 +72,7 @@ mock_api_no_ko_label = {
     "entities": {"Q1": {"labels": {"en": {"value": "English Label"}}}}
 }
 expected_no_ko_label = [
-    {"title": "Q1", "wikidata_label": "English Label", "wikidata_description": "-"}
+    {"title": "Q1", "wikidata_label": "English Label", "wikidata_description": ""}
 ]
 
 # 5. 엣지 케이스: ko/en 레이블 모두 없음
@@ -80,7 +80,7 @@ mock_api_no_valid_label = {
     "entities": {"Q1": {"labels": {"fr": {"value": "French Label"}}}}
 }
 expected_no_valid_label = [
-    {"title": "Q1", "wikidata_label": "-", "wikidata_description": "-"}
+    {"title": "Q1", "wikidata_label": "", "wikidata_description": ""}
 ]
 
 # 6. 엣지 케이스: labels 필드 없음
@@ -88,7 +88,7 @@ mock_api_no_labels_field = {
     "entities": {"Q1": {"descriptions": {"en": {"value": "English Desc"}}}}
 }
 expected_no_labels_field = [
-    {"title": "Q1", "wikidata_label": "-", "wikidata_description": "English Desc"}
+    {"title": "Q1", "wikidata_label": "", "wikidata_description": "English Desc"}
 ]
 
 # --- 테스트 함수 ---
@@ -220,9 +220,9 @@ def test_missing_entity_flagged_and_saved(mocker, enricher):
 
     result = enricher.enrich_events([{"title": "Q9999999"}])
 
-    # 이벤트에는 "-"로 채워져야 함
+    # missing 엔티티는 빈 문자열로 채워져야 함
     assert result == [
-        {"title": "Q9999999", "wikidata_label": "-", "wikidata_description": "-"}
+        {"title": "Q9999999", "wikidata_label": "", "wikidata_description": ""}
     ]
 
     # is_missing=True로 캐시에 저장되어야 함
