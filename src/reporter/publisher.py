@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Optional
 
 import httpx
@@ -32,6 +33,11 @@ _WIKI_FLAGS: dict[str, str] = {
 
 def _wiki_flag(server_name: str) -> str:
     return _WIKI_FLAGS.get(server_name, "🌍")
+
+
+def _upscale_wiki_thumb(url: str, width: int = 800) -> str:
+    """Replace the size component in a Wikipedia thumbnail URL (e.g. 330px → 800px)."""
+    return re.sub(r"/\d+px-", f"/{width}px-", url)
 
 
 def _truncate(text: str, limit: int = 1024) -> str:
@@ -88,8 +94,9 @@ def _build_top5_embed(data: ReportData, top5_analysis: str) -> dict:
             value = f"[🔗 문서 보기]({p.url})\n{lang_str}{signal_line}{desc_part}"
         else:
             value = (
-                f"[🔗 문서 보기]({p.url}) · {flag} {lang} · **{p.edits:,}회** 편집"
-                f"{signal_line}{desc_part}"
+                f"[🔗 문서 보기]({p.url})\n"
+                f"{flag} {lang}  ·  **{p.edits:,}회** 편집{signal_line}"
+                f"{desc_part}"
             )
         fields.append(
             {
@@ -214,13 +221,19 @@ def publish_report(sections: dict[str, str], data: ReportData) -> None:
 
     featured_embed = _build_featured_embed(data, featured_text)
 
+    headline_embed: dict = {
+        "title": f"Wikipedia 일일 트렌드 브리핑 — {date}",
+        "description": headline,
+        "color": BLURPLE,
+        "footer": {"text": "WikiStreams · Powered by Claude Haiku"},
+    }
+    if data.top_pages and data.top_pages[0].thumbnail_url:
+        headline_embed["image"] = {
+            "url": _upscale_wiki_thumb(data.top_pages[0].thumbnail_url)
+        }
+
     embeds = [
-        {
-            "title": f"Wikipedia 일일 트렌드 브리핑 — {date}",
-            "description": headline,
-            "color": BLURPLE,
-            "footer": {"text": "WikiStreams · Powered by Claude Haiku"},
-        },
+        headline_embed,
         {
             "title": "📊 숫자로 보는 위키백과 (최근 24시간)",
             "color": BLURPLE,
