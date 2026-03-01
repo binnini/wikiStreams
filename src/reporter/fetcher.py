@@ -1,6 +1,8 @@
 import json
 import logging
+import re
 import xml.etree.ElementTree as ET
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
@@ -45,6 +47,7 @@ class TopPage:
     is_spike: bool = False
     spike_ratio_val: float = 0.0
     crosswiki_count: int = 0  # 0 = not cross-wiki
+    qid: Optional[str] = None  # Wikidata Q-ID (cross-language dedup key)
 
 
 @dataclass
@@ -249,7 +252,7 @@ def _fetch_featured_article(date: datetime) -> FeaturedArticle:
         return FeaturedArticle()
 
 
-def _fetch_thumbnail(server_name: str, title: str) -> str:
+def fetch_thumbnail(server_name: str, title: str) -> str:
     if "wikidata" in server_name:
         return ""
     encoded = quote(title.replace(" ", "_"), safe="")
@@ -262,6 +265,43 @@ def _fetch_thumbnail(server_name: str, title: str) -> str:
     except Exception as e:
         logger.warning("Thumbnail fetch failed for '%s/%s': %s", server_name, title, e)
         return ""
+
+
+def _fetch_qid(server_name: str, title: str) -> Optional[str]:
+    """Fetch the Wikidata Q-ID for a page via the REST summary API.
+
+    For Wikidata pages, the title itself is the Q-ID if it matches Q\\d+.
+    For Wikipedia pages, the wikibase_item field in the summary response is used.
+    Returns None on error or if no Q-ID is available.
+    """
+    if "wikidata" in server_name:
+        return title if re.match(r"^Q\d+$", title) else None
+    encoded = quote(title.replace(" ", "_"), safe="")
+    url = f"https://{server_name}/api/rest_v1/page/summary/{encoded}"
+    try:
+        with httpx.Client(timeout=5) as client:
+            resp = client.get(url, headers=_WIKI_API_HEADERS)
+            resp.raise_for_status()
+        return resp.json().get("wikibase_item")
+    except Exception as e:
+        logger.warning("Q-ID fetch failed for '%s/%s': %s", server_name, title, e)
+        return None
+
+
+def _deduplicate_by_qid(pages: list[TopPage]) -> list[TopPage]:
+    """Remove duplicate pages that share the same Wikidata Q-ID.
+
+    Pages without a Q-ID are always kept (each gets a unique fallback key).
+    When duplicates exist, the first occurrence (highest edit count) is kept.
+    """
+    seen: set[str] = set()
+    result = []
+    for page in pages:
+        key = page.qid if page.qid else f"_{page.server_name}/{page.title}"
+        if key not in seen:
+            seen.add(key)
+            result.append(page)
+    return result
 
 
 def fetch_report_data() -> ReportData:
@@ -295,7 +335,7 @@ def fetch_report_data() -> ReportData:
     except Exception as e:
         logger.error("Failed to fetch overall stats: %s", e)
 
-    # 2. Top edited pages (bot excluded, actual edits only, 24h, top 10)
+    # 2. Top edited pages (bot excluded, actual edits only, 24h, top 20)
     try:
         rows = _query(
             f"SELECT if(wikidata_label != '', wikidata_label, title) AS label, "
@@ -303,7 +343,7 @@ def fetch_report_data() -> ReportData:
             f"FROM wikimedia.events "
             f"WHERE {time_filter} AND namespace = 0 AND bot = 0 AND wiki_type = 'edit' "
             f"GROUP BY title, wikidata_label, wikidata_description, server_name "
-            f"ORDER BY edits DESC LIMIT 10"
+            f"ORDER BY edits DESC LIMIT 20"
         )
         data.top_pages = [
             TopPage(
@@ -318,6 +358,18 @@ def fetch_report_data() -> ReportData:
         ]
     except Exception as e:
         logger.error("Failed to fetch top pages: %s", e)
+
+    # 2b. Fetch Wikidata Q-IDs in parallel for cross-language deduplication
+    if data.top_pages:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(_fetch_qid, p.server_name, p.title): p
+                for p in data.top_pages
+            }
+            for f in as_completed(futures):
+                futures[f].qid = f.result()
+        data.top_pages = _deduplicate_by_qid(data.top_pages)
+        logger.info("After Q-ID dedup: %d unique topic candidates", len(data.top_pages))
 
     # 3. Spike pages (recent 15m vs previous 60m)
     try:
@@ -409,7 +461,7 @@ def fetch_report_data() -> ReportData:
     except Exception as e:
         logger.error("Failed to fetch peak hour: %s", e)
 
-    # 7. Yesterday's top pages → rank_change for today's top 5
+    # 7. Yesterday's top pages → rank_change for all candidates
     if data.top_pages:
         try:
             rows = _query(
@@ -422,16 +474,16 @@ def fetch_report_data() -> ReportData:
                 "ORDER BY count() DESC LIMIT 10"
             )
             yesterday_rank = {r["title"]: i + 1 for i, r in enumerate(rows)}
-            for today_rank, page in enumerate(data.top_pages[:5], 1):
+            for today_rank, page in enumerate(data.top_pages, 1):
                 prev = yesterday_rank.get(page.title)
                 page.rank_change = None if prev is None else (prev - today_rank)
         except Exception as e:
             logger.error("Failed to fetch yesterday ranks: %s", e)
 
-    # 8. Enrich top 5 pages with spike / cross-wiki metadata
+    # 8. Enrich all candidate pages with spike / cross-wiki metadata
     spike_map = {(p.title, p.server_name): p for p in data.spike_pages}
     crosswiki_map = {p.title: p for p in data.crosswiki_pages}
-    for page in data.top_pages[:5]:
+    for page in data.top_pages:
         spike = spike_map.get((page.title, page.server_name))
         if spike:
             page.is_spike = True
@@ -440,17 +492,11 @@ def fetch_report_data() -> ReportData:
         if cw:
             page.crosswiki_count = cw.wiki_count
 
-    # 9. Thumbnail for #1 page
-    if data.top_pages:
-        data.top_pages[0].thumbnail_url = _fetch_thumbnail(
-            data.top_pages[0].server_name, data.top_pages[0].title
-        )
-
-    # 10. Wikipedia Featured Article of the day
+    # 9. Wikipedia Featured Article of the day
     data.featured_article = _fetch_featured_article(now_kst)
 
     logger.info(
-        "Fetched: %d edits, %d top pages, %d spikes, %d cross-wiki, %d reverts, "
+        "Fetched: %d edits, %d top candidates, %d spikes, %d cross-wiki, %d reverts, "
         "peak=%dh, featured='%s'",
         data.stats.total_edits,
         len(data.top_pages),

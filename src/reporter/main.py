@@ -4,7 +4,7 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from reporter.config import settings
-from reporter.fetcher import fetch_report_data, fetch_news_with_keywords
+from reporter.fetcher import fetch_report_data, fetch_news_with_keywords, fetch_thumbnail
 from reporter.builder import build_report
 from reporter.publisher import publish_report
 
@@ -21,16 +21,22 @@ def run_report() -> None:
         # 1. Fetch all ClickHouse data + external APIs (no news yet)
         data = fetch_report_data()
 
-        # 2. Claude: generate sections + extract news search keywords
+        # 2. Claude: select diverse top 5, generate sections + news keywords
         sections, news_keywords = build_report(data)
 
-        # 3. Fetch news using Claude-extracted keywords for better relevance
+        # 3. Thumbnail for the #1 selected page (after LLM selection)
+        if data.top_pages:
+            data.top_pages[0].thumbnail_url = fetch_thumbnail(
+                data.top_pages[0].server_name, data.top_pages[0].title
+            )
+
+        # 4. Fetch news using Claude-extracted keywords for better relevance
         data.news_items = fetch_news_with_keywords(data.top_pages, news_keywords)
         logger.info(
             "News fetched: %d items (keywords: %s)", len(data.news_items), news_keywords
         )
 
-        # 4. Publish to Discord
+        # 5. Publish to Discord
         publish_report(sections, data)
         logger.info("Daily trend report sent successfully")
     except Exception as e:

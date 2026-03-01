@@ -55,6 +55,20 @@ def sample_data():
                 server_name="ko.wikipedia.org",
                 edits=60,
             ),
+            TopPage(
+                label="Marie Curie",
+                title="Marie_Curie",
+                description="Physicist and chemist",
+                server_name="en.wikipedia.org",
+                edits=50,
+            ),
+            TopPage(
+                label="축구",
+                title="Football",
+                description="스포츠",
+                server_name="ko.wikipedia.org",
+                edits=40,
+            ),
         ],
         revert_pages=[
             RevertPage(
@@ -77,6 +91,7 @@ def sample_data():
 @pytest.fixture
 def claude_response_json():
     return {
+        "selected_indices": [0, 1, 2, 3, 4],
         "headline": "테스트 헤드라인 요약입니다.",
         "top5_analysis": "상위 5개 문서 분석 내용입니다.",
         "controversy": "논쟁 문서 정보입니다.",
@@ -111,12 +126,23 @@ class TestBuildContext:
         assert "25.0" in ctx  # bot_ratio_pct
         assert "50" in ctx  # new_articles
 
-    def test_includes_top_page_labels(self, sample_data):
+    def test_includes_all_candidate_page_labels(self, sample_data):
+        """All candidates (not just top 5) must appear in context."""
         ctx = _build_context(sample_data, "2026년 03월 01일")
 
         assert "Alan Turing" in ctx
         assert "파이썬" in ctx
+        assert "Marie Curie" in ctx
+        assert "축구" in ctx
         assert "en.wikipedia.org" in ctx
+
+    def test_context_uses_zero_based_indices(self, sample_data):
+        """Candidates are shown with [0], [1], ... prefix for LLM index selection."""
+        ctx = _build_context(sample_data, "2026년 03월 01일")
+
+        assert "[0]" in ctx
+        assert "[1]" in ctx
+        assert "[4]" in ctx  # 5 pages → indices 0-4
 
     def test_spike_badge_appears_in_context(self, sample_data):
         ctx = _build_context(sample_data, "2026년 03월 01일")
@@ -199,6 +225,107 @@ class TestBuildReport:
             ["Test"],
         ]
 
+    def test_selected_indices_not_in_sections(
+        self, mocker, sample_data, claude_response_json
+    ):
+        """selected_indices must be extracted from sections dict."""
+        _mock_claude(mocker, claude_response_json)
+
+        sections, _ = build_report(sample_data)
+
+        assert "selected_indices" not in sections
+
+    def test_top_pages_filtered_by_selected_indices(self, mocker, sample_data):
+        """data.top_pages is replaced with LLM-selected pages in order."""
+        response = {
+            "selected_indices": [2, 0, 4, 1, 3],  # reverse-ish order
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+        }
+        _mock_claude(mocker, response)
+        original_pages = list(sample_data.top_pages)
+
+        build_report(sample_data)
+
+        assert len(sample_data.top_pages) == 5
+        assert sample_data.top_pages[0].label == original_pages[2].label
+        assert sample_data.top_pages[1].label == original_pages[0].label
+        assert sample_data.top_pages[2].label == original_pages[4].label
+
+    def test_selected_indices_capped_at_5(self, mocker, sample_data):
+        """Even if LLM returns 6+ indices, only first 5 are used."""
+        response = {
+            "selected_indices": [0, 1, 2, 3, 4, 0],  # 6 entries (last is duplicate)
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+        }
+        _mock_claude(mocker, response)
+
+        build_report(sample_data)
+
+        assert len(sample_data.top_pages) == 5
+
+    def test_fallback_to_first_5_when_selected_indices_empty(self, mocker, sample_data):
+        """Empty selected_indices → fallback to first 5 pages."""
+        response = {
+            "selected_indices": [],
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+        }
+        _mock_claude(mocker, response)
+
+        build_report(sample_data)
+
+        assert len(sample_data.top_pages) == 5
+
+    def test_fallback_to_first_5_when_selected_indices_out_of_range(
+        self, mocker, sample_data
+    ):
+        """Out-of-range indices are dropped; fallback to [:5] if none valid."""
+        response = {
+            "selected_indices": [99, 100],  # all out of range
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+        }
+        _mock_claude(mocker, response)
+
+        build_report(sample_data)
+
+        assert len(sample_data.top_pages) == 5
+
+    def test_fallback_when_selected_indices_is_not_list(self, mocker, sample_data):
+        """Non-list selected_indices → fallback to [:5]."""
+        response = {
+            "selected_indices": "not a list",
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
+            "news_keywords": [],
+        }
+        _mock_claude(mocker, response)
+
+        build_report(sample_data)
+
+        assert len(sample_data.top_pages) == 5
+
     def test_date_injected_into_sections(
         self, mocker, sample_data, claude_response_json
     ):
@@ -230,9 +357,18 @@ class TestBuildReport:
         create_kwargs = mock_client.messages.create.call_args.kwargs
         assert create_kwargs["model"] == "claude-haiku-4-5-20251001"
 
+    def test_max_tokens_is_1800(self, mocker, sample_data, claude_response_json):
+        mock_client = _mock_claude(mocker, claude_response_json)
+
+        build_report(sample_data)
+
+        create_kwargs = mock_client.messages.create.call_args.kwargs
+        assert create_kwargs["max_tokens"] == 1800
+
     def test_missing_news_keywords_field_returns_empty_list(self, mocker, sample_data):
         """If Claude omits news_keywords, return empty list without error."""
         response_without_keywords = {
+            "selected_indices": [0, 1, 2, 3, 4],
             "headline": "헤드라인",
             "top5_analysis": "분석",
             "controversy": "없음",
@@ -249,6 +385,7 @@ class TestBuildReport:
     def test_non_list_news_keywords_normalised_to_empty(self, mocker, sample_data):
         """If Claude returns news_keywords as non-list, normalise to []."""
         response = {
+            "selected_indices": [0, 1, 2, 3, 4],
             "headline": "h",
             "top5_analysis": "t",
             "controversy": "c",

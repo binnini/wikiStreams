@@ -2,7 +2,7 @@
 
 import pytest
 
-from reporter.fetcher import NewsItem, PeakHour, ReportData
+from reporter.fetcher import NewsItem, PeakHour, ReportData, TopPage
 from reporter.main import run_report
 
 
@@ -36,6 +36,7 @@ class TestRunReport:
         mock_build = mocker.patch(
             "reporter.main.build_report", return_value=(mock_sections, mock_keywords)
         )
+        mocker.patch("reporter.main.fetch_thumbnail", return_value="")
         mock_news = mocker.patch(
             "reporter.main.fetch_news_with_keywords", return_value=[]
         )
@@ -48,6 +49,46 @@ class TestRunReport:
         mock_news.assert_called_once_with(mock_data.top_pages, mock_keywords)
         mock_publish.assert_called_once_with(mock_sections, mock_data)
 
+    def test_thumbnail_fetched_for_first_page_after_build(
+        self, mocker, mock_data, mock_sections
+    ):
+        """fetch_thumbnail is called for the first selected page after build_report."""
+        mock_data.top_pages = [
+            TopPage(
+                label="Top Article",
+                title="Top_Article",
+                server_name="en.wikipedia.org",
+            )
+        ]
+        mocker.patch("reporter.main.fetch_report_data", return_value=mock_data)
+        mocker.patch("reporter.main.build_report", return_value=(mock_sections, []))
+        mock_thumb = mocker.patch(
+            "reporter.main.fetch_thumbnail",
+            return_value="https://example.com/thumb.jpg",
+        )
+        mocker.patch("reporter.main.fetch_news_with_keywords", return_value=[])
+        mocker.patch("reporter.main.publish_report")
+
+        run_report()
+
+        mock_thumb.assert_called_once_with("en.wikipedia.org", "Top_Article")
+        assert mock_data.top_pages[0].thumbnail_url == "https://example.com/thumb.jpg"
+
+    def test_thumbnail_not_fetched_when_no_pages(
+        self, mocker, mock_data, mock_sections
+    ):
+        """fetch_thumbnail is not called when top_pages is empty."""
+        mock_data.top_pages = []
+        mocker.patch("reporter.main.fetch_report_data", return_value=mock_data)
+        mocker.patch("reporter.main.build_report", return_value=(mock_sections, []))
+        mock_thumb = mocker.patch("reporter.main.fetch_thumbnail")
+        mocker.patch("reporter.main.fetch_news_with_keywords", return_value=[])
+        mocker.patch("reporter.main.publish_report")
+
+        run_report()
+
+        mock_thumb.assert_not_called()
+
     def test_fetched_news_assigned_to_data_before_publish(
         self, mocker, mock_data, mock_sections
     ):
@@ -55,6 +96,7 @@ class TestRunReport:
 
         mocker.patch("reporter.main.fetch_report_data", return_value=mock_data)
         mocker.patch("reporter.main.build_report", return_value=(mock_sections, []))
+        mocker.patch("reporter.main.fetch_thumbnail", return_value="")
         mocker.patch("reporter.main.fetch_news_with_keywords", return_value=news_items)
         mock_publish = mocker.patch("reporter.main.publish_report")
 

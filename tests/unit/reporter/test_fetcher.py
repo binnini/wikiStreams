@@ -10,11 +10,13 @@ from reporter.fetcher import (
     FeaturedArticle,
     NewsItem,
     TopPage,
+    _deduplicate_by_qid,
     _fetch_featured_article,
     _fetch_news,
-    _fetch_thumbnail,
+    _fetch_qid,
     fetch_news_with_keywords,
     fetch_report_data,
+    fetch_thumbnail,
     wiki_url,
 )
 
@@ -421,7 +423,7 @@ class TestFetchFeaturedArticle:
 
 
 # ─────────────────────────────────────────────
-# _fetch_thumbnail
+# fetch_thumbnail (public)
 # ─────────────────────────────────────────────
 
 
@@ -431,14 +433,14 @@ class TestFetchThumbnail:
             mocker, json_data={"thumbnail": {"source": "https://example.com/thumb.jpg"}}
         )
 
-        result = _fetch_thumbnail("en.wikipedia.org", "Alan Turing")
+        result = fetch_thumbnail("en.wikipedia.org", "Alan Turing")
 
         assert result == "https://example.com/thumb.jpg"
 
     def test_wikidata_returns_empty_without_http_call(self, mocker):
         mock_client_cls = mocker.patch("httpx.Client")
 
-        result = _fetch_thumbnail("www.wikidata.org", "Q42")
+        result = fetch_thumbnail("www.wikidata.org", "Q42")
 
         assert result == ""
         mock_client_cls.assert_not_called()
@@ -446,7 +448,7 @@ class TestFetchThumbnail:
     def test_no_thumbnail_field_returns_empty(self, mocker):
         _mock_client(mocker, json_data={"title": "Some Page"})
 
-        result = _fetch_thumbnail("en.wikipedia.org", "Some Page")
+        result = fetch_thumbnail("en.wikipedia.org", "Some Page")
 
         assert result == ""
 
@@ -457,9 +459,151 @@ class TestFetchThumbnail:
         mock_cm.get.side_effect = httpx.HTTPError("Timeout")
         mocker.patch("httpx.Client", return_value=mock_cm)
 
-        result = _fetch_thumbnail("en.wikipedia.org", "Some Page")
+        result = fetch_thumbnail("en.wikipedia.org", "Some Page")
 
         assert result == ""
+
+
+# ─────────────────────────────────────────────
+# _fetch_qid
+# ─────────────────────────────────────────────
+
+
+class TestFetchQid:
+    def test_returns_wikibase_item_for_wikipedia_page(self, mocker):
+        _mock_client(mocker, json_data={"wikibase_item": "Q22686"})
+
+        result = _fetch_qid("en.wikipedia.org", "Donald Trump")
+
+        assert result == "Q22686"
+
+    def test_wikidata_page_qid_format_returns_title(self, mocker):
+        mock_client_cls = mocker.patch("httpx.Client")
+
+        result = _fetch_qid("www.wikidata.org", "Q42")
+
+        assert result == "Q42"
+        mock_client_cls.assert_not_called()
+
+    def test_wikidata_page_non_qid_format_returns_none(self, mocker):
+        mock_client_cls = mocker.patch("httpx.Client")
+
+        result = _fetch_qid("www.wikidata.org", "Douglas Adams")
+
+        assert result is None
+        mock_client_cls.assert_not_called()
+
+    def test_no_wikibase_item_returns_none(self, mocker):
+        _mock_client(mocker, json_data={"title": "Some Page"})
+
+        result = _fetch_qid("en.wikipedia.org", "Some Page")
+
+        assert result is None
+
+    def test_http_error_returns_none(self, mocker):
+        mock_cm = MagicMock()
+        mock_cm.__enter__.return_value = mock_cm
+        mock_cm.__exit__.return_value = False
+        mock_cm.get.side_effect = httpx.HTTPError("Timeout")
+        mocker.patch("httpx.Client", return_value=mock_cm)
+
+        result = _fetch_qid("en.wikipedia.org", "Some Page")
+
+        assert result is None
+
+
+# ─────────────────────────────────────────────
+# _deduplicate_by_qid
+# ─────────────────────────────────────────────
+
+
+class TestDeduplicateByQid:
+    def test_same_qid_keeps_first_occurrence(self):
+        """Same Q-ID across language editions → keep first (highest edit count)."""
+        pages = [
+            TopPage(
+                label="Donald Trump",
+                title="Donald_Trump",
+                server_name="en.wikipedia.org",
+                edits=100,
+                qid="Q22686",
+            ),
+            TopPage(
+                label="도널드 트럼프",
+                title="도널드_트럼프",
+                server_name="ko.wikipedia.org",
+                edits=80,
+                qid="Q22686",
+            ),
+        ]
+
+        result = _deduplicate_by_qid(pages)
+
+        assert len(result) == 1
+        assert result[0].label == "Donald Trump"
+
+    def test_no_qid_all_kept(self):
+        """Pages without Q-IDs each get a unique fallback key and are all kept."""
+        pages = [
+            TopPage(
+                label="Page A",
+                title="Page_A",
+                server_name="en.wikipedia.org",
+                edits=100,
+                qid=None,
+            ),
+            TopPage(
+                label="Page B",
+                title="Page_B",
+                server_name="ko.wikipedia.org",
+                edits=80,
+                qid=None,
+            ),
+        ]
+
+        result = _deduplicate_by_qid(pages)
+
+        assert len(result) == 2
+
+    def test_mixed_qid_and_no_qid(self):
+        """Duplicate Q-ID removed; pages without Q-ID always kept."""
+        pages = [
+            TopPage(label="A-en", title="A", server_name="en.wikipedia.org", edits=100, qid="Q1"),
+            TopPage(label="A-ko", title="A-ko", server_name="ko.wikipedia.org", edits=90, qid="Q1"),
+            TopPage(label="B", title="B", server_name="en.wikipedia.org", edits=80, qid=None),
+        ]
+
+        result = _deduplicate_by_qid(pages)
+
+        assert len(result) == 2
+        assert result[0].label == "A-en"
+        assert result[1].label == "B"
+
+    def test_order_preserved_for_unique_pages(self):
+        pages = [
+            TopPage(label="X", title="X", server_name="en.wikipedia.org", edits=100, qid="Q1"),
+            TopPage(label="Y", title="Y", server_name="en.wikipedia.org", edits=90, qid="Q2"),
+            TopPage(label="Z", title="Z", server_name="en.wikipedia.org", edits=80, qid="Q3"),
+        ]
+
+        result = _deduplicate_by_qid(pages)
+
+        assert [p.label for p in result] == ["X", "Y", "Z"]
+
+    def test_triple_duplicate_keeps_only_first(self):
+        pages = [
+            TopPage(label="En", title="En", server_name="en.wikipedia.org", edits=300, qid="Q99"),
+            TopPage(label="Ko", title="Ko", server_name="ko.wikipedia.org", edits=200, qid="Q99"),
+            TopPage(label="De", title="De", server_name="de.wikipedia.org", edits=100, qid="Q99"),
+        ]
+
+        result = _deduplicate_by_qid(pages)
+
+        assert len(result) == 1
+        assert result[0].label == "En"
+
+    def test_empty_list_returns_empty(self):
+        assert _deduplicate_by_qid([]) == []
 
 
 # ─────────────────────────────────────────────
@@ -483,7 +627,7 @@ class TestFetchReportData:
             [{"value": "500"}],  # active_users
             [{"value": "20.5"}],  # bot_ratio_pct
             [{"value": "100"}],  # new_articles
-            top_rows or [],  # top_pages
+            top_rows or [],  # top_pages (LIMIT 20)
             spike_rows or [],  # spike_pages
             crosswiki_rows or [],  # crosswiki_pages
             [],  # revert_pages
@@ -491,11 +635,11 @@ class TestFetchReportData:
             yesterday_rows or [],  # yesterday_rank
         ]
 
-    def _patch_all(self, mocker, **kwargs):
+    def _patch_all(self, mocker, qid_return=None, **kwargs):
         mocker.patch(
             "reporter.fetcher._query", side_effect=self._query_side_effect(**kwargs)
         )
-        mocker.patch("reporter.fetcher._fetch_thumbnail", return_value="")
+        mocker.patch("reporter.fetcher._fetch_qid", return_value=qid_return)
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )
@@ -607,7 +751,8 @@ class TestFetchReportData:
 
         assert data.top_pages[0].rank_change is None
 
-    def test_thumbnail_fetched_for_first_page(self, mocker):
+    def test_thumbnail_not_fetched_in_fetch_report_data(self, mocker):
+        """fetch_thumbnail must NOT be called inside fetch_report_data (moved to main.py)."""
         top_rows = [
             {
                 "label": "Top Page",
@@ -621,25 +766,55 @@ class TestFetchReportData:
             "reporter.fetcher._query",
             side_effect=self._query_side_effect(top_rows=top_rows),
         )
-        mock_thumb = mocker.patch(
-            "reporter.fetcher._fetch_thumbnail",
-            return_value="https://example.com/thumb.jpg",
+        mocker.patch("reporter.fetcher._fetch_qid", return_value=None)
+        mocker.patch(
+            "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )
+        mock_thumb = mocker.patch("reporter.fetcher.fetch_thumbnail")
+
+        fetch_report_data()
+
+        mock_thumb.assert_not_called()
+
+    def test_qid_deduplication_applied(self, mocker):
+        """Pages sharing the same Q-ID are deduplicated: only the first survives."""
+        top_rows = [
+            {
+                "label": "Trump EN",
+                "title": "Donald_Trump",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "200",
+            },
+            {
+                "label": "Trump KO",
+                "title": "도널드_트럼프",
+                "description": "",
+                "server_name": "ko.wikipedia.org",
+                "edits": "100",
+            },
+        ]
+        mocker.patch(
+            "reporter.fetcher._query",
+            side_effect=self._query_side_effect(top_rows=top_rows),
+        )
+        # Both pages map to the same Q-ID
+        mocker.patch("reporter.fetcher._fetch_qid", return_value="Q22686")
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )
 
         data = fetch_report_data()
 
-        mock_thumb.assert_called_once_with("en.wikipedia.org", "Top_Page")
-        assert data.top_pages[0].thumbnail_url == "https://example.com/thumb.jpg"
+        assert len(data.top_pages) == 1
+        assert data.top_pages[0].label == "Trump EN"
 
     def test_query_failure_returns_empty_data(self, mocker):
         """ClickHouse errors are caught; empty ReportData is returned."""
         mocker.patch(
             "reporter.fetcher._query", side_effect=Exception("ClickHouse down")
         )
-        mocker.patch("reporter.fetcher._fetch_thumbnail", return_value="")
+        mocker.patch("reporter.fetcher._fetch_qid", return_value=None)
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )

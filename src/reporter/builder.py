@@ -38,17 +38,17 @@ def _build_context(data: ReportData, report_date: str) -> str:
     lines.append("")
 
     if data.top_pages:
-        lines.append("## 편집량 상위 문서 (봇 제외, 실제 편집만, 24시간)")
-        for i, p in enumerate(data.top_pages[:5], 1):
+        lines.append("## 편집량 상위 문서 후보 (봇 제외, 실제 편집만, 24시간)")
+        for i, p in enumerate(data.top_pages):
             desc = f" — {p.description}" if p.description else ""
             badges = []
             if p.is_spike:
-                badges.append(f"스파이크 {p.spike_ratio_val}x")
+                badges.append(f"⚡스파이크 {p.spike_ratio_val}x")
             if p.crosswiki_count >= 2:
-                badges.append(f"다국어 {p.crosswiki_count}개 언어판")
+                badges.append(f"🌍다국어 {p.crosswiki_count}개 언어판")
             badge_str = f" [{', '.join(badges)}]" if badges else ""
             lines.append(
-                f"{i}. {p.label} ({p.server_name}, {p.edits}회){badge_str}{desc}"
+                f"[{i}] {p.label} ({p.server_name}, {p.edits}회){badge_str}{desc}"
             )
         lines.append("")
 
@@ -76,34 +76,40 @@ def _build_context(data: ReportData, report_date: str) -> str:
 def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
     """Build the daily report using Claude.
 
+    Selects 5 thematically diverse top pages (via selected_indices) from the
+    full candidate list, then generates section text and news keywords.
+
     Returns:
         sections: Dict of section name → text content for Discord embeds.
-        news_keywords: List of keyword lists (one per top-3 page) for news searching.
+        news_keywords: List of keyword lists (one per top-3 selected page) for news searching.
     """
     report_date = datetime.now(KST).strftime("%Y년 %m월 %d일")
     context = _build_context(data, report_date)
 
-    top3_labels = [p.label or p.title for p in data.top_pages[:3]]
-    top3_list = "\n".join(f"{i+1}. {lbl}" for i, lbl in enumerate(top3_labels))
-
     user_message = f"""{context}
 
-위 데이터를 바탕으로 다음 6개 섹션과 뉴스 키워드를 JSON 형식으로 작성해주세요.
+위 데이터를 바탕으로 다음 7개 항목을 JSON 형식으로 작성해주세요.
 
-섹션 구성:
+항목 구성:
+0. selected_indices: 위 후보 목록([0], [1], ...)에서 주제가 서로 다른 5개의 인덱스(0-based 정수)를 선택하세요.
+   선택 기준:
+   - 같은 사건/인물에 관한 문서는 1개만 선택
+   - ⚡스파이크 · 🌍다국어 트렌딩이 있으면 우선 고려
+   - 정치/스포츠/과학/문화 등 분야 다양성 선호
+   - 선택 순서는 편집량 내림차순 유지 (편집 수가 많은 문서를 앞에)
+   - 후보가 5개 미만이면 전체 선택
 1. headline: 오늘 가장 주목할 Wikipedia 동향 1-2개를 선정해 2-3문장으로 요약. 왜 오늘 이 문서들이 주목받는지 맥락을 포함하세요.
-2. top5_analysis: 편집량 상위 문서들의 통합 분석 (2-3문장). 스파이크·다국어 문서를 강조하고, 단순 나열이 아닌 "왜 오늘 이 문서인가"에 초점을 맞추세요.
+2. top5_analysis: 선택된 5개 문서들의 통합 분석 (2-3문장). 스파이크·다국어 문서를 강조하고, "왜 오늘 이 문서인가"에 초점을 맞추세요.
 3. controversy: 되돌리기(revert)가 집중된 주제·분야의 공통 맥락 (1-2문장, 도입부). 개별 문서명과 수치는 언급하지 마세요 — 문서별 통계는 별도로 표시됩니다. 어떤 유형의 주제(정치·행정·문화 등)에서 편집 분쟁이 발생하고 있는지 설명하세요. 데이터가 없으면 "특이사항 없음"
 4. numbers: 오늘의 핵심 수치 요약 — 총 편집 수, 활성 편집자, 봇 비율, 신규 문서, 피크 시간대를 자연스러운 한 문단으로 서술하세요.
 5. featured: 오늘의 Wikipedia 특집 문서 소개 — 제목을 한국어로 번역하고, 어떤 내용인지, 왜 주목할 만한지 2-3문장. 데이터 없으면 "특집 문서 정보 없음"
-6. news_keywords: 아래 상위 3개 문서에 대한 Google 뉴스 검색용 핵심 키워드 추출.
+6. news_keywords: selected_indices로 선택한 5개 문서 중 앞의 3개에 대한 Google 뉴스 검색용 핵심 키워드.
    - 고유명사(인물명, 국가명, 사건명)만 1-3개씩 추출하세요.
    - 검색 효율을 위해 문서 원어(영어/한국어 등) 기준으로 작성하세요.
-   대상 문서:
-{top3_list}
 
 반드시 아래 형식으로 응답하세요 (JSON):
 {{
+  "selected_indices": [i1, i2, i3, i4, i5],
   "headline": "...",
   "top5_analysis": "...",
   "controversy": "...",
@@ -115,7 +121,7 @@ def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1400,
+        max_tokens=1800,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
     )
@@ -126,6 +132,7 @@ def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
         parsed = json.loads(json_match.group())
     else:
         parsed = {
+            "selected_indices": [],
             "headline": raw,
             "top5_analysis": "",
             "controversy": "",
@@ -133,6 +140,20 @@ def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
             "featured": "",
             "news_keywords": [],
         }
+
+    # Apply LLM-selected topic diversity: filter top_pages to chosen indices
+    selected = parsed.pop("selected_indices", [])
+    if isinstance(selected, list):
+        valid = [
+            i for i in selected if isinstance(i, int) and 0 <= i < len(data.top_pages)
+        ][:5]
+        if valid:
+            data.top_pages = [data.top_pages[i] for i in valid]
+            logger.info("LLM selected indices: %s", valid)
+        else:
+            data.top_pages = data.top_pages[:5]
+    else:
+        data.top_pages = data.top_pages[:5]
 
     # Separate news_keywords (list[list[str]]) from text sections (dict[str, str])
     news_keywords: list[list[str]] = parsed.pop("news_keywords", [])
