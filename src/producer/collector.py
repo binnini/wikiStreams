@@ -8,8 +8,8 @@ from httpx_sse import connect_sse
 logger = logging.getLogger(__name__)
 
 WIKIMEDIA_URL = "https://stream.wikimedia.org/v2/stream/recentchange"
-_RETRY_BASE_DELAY = 2.0   # 초기 재연결 대기 시간 (초)
-_RETRY_MAX_DELAY = 60.0   # 최대 재연결 대기 시간 (초)
+_RETRY_BASE_DELAY = 2.0  # 초기 재연결 대기 시간 (초)
+_RETRY_MAX_DELAY = 60.0  # 최대 재연결 대기 시간 (초)
 
 
 # 테스트 환경에서 무한 루프를 제어하기 위한 예외
@@ -44,7 +44,9 @@ class WikimediaCollector:
                 headers = {"User-Agent": "wikiStreams-project/0.3"}
                 with httpx.Client(timeout=None, headers=headers) as client:
                     with connect_sse(client, "GET", WIKIMEDIA_URL) as event_source:
-                        logger.info("✅ Wikimedia SSE 스트림에 성공적으로 연결되었습니다.")
+                        logger.info(
+                            "✅ Wikimedia SSE 스트림에 성공적으로 연결되었습니다."
+                        )
                         retry_delay = _RETRY_BASE_DELAY  # 연결 성공 시 초기화
                         for sse in event_source.iter_sse():
                             if not sse.data:
@@ -59,7 +61,9 @@ class WikimediaCollector:
                                 event_data = json.loads(sse.data)
                                 self.event_buffer.append(event_data)
                             except json.JSONDecodeError:
-                                logger.warning("⚠️ 잘못된 JSON 데이터를 건너뜀: %s", sse.data)
+                                logger.warning(
+                                    "⚠️ 잘못된 JSON 데이터를 건너뜀: %s", sse.data
+                                )
                                 continue
 
                             if len(self.event_buffer) >= self.batch_size:
@@ -76,7 +80,9 @@ class WikimediaCollector:
             except Exception as e:
                 logger.error(
                     "❌ 예상치 못한 오류 발생: %s (TYPE: %s) — %.0f초 후 재연결...",
-                    e, type(e).__name__, retry_delay,
+                    e,
+                    type(e).__name__,
+                    retry_delay,
                 )
                 time.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, _RETRY_MAX_DELAY)

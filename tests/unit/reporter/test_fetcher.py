@@ -556,8 +556,20 @@ class TestDeduplicateByQid:
     def test_same_qid_lang_editions_populated(self):
         """Both editions appear in lang_editions of the representative."""
         pages = [
-            TopPage(label="EN", title="T", server_name="en.wikipedia.org", edits=100, qid="Q1"),
-            TopPage(label="KO", title="T_ko", server_name="ko.wikipedia.org", edits=80, qid="Q1"),
+            TopPage(
+                label="EN",
+                title="T",
+                server_name="en.wikipedia.org",
+                edits=100,
+                qid="Q1",
+            ),
+            TopPage(
+                label="KO",
+                title="T_ko",
+                server_name="ko.wikipedia.org",
+                edits=80,
+                qid="Q1",
+            ),
         ]
 
         result = _deduplicate_by_qid(pages)
@@ -569,8 +581,20 @@ class TestDeduplicateByQid:
     def test_no_qid_all_kept(self):
         """Pages without Q-IDs each get a unique fallback key and are all kept."""
         pages = [
-            TopPage(label="Page A", title="Page_A", server_name="en.wikipedia.org", edits=100, qid=None),
-            TopPage(label="Page B", title="Page_B", server_name="ko.wikipedia.org", edits=80, qid=None),
+            TopPage(
+                label="Page A",
+                title="Page_A",
+                server_name="en.wikipedia.org",
+                edits=100,
+                qid=None,
+            ),
+            TopPage(
+                label="Page B",
+                title="Page_B",
+                server_name="ko.wikipedia.org",
+                edits=80,
+                qid=None,
+            ),
         ]
 
         result = _deduplicate_by_qid(pages)
@@ -582,9 +606,23 @@ class TestDeduplicateByQid:
     def test_mixed_qid_and_no_qid(self):
         """Duplicate Q-ID removed; pages without Q-ID always kept."""
         pages = [
-            TopPage(label="A-en", title="A", server_name="en.wikipedia.org", edits=100, qid="Q1"),
-            TopPage(label="A-ko", title="A-ko", server_name="ko.wikipedia.org", edits=90, qid="Q1"),
-            TopPage(label="B", title="B", server_name="en.wikipedia.org", edits=80, qid=None),
+            TopPage(
+                label="A-en",
+                title="A",
+                server_name="en.wikipedia.org",
+                edits=100,
+                qid="Q1",
+            ),
+            TopPage(
+                label="A-ko",
+                title="A-ko",
+                server_name="ko.wikipedia.org",
+                edits=90,
+                qid="Q1",
+            ),
+            TopPage(
+                label="B", title="B", server_name="en.wikipedia.org", edits=80, qid=None
+            ),
         ]
 
         result = _deduplicate_by_qid(pages)
@@ -597,9 +635,19 @@ class TestDeduplicateByQid:
 
     def test_order_preserved_for_unique_pages(self):
         pages = [
-            TopPage(label="X", title="X", server_name="en.wikipedia.org", edits=100, qid="Q1"),
-            TopPage(label="Y", title="Y", server_name="en.wikipedia.org", edits=90, qid="Q2"),
-            TopPage(label="Z", title="Z", server_name="en.wikipedia.org", edits=80, qid="Q3"),
+            TopPage(
+                label="X",
+                title="X",
+                server_name="en.wikipedia.org",
+                edits=100,
+                qid="Q1",
+            ),
+            TopPage(
+                label="Y", title="Y", server_name="en.wikipedia.org", edits=90, qid="Q2"
+            ),
+            TopPage(
+                label="Z", title="Z", server_name="en.wikipedia.org", edits=80, qid="Q3"
+            ),
         ]
 
         result = _deduplicate_by_qid(pages)
@@ -609,9 +657,27 @@ class TestDeduplicateByQid:
 
     def test_triple_duplicate_keeps_only_first(self):
         pages = [
-            TopPage(label="En", title="En", server_name="en.wikipedia.org", edits=300, qid="Q99"),
-            TopPage(label="Ko", title="Ko", server_name="ko.wikipedia.org", edits=200, qid="Q99"),
-            TopPage(label="De", title="De", server_name="de.wikipedia.org", edits=100, qid="Q99"),
+            TopPage(
+                label="En",
+                title="En",
+                server_name="en.wikipedia.org",
+                edits=300,
+                qid="Q99",
+            ),
+            TopPage(
+                label="Ko",
+                title="Ko",
+                server_name="ko.wikipedia.org",
+                edits=200,
+                qid="Q99",
+            ),
+            TopPage(
+                label="De",
+                title="De",
+                server_name="de.wikipedia.org",
+                edits=100,
+                qid="Q99",
+            ),
         ]
 
         result = _deduplicate_by_qid(pages)

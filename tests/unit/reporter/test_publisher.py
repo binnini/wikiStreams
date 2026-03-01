@@ -249,9 +249,9 @@ class TestBuildTop5Embed:
         embed = _build_top5_embed(data, "")
         value = embed["fields"][0]["value"]
 
-        assert "450" in value   # EN edits
-        assert "320" in value   # RU edits
-        assert "280" in value   # ES edits
+        assert "450" in value  # EN edits
+        assert "320" in value  # RU edits
+        assert "280" in value  # ES edits
         assert "1,050" in value  # total (450+320+280)
         assert "합계" in value
 
@@ -261,7 +261,7 @@ class TestBuildTop5Embed:
         embed = _build_top5_embed(sample_data, "")
         value = embed["fields"][0]["value"]
 
-        assert "편집" in value   # "100회 편집"
+        assert "편집" in value  # "100회 편집"
         assert "합계" not in value  # no total line
 
 

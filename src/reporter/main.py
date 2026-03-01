@@ -4,7 +4,11 @@ from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from reporter.config import settings
-from reporter.fetcher import fetch_report_data, fetch_news_with_keywords, fetch_thumbnail
+from reporter.fetcher import (
+    fetch_report_data,
+    fetch_news_with_keywords,
+    fetch_thumbnail,
+)
 from reporter.builder import build_report
 from reporter.publisher import publish_report
 

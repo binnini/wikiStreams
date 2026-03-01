@@ -153,9 +153,7 @@ def test_exponential_backoff(mocker):
     def make_stream():
         cm = MagicMock()
         cm.__enter__ = MagicMock(
-            return_value=MagicMock(
-                iter_sse=MagicMock(return_value=iter([event]))
-            )
+            return_value=MagicMock(iter_sse=MagicMock(return_value=iter([event])))
         )
         cm.__exit__ = MagicMock(return_value=False)
         return cm
