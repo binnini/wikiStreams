@@ -135,3 +135,39 @@ def test_collector_scenarios(
     assert len(collector_instance.event_buffer) == 0
     if reconnect_side_effect:
         assert mock_connect_sse.call_count == len(reconnect_side_effect) + 1
+
+
+def test_exponential_backoff(mocker):
+    """연속 HTTP 오류 시 재연결 대기 시간이 지수적으로 증가해야 한다."""
+    collector_instance = WikimediaCollector(batch_size=1, batch_timeout_seconds=10.0)
+    mock_callback = MagicMock(side_effect=StopCollector)
+    collector_instance.set_callback(mock_callback)
+
+    mocker.patch("producer.collector.httpx.Client")
+    mock_connect_sse = mocker.patch("producer.collector.connect_sse")
+    mock_sleep = mocker.patch("producer.collector.time.sleep")
+
+    # 두 번 HTTP 오류 → 세 번째에 연결 성공 후 StopCollector
+    event = MagicMock(data=json.dumps({"id": 1}))
+
+    def make_stream():
+        cm = MagicMock()
+        cm.__enter__ = MagicMock(
+            return_value=MagicMock(
+                iter_sse=MagicMock(return_value=iter([event]))
+            )
+        )
+        cm.__exit__ = MagicMock(return_value=False)
+        return cm
+
+    mock_connect_sse.side_effect = [
+        httpx.HTTPError("err1"),
+        httpx.HTTPError("err2"),
+        make_stream(),
+    ]
+
+    with pytest.raises(StopCollector):
+        collector_instance.run()
+
+    sleep_calls = [c.args[0] for c in mock_sleep.call_args_list]
+    assert sleep_calls == pytest.approx([2.0, 4.0])  # _RETRY_BASE_DELAY, then doubled
