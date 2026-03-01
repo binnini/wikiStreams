@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     discord_webhook_url: str = ""
 
+    # Prompt style ('default' or 'doro')
+    prompt_style: str = "default"
+
     # Schedule
     report_hour_kst: int = 9
 

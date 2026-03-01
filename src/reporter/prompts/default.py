@@ -1,4 +1,4 @@
-"""Prompt strings for the WikiStreams daily reporter (Claude calls)."""
+"""Default prompt strings for the WikiStreams daily reporter (Claude calls)."""
 
 SYSTEM_PROMPT = """당신은 한국어 Wikipedia 트렌드 뉴스 에디터입니다.
 매일 위키미디어 편집 데이터를 분석해 간결하고 읽기 쉬운 한국어 뉴스 브리핑을 작성합니다.
