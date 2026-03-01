@@ -1,5 +1,11 @@
+import json
 import logging
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
+from datetime import datetime, timezone, timedelta
+from email.utils import parsedate_to_datetime
+from typing import Optional
+from urllib.parse import quote
 
 import httpx
 
@@ -8,6 +14,13 @@ from reporter.config import settings
 logger = logging.getLogger(__name__)
 
 CLICKHOUSE_URL = f"http://{settings.clickhouse_host}:{settings.clickhouse_port}"
+KST = timezone(timedelta(hours=9))
+_WIKI_API_HEADERS = {"User-Agent": "WikiStreams/1.0 (https://github.com/wikistreams)"}
+
+
+def wiki_url(server_name: str, title: str) -> str:
+    path = quote(title.replace(" ", "_"), safe="")
+    return f"https://{server_name}/wiki/{path}"
 
 
 @dataclass
@@ -25,6 +38,9 @@ class TopPage:
     description: str = ""
     server_name: str = ""
     edits: int = 0
+    url: str = ""
+    thumbnail_url: str = ""
+    rank_change: Optional[int] = None  # None=new entry, 0=same, +N=improved, -N=dropped
 
 
 @dataclass
@@ -53,12 +69,37 @@ class RevertPage:
 
 
 @dataclass
+class NewsItem:
+    title: str = ""
+    link: str = ""
+    source: str = ""
+
+
+@dataclass
+class FeaturedArticle:
+    title: str = ""
+    description: str = ""
+    extract: str = ""
+    url: str = ""
+    thumbnail_url: str = ""
+
+
+@dataclass
+class PeakHour:
+    hour: int = -1
+    edits: int = 0
+
+
+@dataclass
 class ReportData:
     stats: OverallStats = field(default_factory=OverallStats)
     top_pages: list[TopPage] = field(default_factory=list)
     spike_pages: list[SpikePage] = field(default_factory=list)
     crosswiki_pages: list[CrossWikiPage] = field(default_factory=list)
     revert_pages: list[RevertPage] = field(default_factory=list)
+    news_items: list[NewsItem] = field(default_factory=list)
+    featured_article: FeaturedArticle = field(default_factory=FeaturedArticle)
+    peak_hour: PeakHour = field(default_factory=PeakHour)
 
 
 def _query(sql: str) -> list[dict]:
@@ -69,13 +110,105 @@ def _query(sql: str) -> list[dict]:
     rows = []
     for line in resp.text.strip().splitlines():
         if line:
-            import json
             rows.append(json.loads(line))
     return rows
 
 
+def _fetch_news(query: str, max_items: int = 2) -> list[NewsItem]:
+    encoded = quote(query)
+    rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
+    # Keywords: words of length >= 4 for relevance check
+    keywords = {w.lower() for w in query.split() if len(w) >= 4}
+    try:
+        with httpx.Client(timeout=5, follow_redirects=True) as client:
+            resp = client.get(rss_url)
+            resp.raise_for_status()
+        root = ET.fromstring(resp.text)
+        items: list[NewsItem] = []
+        for item in root.findall(".//item"):
+            if len(items) >= max_items:
+                break
+            title_el = item.find("title")
+            link_el = item.find("link")
+            source_el = item.find("source")
+            pubdate_el = item.find("pubDate")
+
+            # 48h freshness filter
+            if pubdate_el is not None and pubdate_el.text:
+                try:
+                    pub_dt = parsedate_to_datetime(pubdate_el.text)
+                    if pub_dt < cutoff:
+                        continue
+                except Exception:
+                    pass  # unparseable date: allow through
+
+            link_url = ""
+            if link_el is not None:
+                link_url = (link_el.text or link_el.get("href", "")).strip()
+            if not title_el or not link_url:
+                continue
+
+            news_title = title_el.text or ""
+            # Keyword relevance: at least one keyword must appear in the headline
+            if keywords and not any(kw in news_title.lower() for kw in keywords):
+                continue
+
+            items.append(
+                NewsItem(
+                    title=news_title,
+                    link=link_url,
+                    source=source_el.text if source_el is not None else "",
+                )
+            )
+        return items
+    except Exception as e:
+        logger.warning("News fetch failed for '%s': %s", query, e)
+        return []
+
+
+def _fetch_featured_article(date: datetime) -> FeaturedArticle:
+    y = date.strftime("%Y")
+    m = date.strftime("%m")
+    d = date.strftime("%d")
+    url = f"https://en.wikipedia.org/api/rest_v1/feed/featured/{y}/{m}/{d}"
+    try:
+        with httpx.Client(timeout=10) as client:
+            resp = client.get(url, headers=_WIKI_API_HEADERS)
+            resp.raise_for_status()
+        tfa = resp.json().get("tfa", {})
+        if not tfa:
+            return FeaturedArticle()
+        return FeaturedArticle(
+            title=tfa.get("title", ""),
+            description=tfa.get("description", ""),
+            extract=tfa.get("extract", "")[:600],
+            url=tfa.get("content_urls", {}).get("desktop", {}).get("page", ""),
+            thumbnail_url=tfa.get("thumbnail", {}).get("source", ""),
+        )
+    except Exception as e:
+        logger.warning("Failed to fetch featured article: %s", e)
+        return FeaturedArticle()
+
+
+def _fetch_thumbnail(server_name: str, title: str) -> str:
+    if "wikidata" in server_name:
+        return ""
+    encoded = quote(title.replace(" ", "_"), safe="")
+    url = f"https://{server_name}/api/rest_v1/page/summary/{encoded}"
+    try:
+        with httpx.Client(timeout=5) as client:
+            resp = client.get(url, headers=_WIKI_API_HEADERS)
+            resp.raise_for_status()
+        return resp.json().get("thumbnail", {}).get("source", "")
+    except Exception as e:
+        logger.warning("Thumbnail fetch failed for '%s/%s': %s", server_name, title, e)
+        return ""
+
+
 def fetch_report_data() -> ReportData:
     data = ReportData()
+    now_kst = datetime.now(KST)
 
     # 1. Overall stats (24h)
     time_filter = "event_time >= now() - INTERVAL 24 HOUR"
@@ -106,7 +239,7 @@ def fetch_report_data() -> ReportData:
             f"SELECT if(wikidata_label != '', wikidata_label, title) AS label, "
             f"title, wikidata_description AS description, server_name, count() AS edits "
             f"FROM wikimedia.events "
-            f"WHERE {time_filter} AND namespace = 0 AND bot = 0 "
+            f"WHERE {time_filter} AND namespace = 0 AND bot = 0 AND wiki_type = 'edit' "
             f"GROUP BY title, wikidata_label, wikidata_description, server_name "
             f"ORDER BY edits DESC LIMIT 10"
         )
@@ -117,6 +250,7 @@ def fetch_report_data() -> ReportData:
                 description=r.get("description", ""),
                 server_name=r["server_name"],
                 edits=int(r["edits"]),
+                url=wiki_url(r["server_name"], r["title"]),
             )
             for r in rows
         ]
@@ -197,12 +331,65 @@ def fetch_report_data() -> ReportData:
     except Exception as e:
         logger.error("Failed to fetch revert pages: %s", e)
 
+    # 6. Related news for top 3 trending pages (Google News RSS, no API key required)
+    if data.top_pages:
+        all_news: list[NewsItem] = []
+        for page in data.top_pages[:3]:
+            query_term = page.label if page.label else page.title
+            all_news.extend(_fetch_news(query_term))
+        data.news_items = all_news[:5]
+
+    # 7. Peak edit hour (24h)
+    try:
+        rows = _query(
+            "SELECT toHour(event_time) AS hour, count() AS edits "
+            "FROM wikimedia.events "
+            f"WHERE {time_filter} "
+            "GROUP BY hour ORDER BY edits DESC LIMIT 1"
+        )
+        if rows:
+            data.peak_hour = PeakHour(hour=int(rows[0]["hour"]), edits=int(rows[0]["edits"]))
+    except Exception as e:
+        logger.error("Failed to fetch peak hour: %s", e)
+
+    # 8. Yesterday's top pages → compute rank_change for today's top 5
+    if data.top_pages:
+        try:
+            rows = _query(
+                "SELECT title, server_name "
+                "FROM wikimedia.events "
+                "WHERE event_time >= now() - INTERVAL 48 HOUR "
+                "AND event_time < now() - INTERVAL 24 HOUR "
+                "AND namespace = 0 AND bot = 0 "
+                "GROUP BY title, wikidata_label, server_name "
+                "ORDER BY count() DESC LIMIT 10"
+            )
+            yesterday_rank = {r["title"]: i + 1 for i, r in enumerate(rows)}
+            for today_rank, page in enumerate(data.top_pages[:5], 1):
+                prev = yesterday_rank.get(page.title)
+                page.rank_change = None if prev is None else (prev - today_rank)
+        except Exception as e:
+            logger.error("Failed to fetch yesterday ranks: %s", e)
+
+    # 9. Thumbnail for #1 page
+    if data.top_pages:
+        data.top_pages[0].thumbnail_url = _fetch_thumbnail(
+            data.top_pages[0].server_name, data.top_pages[0].title
+        )
+
+    # 10. Wikipedia Featured Article of the day
+    data.featured_article = _fetch_featured_article(now_kst)
+
     logger.info(
-        "Fetched report data: %d edits, %d top pages, %d spikes, %d cross-wiki, %d reverts",
+        "Fetched: %d edits, %d top pages, %d spikes, %d cross-wiki, %d reverts, "
+        "%d news, peak=%dh, featured='%s'",
         data.stats.total_edits,
         len(data.top_pages),
         len(data.spike_pages),
         len(data.crosswiki_pages),
         len(data.revert_pages),
+        len(data.news_items),
+        data.peak_hour.hour,
+        data.featured_article.title,
     )
     return data

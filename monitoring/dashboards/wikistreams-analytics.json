@@ -766,7 +766,7 @@
             "uid": "ClickHouse"
           },
           "format": 0,
-          "rawSql": "SELECT if(wikidata_label != '', wikidata_label, title) AS label, title, wikidata_description AS description, server_name, count() AS edits FROM wikimedia.events WHERE $__timeFilter(event_time) AND namespace = 0 AND bot = 0 GROUP BY title, wikidata_label, wikidata_description, server_name ORDER BY edits DESC LIMIT 20",
+          "rawSql": "SELECT if(wikidata_label != '', wikidata_label, title) AS label, title, wikidata_description AS description, server_name, count() AS edits FROM wikimedia.events WHERE $__timeFilter(event_time) AND namespace = 0 AND bot = 0 AND wiki_type = 'edit' GROUP BY title, wikidata_label, wikidata_description, server_name ORDER BY edits DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -2060,7 +2060,7 @@
             "uid": "ClickHouse"
           },
           "format": 0,
-          "rawSql": "SELECT if(wikidata_label NOT IN ('', '-'), wikidata_label, title) AS label, server_name, countIf(event_time > now() - INTERVAL 15 MINUTE) AS edits_15m, countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) AS edits_prev_60m, round(countIf(event_time > now() - INTERVAL 15 MINUTE) * 4.0 / (countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) + 1), 1) AS spike_ratio FROM wikimedia.events WHERE event_time > now() - INTERVAL 75 MINUTE AND namespace = 0 GROUP BY title, wikidata_label, server_name HAVING edits_15m >= 3 ORDER BY spike_ratio DESC LIMIT 15",
+          "rawSql": "SELECT if(wikidata_label NOT IN ('', '-'), wikidata_label, title) AS label, server_name, countIf(event_time > now() - INTERVAL 15 MINUTE) AS edits_15m, countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) AS edits_prev_60m, round(countIf(event_time > now() - INTERVAL 15 MINUTE) * 4.0 / (countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) + 1), 1) AS spike_ratio FROM wikimedia.events WHERE event_time > now() - INTERVAL 75 MINUTE AND namespace = 0 AND wiki_type = 'edit' GROUP BY title, wikidata_label, server_name HAVING edits_15m >= 3 ORDER BY spike_ratio DESC LIMIT 15",
           "refId": "A"
         }
       ],

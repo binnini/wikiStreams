@@ -20,7 +20,7 @@ def run_report() -> None:
     try:
         data = fetch_report_data()
         sections = build_report(data)
-        publish_report(sections)
+        publish_report(sections, data)
         logger.info("Daily trend report sent successfully")
     except Exception as e:
         logger.error("Failed to generate/send report: %s", e, exc_info=True)
