@@ -583,3 +583,39 @@
 - **향후 조치**:
   - 메모리 drift를 며칠 더 관찰. 선형 증가가 지속되면 `OPTIMIZE TABLE wikimedia.events FINAL`로 파트 강제 병합하거나 ClickHouse `max_memory_usage` 설정 검토.
   - resource-monitor 베이스라인이 충분히 학습되면 (시간대별 30+ 샘플) merge spike가 자동으로 "정상 범위"로 인식될 예정.
+
+### 16. resource-monitor hour 버킷 UTC → KST 교체
+
+- **이슈**: `main.py`에서 `datetime.now(tz=timezone.utc)`로 시간대를 UTC 기준으로 나눠 베이스라인을 저장. Discord 알림의 "시간대 평균 (12시)"가 실제 KST 21시 패턴을 가리켜 혼란 발생.
+- **해결**: `zoneinfo.ZoneInfo("Asia/Seoul")`로 교체. `zoneinfo`는 Python 3.9+ 표준 라이브러리로 별도 의존성 없음.
+- **부작용**: 기존 SQLite에 UTC 기준으로 학습된 hour 버킷 데이터가 잔존. KST 버킷이 min_samples=360에 도달하기 전까지(새 시간대당 약 1시간) 이상 감지 억제됨. 깔끔하게 재시작하려면 `resource_monitor_data` 볼륨 초기화 필요.
+
+### 17. resource-monitor min_samples 조정 (30 → 360) 및 이원화 배경 이해
+
+- **배경**: `min_samples=30`은 수집 간격 10초 기준 5분만 지나면 알람이 활성화됨 — EMA·분산이 충분히 안정되지 않은 상태에서 false alarm 가능성 높음.
+
+- **hour 버킷 구조 이해**:
+  - SQLite에 `(container, metric, hour)` 조합별로 독립적인 EMA·variance 레코드 유지.
+  - 각 hour 버킷은 하루에 딱 1시간(3600초 ÷ 10초 = 360 샘플/일)만 데이터를 받음.
+  - 시간대를 나누는 이유: 새벽 3시의 "정상 CPU 5%"와 저녁 9시의 "정상 CPU 25%"를 같은 평균으로 취급하면 오알람 발생.
+
+- **min_samples 계산**:
+  ```
+  min_samples = 360  →  360 × 10초 = 1시간분 데이터 필요
+  24개 버킷 전체 활성화 = 약 1일 (각 시간대를 최소 1회 통째로 관찰)
+  ```
+
+- **결정**: `min_samples = 360` 설정. 첫날은 학습 전용, 이튿날부터 점진적으로 버킷이 활성화됨.
+
+### 18. CI 파이프라인 이원화 (unit-tests / integration-tests 분리)
+
+- **배경**: 단일 job에서 PR마다 `docker compose up` + 60초 대기 + 통합 테스트를 실행하여 불필요한 시간과 비용 발생. PR에서는 빠른 피드백만 필요.
+
+- **변경**:
+  - `unit-tests` job (PR + main push): Lint → Format → Unit Tests. Docker 불필요. 약 1~2분.
+  - `integration-tests` job (main push 전용):
+    - `needs: unit-tests` — unit 통과 후에만 시작.
+    - `if: github.event_name == 'push' && github.ref == 'refs/heads/main'` — `pull_request` 이벤트는 조건 불충족으로 job 자체가 스킵.
+    - Docker Compose 기동 → sleep 60 → `tests/integration/` 전체 실행.
+
+- **결과**: PR 피드백 속도 향상, main 머지 시에만 인프라 의존 테스트 실행.
