@@ -328,3 +328,23 @@
 - **원인**: Python의 `xml.etree.ElementTree.Element`는 자식 엘리먼트가 없을 때 `bool(element) == False`로 평가됨. `<title>텍스트</title>` 처럼 텍스트만 있는 엘리먼트도 자식 없으면 falsy. 결과적으로 `if not title_el` 조건이 항상 `True`가 되어 모든 RSS 아이템이 필터링됨.
 - **해결**: `if not title_el or not link_url:` → `if title_el is None or not link_url:`
 - **교훈**: ElementTree 엘리먼트 존재 여부 확인은 반드시 `is None` / `is not None`으로 해야 함 (`not element` 사용 금지).
+
+### 4. 뉴스 스크래핑 관련성 필터 개선 및 Docker 이미지 재빌드
+
+- **이슈**: 운영 환경(`docker compose run --rm reporter`)에서 "News fetched: 0 items" 지속 — 단위 테스트는 전부 통과하는 상황.
+
+- **원인 1 — 다중 단어 키워드 미분리 (`fetch_news_with_keywords`)**:
+  - Claude가 `['Ali Khamenei']` 같은 다중 단어 키워드를 반환할 때 관련성 집합을 `{"ali khamenei"}`(구문 전체)로 만들어, 헤드라인에 부분 문자열 매칭이 불가능.
+  - **해결**: `{kw.lower() for kw in kws if len(kw) >= 3}` → `{word.lower() for kw in kws for word in kw.split() if len(word) >= 3}` — 단어 단위로 분리.
+
+- **원인 2 — 한국어판에도 관련성 필터 적용 (`_fetch_news`)**:
+  - 초기 구현에서 관련성 필터를 한국어판/영어판 구분 없이 적용. 한국어 구글 뉴스는 이미 쿼리로 관련성이 보장되므로 추가 키워드 필터가 오히려 결과를 차단.
+  - **해결**: `apply_relevance = (i > 0) and bool(relevance_keywords)` 플래그 도입 — 영어판(fallback)에만 관련성 필터 적용.
+
+- **원인 3 — Docker 이미지 stale**:
+  - 위 두 수정 사항이 소스코드에 반영됐으나 `reporter` 컨테이너 이미지가 재빌드되지 않아 운영에 미반영 상태였음.
+  - 단위 테스트는 로컬 소스 코드를 직접 참조하므로 이상 없이 통과 → 테스트 통과와 운영 동작 불일치 발생.
+  - **해결**: `docker compose build reporter` 후 `docker compose up -d reporter`로 재시작.
+
+- **결과**: News fetched: 4 items (Discord 5 Embed 정상 발송 확인).
+- **단위 테스트**: 다중 단어 키워드 분리 케이스 `test_multiword_keyword_split_into_individual_words` 추가 → **총 89개 통과**.

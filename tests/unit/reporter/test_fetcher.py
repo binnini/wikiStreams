@@ -297,6 +297,24 @@ class TestFetchNewsWithKeywords:
         query = mock_fn.call_args_list[0][0][0]
         assert query == "KeywordA KeywordB"
 
+    def test_multiword_keyword_split_into_individual_words(self, mocker):
+        """'Ali Khamenei' should produce relevance {'ali', 'khamenei'}, not {'ali khamenei'}."""
+        mock_fn = mocker.patch("reporter.fetcher._fetch_news", return_value=[])
+        pages = [
+            TopPage(
+                label="Ali Khamenei",
+                title="Ali_Khamenei",
+                server_name="en.wikipedia.org",
+            )
+        ]
+
+        fetch_news_with_keywords(pages, [["Ali Khamenei"]])
+
+        relevance = mock_fn.call_args_list[0][1]["relevance_keywords"]
+        assert "ali" in relevance
+        assert "khamenei" in relevance
+        assert "ali khamenei" not in relevance
+
     def test_falls_back_to_label_when_no_keywords(self, mocker):
         mock_fn = mocker.patch("reporter.fetcher._fetch_news", return_value=[])
         pages = [

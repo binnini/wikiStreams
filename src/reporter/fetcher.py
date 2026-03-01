@@ -218,7 +218,9 @@ def fetch_news_with_keywords(
             kws = [page.label or page.title]
         # Primary search query: join first two keywords
         query = " ".join(kws[:2])
-        relevance = {kw.lower() for kw in kws if len(kw) >= 3}
+        relevance = {
+            word.lower() for kw in kws for word in kw.split() if len(word) >= 3
+        }
         all_news.extend(_fetch_news(query, relevance_keywords=relevance))
     return all_news[:5]
 
