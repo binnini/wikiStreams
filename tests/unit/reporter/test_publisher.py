@@ -316,7 +316,7 @@ class TestPublishReport:
 
         embeds = mock_cm.post.call_args.kwargs["json"]["embeds"]
         assert "Wikipedia 일일 트렌드" in embeds[0]["title"]
-        assert "숫자 브리핑" in embeds[1]["title"]
+        assert "숫자로" in embeds[1]["title"]
         assert "Top 5" in embeds[2]["title"]
         assert "논쟁" in embeds[3]["title"]
         assert "교양 코너" in embeds[4]["title"]

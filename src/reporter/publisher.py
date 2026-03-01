@@ -145,11 +145,32 @@ def publish_report(sections: dict[str, str], data: ReportData) -> None:
     headline = _truncate(sections.get("headline", ""))
     top5_analysis = sections.get("top5_analysis", "")
     controversy = _truncate(sections.get("controversy", "특이사항 없음"))
-    numbers = _truncate(sections.get("numbers", ""))
     featured_text = sections.get("featured", "")
 
-    # 숫자 브리핑 fields
-    numbers_fields = [{"name": "📊 오늘의 통계", "value": numbers, "inline": False}]
+    # 숫자 브리핑 — Big Number 인라인 필드
+    stats = data.stats
+    numbers_fields: list[dict] = [
+        {
+            "name": "✏️ 총 편집 수",
+            "value": f"**{stats.total_edits:,}**",
+            "inline": True,
+        },
+        {
+            "name": "👥 활성 편집자",
+            "value": f"**{stats.active_users:,}**명",
+            "inline": True,
+        },
+        {
+            "name": "🤖 봇 편집 비율",
+            "value": f"**{stats.bot_ratio_pct}%**",
+            "inline": True,
+        },
+        {
+            "name": "📄 신규 문서",
+            "value": f"**{stats.new_articles:,}**개",
+            "inline": True,
+        },
+    ]
     if data.peak_hour.hour >= 0:
         hour = data.peak_hour.hour
         period = "오전" if hour < 12 else "오후"
@@ -162,6 +183,19 @@ def publish_report(sections: dict[str, str], data: ReportData) -> None:
             }
         )
 
+    # 논쟁/반달리즘 — revert_pages 구조화 필드
+    revert_fields = [
+        {
+            "name": f"{_wiki_flag(p.server_name)} {p.label or '문서'}",
+            "value": (
+                f"되돌리기율 **{p.revert_rate_pct}%**"
+                f"  ·  총 {p.total_edits}회 편집 중 **{p.reverts}회** 되돌림"
+            ),
+            "inline": False,
+        }
+        for p in data.revert_pages[:5]
+    ]
+
     featured_embed = _build_featured_embed(data, featured_text)
 
     embeds = [
@@ -172,15 +206,16 @@ def publish_report(sections: dict[str, str], data: ReportData) -> None:
             "footer": {"text": "WikiStreams · Powered by Claude Haiku"},
         },
         {
-            "title": "숫자 브리핑",
+            "title": "📊 숫자로 보는 위키백과 (최근 24시간)",
             "color": BLURPLE,
             "fields": numbers_fields,
         },
         _build_top5_embed(data, top5_analysis),
         {
-            "title": "⚠️ 논쟁/반달리즘 문서",
+            "title": "⚠️ 논쟁 및 반달리즘 (편집 분쟁) 주요 문서",
             "description": controversy,
             "color": BLURPLE,
+            **({"fields": revert_fields} if revert_fields else {}),
         },
         *([] if featured_embed is None else [featured_embed]),
     ]
