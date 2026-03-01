@@ -1,0 +1,31 @@
+// Grafana Alloy configuration for log collection
+// Uses Docker socket API directly — works on macOS (Docker Desktop) and Linux.
+// Unlike Promtail, this does NOT require access to /var/lib/docker/containers
+// which is unavailable from the host on macOS Docker Desktop.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Strip leading slash from container name (e.g. "/producer" → "producer")
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

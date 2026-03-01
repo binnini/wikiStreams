@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOS launchd plist — auto-starts WikiStreams on login.
+
+  INSTALL (Mac Mini 에서 실행):
+    1. 이 파일을 ~/Library/LaunchAgents/ 에 복사
+       cp scripts/com.wikistreams.startup.plist ~/Library/LaunchAgents/
+
+    2. REPO_PATH 를 실제 클론 경로로 수정
+       예: /Users/yebin/workSpace/wikiStreams
+
+    3. launchd 에 등록
+       launchctl load ~/Library/LaunchAgents/com.wikistreams.startup.plist
+
+  UNINSTALL:
+    launchctl unload ~/Library/LaunchAgents/com.wikistreams.startup.plist
+
+  NOTE: Docker Desktop 이 먼저 실행되어 있어야 하므로
+        "Start Docker Desktop when you log in" 옵션을 반드시 활성화할 것.
+        Docker Desktop 기동 대기를 위해 120초 지연을 넣었음.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.wikistreams.startup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>-c</string>
+    <!-- Docker Desktop이 완전히 기동될 때까지 대기 후 compose 실행 -->
+    <string>
+      sleep 120 &amp;&amp;
+      /usr/local/bin/docker compose -f /REPO_PATH/docker-compose.yml up -d
+    </string>
+  </array>
+
+  <!-- 로그인 시 1회 실행 -->
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- 충돌 시 재시작하지 않음 (docker compose 자체가 restart: always 로 관리) -->
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/wikistreams-startup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/wikistreams-startup.err</string>
+</dict>
+</plist>
