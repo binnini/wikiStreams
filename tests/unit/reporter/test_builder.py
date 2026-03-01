@@ -448,7 +448,9 @@ class TestBuildReport:
 
         assert "headline" in sections
 
-    def test_descriptions_not_in_sections(self, mocker, sample_data, claude_response_json):
+    def test_descriptions_not_in_sections(
+        self, mocker, sample_data, claude_response_json
+    ):
         """descriptions must be extracted and not passed through to sections dict."""
         claude_response_json["descriptions"] = {"2": "테스트"}
         _mock_claude(mocker, claude_response_json)

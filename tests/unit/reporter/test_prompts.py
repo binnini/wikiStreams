@@ -1,7 +1,5 @@
 """Unit tests for reporter.prompts package."""
 
-import pytest
-
 from reporter.prompts import SYSTEM_PROMPT, build_user_message
 from reporter.prompts import default as default_prompts
 from reporter.prompts import doro as doro_prompts
@@ -40,8 +38,15 @@ class TestBuildUserMessage:
 
     def test_json_schema_keys_present(self):
         msg = build_user_message("ctx", [])
-        for key in ("selected_indices", "headline", "top5_analysis",
-                    "controversy", "numbers", "featured", "news_keywords"):
+        for key in (
+            "selected_indices",
+            "headline",
+            "top5_analysis",
+            "controversy",
+            "numbers",
+            "featured",
+            "news_keywords",
+        ):
             assert key in msg
 
 
@@ -59,8 +64,15 @@ class TestDefaultPrompts:
 
     def test_build_user_message_json_schema_keys_present(self):
         msg = default_prompts.build_user_message("ctx", [])
-        for key in ("selected_indices", "headline", "top5_analysis",
-                    "controversy", "numbers", "featured", "news_keywords"):
+        for key in (
+            "selected_indices",
+            "headline",
+            "top5_analysis",
+            "controversy",
+            "numbers",
+            "featured",
+            "news_keywords",
+        ):
             assert key in msg
 
     def test_build_user_message_missing_indices(self):
@@ -90,8 +102,15 @@ class TestDoroPrompts:
 
     def test_build_user_message_json_schema_keys_present(self):
         msg = doro_prompts.build_user_message("ctx", [])
-        for key in ("selected_indices", "headline", "top5_analysis",
-                    "controversy", "numbers", "featured", "news_keywords"):
+        for key in (
+            "selected_indices",
+            "headline",
+            "top5_analysis",
+            "controversy",
+            "numbers",
+            "featured",
+            "news_keywords",
+        ):
             assert key in msg
 
     def test_build_user_message_missing_indices(self):

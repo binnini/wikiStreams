@@ -29,7 +29,9 @@ def build_user_message(context: str, missing_desc_indices: list[int]) -> str:
         schema_entries = ", ".join(f'"{i}": "..."' for i in missing_desc_indices)
         desc_schema = f',\n  "descriptions": {{{schema_entries}}}'
     else:
-        desc_instruction = "7. descriptions: 모든 후보에 설명이 있으므로 빈 객체 {} 반환."
+        desc_instruction = (
+            "7. descriptions: 모든 후보에 설명이 있으므로 빈 객체 {} 반환."
+        )
         desc_schema = ',\n  "descriptions": {}'
 
     return f"""{context}

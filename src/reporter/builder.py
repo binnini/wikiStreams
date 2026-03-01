@@ -77,7 +77,9 @@ def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
     report_date = datetime.now(KST).strftime("%Y년 %m월 %d일")
     context = _build_context(data, report_date)
 
-    missing_desc_indices = [i for i, p in enumerate(data.top_pages) if not p.description]
+    missing_desc_indices = [
+        i for i, p in enumerate(data.top_pages) if not p.description
+    ]
     user_message = build_user_message(context, missing_desc_indices)
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
@@ -109,7 +111,11 @@ def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
         for idx_str, desc in descriptions.items():
             try:
                 idx = int(idx_str)
-                if 0 <= idx < len(data.top_pages) and not data.top_pages[idx].description and desc:
+                if (
+                    0 <= idx < len(data.top_pages)
+                    and not data.top_pages[idx].description
+                    and desc
+                ):
                     data.top_pages[idx].description = str(desc)
             except (ValueError, TypeError):
                 pass
