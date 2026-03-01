@@ -348,3 +348,23 @@
 
 - **결과**: News fetched: 4 items (Discord 5 Embed 정상 발송 확인).
 - **단위 테스트**: 다중 단어 키워드 분리 케이스 `test_multiword_keyword_split_into_individual_words` 추가 → **총 89개 통과**.
+
+### 5. Discord Embed 템플릿 개선
+
+- **배경**: 숫자 브리핑이 Claude 생성 텍스트 단일 블록으로 가독성이 낮고, 논쟁 문서 섹션이 Claude 텍스트만 나열되어 구조화된 데이터를 활용하지 못하는 문제.
+
+- **숫자 브리핑 개편** (`publisher.py`):
+  - 제목: `숫자 브리핑` → `📊 숫자로 보는 위키백과 (최근 24시간)`
+  - Claude 텍스트 단일 필드 → **Big Number 인라인 필드** 4종으로 교체:
+    - ✏️ 총 편집 수 / 👥 활성 편집자 / 🤖 봇 편집 비율 / 📄 신규 문서 (3열 그리드)
+    - ⏰ 편집 피크 시간대 (peak_hour >= 0 일 때만 추가)
+
+- **논쟁/반달리즘 Embed 개편** (`publisher.py`):
+  - 제목: `⚠️ 논쟁/반달리즘 문서` → `⚠️ 논쟁 및 반달리즘 (편집 분쟁) 주요 문서`
+  - Description: Claude 생성 **1-2문장 도입부** (분야·맥락 요약)
+  - Fields: `data.revert_pages`에서 문서별 구조화 필드 — `되돌리기율 N%  ·  총 N회 편집 중 N회 되돌림`
+
+- **`controversy` 프롬프트 개선** (`builder.py`):
+  - 기존: 문서별 현황 2-3문장 나열 → 신규: 분야/주제 공통 맥락 1-2문장 도입부만 작성 (개별 수치 언급 금지 — structured field로 별도 표시)
+
+- **테스트**: `test_embed_order` 숫자 브리핑 제목 검사 업데이트 → **89개 전부 통과**.
