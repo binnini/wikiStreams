@@ -90,12 +90,29 @@ docker compose down
 
 스케줄(매일 09:00 KST) 없이 리포트를 바로 발송합니다:
 
-```bash
+# 1단계: 데이터 수집 + Claude 호출 → JSON 저장 (비용 발생)
+docker exec reporter python -c "
+from reporter.main import build_and_save
+build_and_save()
+"
+
+# 2단계: 저장된 JSON → Discord 전송 (API 호출 없음, 몇 초면 완료)
+docker exec reporter python -c "
+from reporter.main import publish_saved
+publish_saved()
+"
+
+# 특정 날짜 재발송
+docker exec reporter python -c "
+from reporter.main import publish_saved
+publish_saved('2026-03-01')
+"
+
+# 기존처럼 한번에 (스케줄러 동작 그대로)
 docker exec reporter python -c "
 from reporter.main import run_report
 run_report()
 "
-```
 
 ### Reporter — 프롬프트 스타일 전환
 
