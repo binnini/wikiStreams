@@ -484,3 +484,63 @@
   ```
 
 - **결과**: 첫 실행에서 `reports/2026-03-01.json` (10KB) 정상 생성 확인. `Report saved → /app/reports/2026-03-01.json` 로그 출력.
+
+### 12. CI 의존성 누락 수정 (`requests`, `docker`)
+
+- **이슈 1 — `requests` 미설치**:
+  - `tests/integration/test_e2e_pipeline.py`가 `import requests`를 사용하나 `requirements-dev.txt`에 미포함.
+  - CI에서 `ModuleNotFoundError: No module named 'requests'` 발생 → 전체 integration 테스트 컬렉션 실패.
+  - **해결**: `requirements-dev.txt`에 `requests` 추가.
+
+- **이슈 2 — `docker` SDK 미설치**:
+  - `resource-monitor` 단위 테스트(`test_collector.py`)가 `docker` 패키지를 임포트하나 `requirements-dev.txt`에 미포함.
+  - **해결**: `requirements-dev.txt`에 `docker` 추가.
+
+- **이슈 3 — CI `Install dependencies` 단계 누락**:
+  - `src/resource_monitor/requirements.txt`가 CI workflow에서 설치되지 않아 단위 테스트 임포트 오류 예상.
+  - **해결**: `.github/workflows/ci.yml`에 `pip install -r src/resource_monitor/requirements.txt` 단계 추가.
+
+### 13. 리소스 이상 감지 서비스 구현 (`resource-monitor`)
+
+- **배경**: `docker-stats-logger`는 단순 shell script로 CPU/Memory 2개 메트릭만 stdout으로 출력. 이상 감지·알림 로직이 전혀 없고 메모리 누수(`mem_mb`)나 I/O 폭증(`block_io_mb`) 감지도 불가능했음.
+
+- **작업**:
+  - `src/resource_monitor/` 신규 패키지 생성 (config, baseline, detector, alerter, collector, main).
+  - **`collector.py`**: Docker SDK(`docker.from_env()`)로 10초 간격 stats 수집. 4개 메트릭:
+    - `cpu_pct`: `cpu_delta / sys_delta × num_cpus × 100`
+    - `mem_pct`: `(usage - cache) / limit × 100`
+    - `mem_mb`: 절댓값 MB (점진적 메모리 누수 감지)
+    - `block_io_mb`: `blkio_stats` 누적값 델타 / 10초 — ClickHouse merge/write 폭증 감지
+  - **`baseline.py`**: SQLite 기반 컨테이너 × 시간대(hour bucket 0–23) 학습 저장소.
+    - EMA (Exponential Moving Average, `alpha=0.1`): 느린 평활화로 장기 baseline 추적.
+    - Welford online variance: 표본 분산을 실시간 1-pass 갱신. 재시작 후에도 `resource_monitor_baseline.db`에서 학습 상태 복원.
+    - `INSERT OR REPLACE`로 upsert 구현.
+  - **`detector.py`**: z-score = `(current - ema) / std`. `|z| > 2.5` 이고 `count >= 30` 샘플 이상일 때만 `AnomalyResult` 반환 (학습 초기 억제).
+  - **`alerter.py`**: Discord Embed 카드 발송. `(container, metric)` 쌍별 1시간 cooldown — `monotonic()` 기반 인메모리 추적. Embed 필드: 컨테이너명, 메트릭, 현재값, 시간대 EMA, z-score, 방향(급증/급감).
+  - **`main.py`**: 메인 루프. 이상 감지 시 `level=warn msg="AnomalyDetected"` 구조화 로그 → Loki + Discord 동시 발송.
+  - `docker-compose.yml`: `docker-stats-logger` 제거 → `resource-monitor` 교체. `resource_monitor_data` 볼륨으로 SQLite DB 영속화.
+
+- **테스트**: 단위 테스트 39개 (baseline 9 / detector 8 / alerter 10 / collector 12) — 전체 **235개 통과**.
+
+- **설계 결정 — EMA vs 단순 이동평균**:
+  - 단순 이동평균은 윈도우 크기만큼의 히스토리를 보관해야 함. EMA는 단일 `ema` 값만 유지 — SQLite row 1개로 충분.
+  - Welford 알고리즘은 분산 계산 시 중간값을 저장하지 않아도 되며, 수치적으로 안정적 (Big sum 빼기 Big sum 문제 없음).
+
+- **`docker compose up -d` 후 min_samples 30개 도달까지(약 5분) 이상 감지 억제** — false alarm 방지.
+
+### 14. Grafana Resources 대시보드 — Anomaly Detection 패널 추가
+
+- **배경**: `resource-monitor`가 Loki에 `level=warn msg="AnomalyDetected"` 로그를 기록하나, 대시보드에서 조회할 방법이 없었음. 기존 패널 쿼리의 컨테이너 레이블도 구버전(`docker-stats-logger`)을 참조 중.
+
+- **작업**:
+  - **기존 패널 쿼리 수정**:
+    - 모든 Loki 쿼리의 `container="docker-stats-logger"` → `container="resource-monitor"` 교체.
+    - CPU/Memory 쿼리에 `|= "DockerStats"` 필터 추가 — AnomalyDetected 로그가 `unwrap cpu_pct` 집계에 섞이지 않도록 격리.
+  - **Anomaly Detection 섹션 신규 추가** (y=45 이후):
+    - **Anomaly Rate** (timeseries, stacked bar): `count_over_time({container="resource-monitor"} |= "AnomalyDetected" | logfmt | msg="AnomalyDetected" [$__interval])`. `sum by (container, metric)`으로 모니터링 대상 컨테이너 × 메트릭 조합 구분.
+    - **Anomaly Events** (logs): `{container="resource-monitor"} |= "AnomalyDetected" | logfmt | msg="AnomalyDetected"`. 최신 순 로그 라인 표시, 상세 보기(Enable Log Details) 활성화.
+  - 대시보드 version: 10 → 11.
+
+- **orphan 컨테이너 정리**:
+  - `docker compose up -d`만으로는 compose 파일에서 제거된 컨테이너(`docker-stats-logger`, `promtail`)가 자동으로 제거되지 않음.
+  - `docker compose up -d --remove-orphans` 실행으로 두 컨테이너 정상 제거 확인.
