@@ -149,7 +149,7 @@
             "mode": "absolute",
             "steps": [
               { "color": "transparent", "value": null },
-              { "color": "red", "value": 20 }
+              { "color": "red", "value": 30 }
             ]
           },
           "unit": "percent"
@@ -235,7 +235,7 @@
             "mode": "absolute",
             "steps": [
               { "color": "transparent", "value": null },
-              { "color": "red", "value": 20 }
+              { "color": "red", "value": 30 }
             ]
           },
           "unit": "percent"
