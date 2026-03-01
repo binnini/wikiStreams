@@ -453,3 +453,34 @@
   - `TestDoroPrompts` (6개): doro 모듈 캐릭터·말투·스키마 검증.
   - `TestPromptStyleDispatch` (3개): 두 스타일 인터페이스 동일성, 콘텐츠 상이성 검증.
   - 기존 6개 유지 → **총 21개 통과** (reporter 단위 전체 52개 통과).
+
+### 11. Reporter 결과물 JSON 저장 기능 추가
+
+- **배경**: 매일 Discord로 발송되는 리포트가 별도로 보존되지 않아 과거 데이터 조회·비교·재활용이 불가능했음.
+
+- **작업**:
+  - `src/reporter/storage.py` 신규 생성 — `save_report(sections, data)` 함수 하나로 구성.
+    - `dataclasses.asdict()`로 모든 dataclass 필드를 직렬화.
+    - `reports/YYYY-MM-DD.json`으로 저장 (같은 날 재실행 시 덮어씀 — 최신 결과 유지).
+    - 저장 경로는 `settings.report_storage_dir`(기본값 `/app/reports`)로 추상화.
+  - `src/reporter/config.py`에 `report_storage_dir: str = "/app/reports"` 설정 추가.
+  - `src/reporter/main.py`의 `run_report()`에서 Discord 발송 직후 `save_report()` 호출 (Step 6).
+  - `docker-compose.yml` reporter 서비스에 `./reports:/app/reports` 볼륨 마운트 + `REPORT_STORAGE_DIR` 환경변수 추가 → 컨테이너 재시작·재빌드 후에도 파일 유지.
+  - `reports/.gitkeep`으로 디렉토리 구조만 git 추적, `.gitignore`에 `reports/*.json` 추가 (실제 리포트 파일은 미추적).
+
+- **저장 JSON 스키마**:
+  ```json
+  {
+    "generated_at": "2026-03-01T17:22:54+09:00",
+    "prompt_style": "doro",
+    "sections": { "headline": "...", "top5_analysis": "...", ... },
+    "stats": { "total_edits": 2508953, "active_users": 13420, ... },
+    "peak_hour": { "hour": 20, "edits": 158432 },
+    "top_pages": [ { "label": "...", "edits": 1359, "lang_editions": [...], ... } ],
+    "revert_pages": [ ... ],
+    "featured_article": { "title": "...", "url": "...", ... },
+    "news_items": [ { "title": "...", "link": "...", "source": "..." } ]
+  }
+  ```
+
+- **결과**: 첫 실행에서 `reports/2026-03-01.json` (10KB) 정상 생성 확인. `Report saved → /app/reports/2026-03-01.json` 로그 출력.
