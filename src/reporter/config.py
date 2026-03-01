@@ -11,7 +11,11 @@ class Settings(BaseSettings):
     discord_webhook_url: str = ""
 
     # Prompt style ('default' or 'doro')
-    prompt_style: str = "default"
+    # prompt_style: str = "default"
+    prompt_style: str = "doro"
+
+    # Report storage — YYYY-MM-DD.json files saved here
+    report_storage_dir: str = "/app/reports"
 
     # Schedule
     report_hour_kst: int = 9

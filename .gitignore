@@ -12,3 +12,6 @@ venv/
 *.swp
 
 docker-sompose.override.yml
+
+# Reporter output (keep directory structure, ignore actual reports)
+reports/*.json

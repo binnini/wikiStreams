@@ -11,6 +11,7 @@ from reporter.fetcher import (
 )
 from reporter.builder import build_report
 from reporter.publisher import publish_report
+from reporter.storage import save_report
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -43,6 +44,9 @@ def run_report() -> None:
         # 5. Publish to Discord
         publish_report(sections, data)
         logger.info("Daily trend report sent successfully")
+
+        # 6. Persist report to local JSON file
+        save_report(sections, data)
     except Exception as e:
         logger.error("Failed to generate/send report: %s", e, exc_info=True)
 

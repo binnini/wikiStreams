@@ -127,3 +127,6 @@ services:
       ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
       DISCORD_WEBHOOK_URL: '${DISCORD_WEBHOOK_URL}'
       REPORT_HOUR_KST: '9'
+      REPORT_STORAGE_DIR: '/app/reports'
+    volumes:
+      - ./reports:/app/reports
