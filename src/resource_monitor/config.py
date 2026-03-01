@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     anomaly_threshold: float = 2.5
 
     # 최소 학습 샘플 수 (미만이면 감지 억제)
-    min_samples: int = 30
+    # 수집 간격 10초 × 360 = 1시간분 데이터 → 24개 버킷 전체 활성화까지 약 1일 소요
+    min_samples: int = 360
 
     # 같은 컨테이너·메트릭 재발송 억제 시간 (초, 기본 15분)
     alert_cooldown_seconds: int = 900
