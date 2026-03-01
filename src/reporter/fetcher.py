@@ -119,6 +119,12 @@ def _query(sql: str) -> list[dict]:
     return rows
 
 
+_RSS_EDITIONS = [
+    "hl=ko&gl=KR&ceid=KR:ko",
+    "hl=en&gl=US&ceid=US:en",
+]
+
+
 def _fetch_news(
     query: str,
     relevance_keywords: Optional[set[str]] = None,
@@ -126,66 +132,74 @@ def _fetch_news(
 ) -> list[NewsItem]:
     """Fetch news from Google News RSS.
 
+    Tries Korean edition first; falls back to English if no results.
+
     Args:
         query: Search query string.
         relevance_keywords: If provided, only keep news whose headline contains
             at least one of these keywords (case-insensitive).
             Falls back to words of length >= 4 from query when None.
     """
-    encoded = quote(query)
-    rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
     cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
 
     if relevance_keywords is None:
         relevance_keywords = {w.lower() for w in query.split() if len(w) >= 4}
 
-    try:
-        with httpx.Client(timeout=5, follow_redirects=True) as client:
-            resp = client.get(rss_url)
-            resp.raise_for_status()
-        root = ET.fromstring(resp.text)
-        items: list[NewsItem] = []
-        for item in root.findall(".//item"):
-            if len(items) >= max_items:
-                break
-            title_el = item.find("title")
-            link_el = item.find("link")
-            source_el = item.find("source")
-            pubdate_el = item.find("pubDate")
+    encoded = quote(query)
+    for i, edition in enumerate(_RSS_EDITIONS):
+        rss_url = f"https://news.google.com/rss/search?q={encoded}&{edition}"
+        # Korean edition: search query already provides relevance; skip keyword filter
+        # English edition: apply keyword filter to avoid off-topic results
+        apply_relevance = (i > 0) and bool(relevance_keywords)
+        try:
+            with httpx.Client(timeout=5, follow_redirects=True) as client:
+                resp = client.get(rss_url)
+                resp.raise_for_status()
+            root = ET.fromstring(resp.text)
+            items: list[NewsItem] = []
+            for item in root.findall(".//item"):
+                if len(items) >= max_items:
+                    break
+                title_el = item.find("title")
+                link_el = item.find("link")
+                source_el = item.find("source")
+                pubdate_el = item.find("pubDate")
 
-            # 48h freshness filter
-            if pubdate_el is not None and pubdate_el.text:
-                try:
-                    pub_dt = parsedate_to_datetime(pubdate_el.text)
-                    if pub_dt < cutoff:
-                        continue
-                except Exception:
-                    pass  # unparseable date: allow through
+                # 48h freshness filter
+                if pubdate_el is not None and pubdate_el.text:
+                    try:
+                        pub_dt = parsedate_to_datetime(pubdate_el.text)
+                        if pub_dt < cutoff:
+                            continue
+                    except Exception:
+                        pass  # unparseable date: allow through
 
-            link_url = ""
-            if link_el is not None:
-                link_url = (link_el.text or link_el.get("href", "")).strip()
-            if not title_el or not link_url:
-                continue
+                link_url = ""
+                if link_el is not None:
+                    link_url = (link_el.text or link_el.get("href", "")).strip()
+                if title_el is None or not link_url:
+                    continue
 
-            news_title = title_el.text or ""
-            # Keyword relevance filter
-            if relevance_keywords and not any(
-                kw in news_title.lower() for kw in relevance_keywords
-            ):
-                continue
+                news_title = title_el.text or ""
+                if apply_relevance and not any(
+                    kw in news_title.lower() for kw in relevance_keywords  # type: ignore[union-attr]
+                ):
+                    continue
 
-            items.append(
-                NewsItem(
-                    title=news_title,
-                    link=link_url,
-                    source=source_el.text if source_el is not None else "",
+                items.append(
+                    NewsItem(
+                        title=news_title,
+                        link=link_url,
+                        source=source_el.text if source_el is not None else "",
+                    )
                 )
-            )
-        return items
-    except Exception as e:
-        logger.warning("News fetch failed for '%s': %s", query, e)
-        return []
+
+            if items:
+                return items  # found results — no need for English fallback
+        except Exception as e:
+            logger.warning("News fetch failed for '%s' (%s): %s", query, edition, e)
+
+    return []
 
 
 def fetch_news_with_keywords(

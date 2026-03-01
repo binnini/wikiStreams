@@ -271,3 +271,60 @@
   - 원인: `enricher.py`에서 레이블 미존재 시 `"-"` 폴백 사용. SQLite 캐시에 9,821개 항목이 `"-"`로 저장.
   - 수정: 폴백 값 `"-"` → `""` 빈 문자열로 변경; 기존 캐시 항목 일괄 업데이트.
   - Grafana 쿼리에도 `NOT IN ('', '-')` 방어 로직 추가.
+
+## 2026-03-01
+
+### 1. Reporter 고도화 (Discord Embed 5카드 체계)
+
+- **배경**: 초기 구현(4개 Embed, 단순 목록)에서 가독성·정보 밀도 개선 요청.
+- **작업 — 콘텐츠 강화**:
+  - `TopPage` 데이터클래스에 `url`, `thumbnail_url`, `rank_change`, `is_spike`, `spike_ratio_val`, `crosswiki_count` 필드 추가.
+  - `wiki_url()`: 문서 제목을 URL 인코딩하여 Wikipedia 직접 링크 생성.
+  - Wikipedia REST API(`/api/rest_v1/page/summary/{title}`)로 1위 문서 썸네일 자동 수집.
+  - Wikipedia Featured Article API(`/api/rest_v1/feed/featured/{y}/{m}/{d}`)로 오늘의 특집 문서 수집 — Discord에 "📚 교양 코너"로 표시.
+  - ClickHouse에서 전일 Top 10을 별도 조회하여 `rank_change` 계산 (신규 진입 시 `None` → 🆕 배지).
+  - 편집 피크 시간대(`PeakHour`) 조회 및 숫자 브리핑 Embed에 표시.
+  - `wiki_type='edit'` 필터: 신규 문서 생성 이벤트를 Top 5와 Grafana 2개 패널에서 제외.
+  - 언어 국기 이모지 매핑 15개(`_WIKI_FLAGS`), 스파이크(⚡)·다국어(🌍) 시각 배지.
+
+- **작업 — 뉴스 스크래핑 개선**:
+  - Google News RSS 스크래핑 도입: `https://news.google.com/rss/search?q={query}&{edition}`.
+  - 한국어판 우선 조회 → 결과 없을 시 영어판 fallback (2단계 edition 루프).
+  - 48시간 freshness 필터: `pubDate`를 `email.utils.parsedate_to_datetime()`으로 파싱.
+  - 한국어판은 관련성 필터 스킵 (한글 헤드라인은 영어 키워드 매칭 불가), 영어판에만 키워드 필터 적용.
+
+- **작업 — Claude 배치 키워드 추출**:
+  - `build_report()` 반환 타입 `dict[str, str]` → `tuple[dict[str, str], list[list[str]]]`.
+  - 기존 Claude 호출 1회로 섹션 5개 + `news_keywords`(상위 3개 문서별 고유명사 1~3개) 동시 추출 — 추가 API 비용 없음.
+  - 파이프라인 재구조: `fetch_report_data()` → `build_report()` → `fetch_news_with_keywords()` → `publish_report()`.
+
+- **작업 — Embed 재구성**:
+  - "글로벌 관심사 & 트렌딩" Embed를 Top 5 Embed로 통합 (6개 → 5개 카드).
+  - 최종 순서: 헤드라인 → 숫자 브리핑 → Top 5 문서 → 논쟁/반달리즘 → 교양코너.
+  - `top5_analysis` 단일 Claude 섹션으로 스파이크·다국어 문서 통합 해설.
+
+### 2. Reporter 단위/통합 테스트 구축 (Claude API 비용 절감)
+
+- **배경**: 리포터 개발 시 매번 Claude API를 직접 호출하여 비용이 발생. 모든 외부 의존성을 mock으로 대체하는 테스트 스위트 구축.
+- **작업**:
+  - `tests/unit/reporter/test_fetcher.py` (30개): `wiki_url` 순수 함수, `_fetch_news` 한국어/영어 fallback·48h 필터·관련성 필터, `fetch_news_with_keywords`, `_fetch_featured_article`, `_fetch_thumbnail`, `fetch_report_data` spike/crosswiki enrichment·rank_change 계산.
+  - `tests/unit/reporter/test_builder.py` (16개): `_build_context` 컨텐츠 검증, `build_report` Claude 응답 파싱·JSON fallback·`news_keywords` 분리.
+  - `tests/unit/reporter/test_publisher.py` (28개): `_rank_badge`·`_wiki_flag`·`_truncate` 순수 함수, `_build_top5_embed`·`_build_featured_embed` 구조, `publish_report` Embed 순서·개수.
+  - `tests/unit/reporter/test_main.py` (5개): `run_report` 파이프라인 순서, 뉴스 데이터 전달, 예외 격리.
+  - `tests/integration/test_reporter_integration.py` (7개): 실제 Wikipedia Featured Article API, Google News RSS (`@pytest.mark.integration`).
+- **httpx mock 패턴** (컨텍스트 매니저):
+  ```python
+  mock_cm = MagicMock()
+  mock_cm.__enter__.return_value = mock_cm
+  mock_cm.__exit__.return_value = False
+  mock_cm.get.return_value = mock_resp
+  mocker.patch("httpx.Client", return_value=mock_cm)
+  ```
+- **총 88개 단위 테스트 통과**.
+
+### 3. ElementTree bool 버그 수정 (`fetcher.py`)
+
+- **이슈**: `_fetch_news()`가 항상 빈 리스트(`[]`)를 반환 — 뉴스 스크래핑이 동작하지 않았음.
+- **원인**: Python의 `xml.etree.ElementTree.Element`는 자식 엘리먼트가 없을 때 `bool(element) == False`로 평가됨. `<title>텍스트</title>` 처럼 텍스트만 있는 엘리먼트도 자식 없으면 falsy. 결과적으로 `if not title_el` 조건이 항상 `True`가 되어 모든 RSS 아이템이 필터링됨.
+- **해결**: `if not title_el or not link_url:` → `if title_el is None or not link_url:`
+- **교훈**: ElementTree 엘리먼트 존재 여부 확인은 반드시 `is None` / `is not None`으로 해야 함 (`not element` 사용 금지).

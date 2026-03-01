@@ -165,18 +165,18 @@ def publish_report(sections: dict[str, str], data: ReportData) -> None:
             "color": BLURPLE,
             "footer": {"text": "WikiStreams · Powered by Claude Haiku"},
         },
-        _build_top5_embed(data, top5_analysis),
-        *([] if featured_embed is None else [featured_embed]),
         {
             "title": "숫자 브리핑",
             "color": BLURPLE,
             "fields": numbers_fields,
         },
+        _build_top5_embed(data, top5_analysis),
         {
             "title": "⚠️ 논쟁/반달리즘 문서",
             "description": controversy,
             "color": BLURPLE,
         },
+        *([] if featured_embed is None else [featured_embed]),
     ]
 
     payload = {"embeds": embeds}
