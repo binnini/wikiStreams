@@ -1,7 +1,8 @@
 """Resource Monitor 메인 루프."""
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from resource_monitor.alerter import Alerter
 from resource_monitor.baseline import BaselineStore
@@ -39,7 +40,7 @@ def run() -> None:
     collector = DockerStatsCollector()
 
     while True:
-        now = datetime.now(tz=timezone.utc)
+        now = datetime.now(tz=ZoneInfo("Asia/Seoul"))
         hour = now.hour
 
         metrics_list = collector.collect_all(settings.targets)
