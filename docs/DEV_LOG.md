@@ -544,3 +544,42 @@
 - **orphan 컨테이너 정리**:
   - `docker compose up -d`만으로는 compose 파일에서 제거된 컨테이너(`docker-stats-logger`, `promtail`)가 자동으로 제거되지 않음.
   - `docker compose up -d --remove-orphans` 실행으로 두 컨테이너 정상 제거 확인.
+
+### 15. ClickHouse CPU Spike 원인 분석 — MergeTree 백그라운드 Merge
+
+- **관찰**: Grafana Resources Monitor CPU Trends에서 50~68% CPU spike가 약 60~90초 주기로 반복 발생. 각 spike는 30초 내외로 종료되며 이후 4~12%로 즉시 복귀.
+
+- **원인 파악**:
+  - `system.part_log`를 조회하여 `MergeParts` 이벤트가 spike와 정확히 일치함을 확인.
+  - Kafka Materialized View가 수신 데이터를 소형 파트로 지속 생성 → MergeTree 백그라운드 워커가 주기적으로 파트를 병합.
+  - spike 정점에서 항상 `block_io_mb` 13~21 MB/s 동반 — I/O와 CPU가 동시 상승하는 패턴이 merge의 특징.
+  - 현재 `wikimedia.events` 파트 수: **22개** (정상 범위), 총 데이터 크기: 123 MB.
+
+  ```
+  12:32:56  merge 61ms  202603_5922_6172_23   ← 대형 누적 merge
+  12:33:11  merge  7ms  202603_6173_6178_1
+  12:34:23  merge  9ms  202603_6173_6185_2
+  12:35:35  merge  5ms  202603_6173_6194_3
+  (이후 약 60~90초 간격으로 반복)
+  ```
+
+- **결론 — 정상 동작, 단 두 지표 주시 필요**:
+
+  | 지표 | 현재 | 판단 |
+  |---|---|---|
+  | CPU spike 높이 | 50~68% | 일시적(~30초), merge 후 즉시 복구 → 정상 |
+  | CPU spike 주기 | 60~90초 | Kafka 수신량에 비례한 예측 가능한 노이즈 |
+  | Merge 소요 시간 | 5~61ms | 매우 빠름, 쿼리 차단 없음 → 정상 |
+  | Block I/O | 15~22 MB/s 상시 | 지속적인 Kafka 쓰기 + merge — 관찰 지속 필요 |
+  | 메모리 drift | +6 MB/분 (20분간) | 장기 선형 증가 시 OOM 위험 → **장기 관찰 필요** |
+
+- **Resource Monitoring 시 고려 사항**:
+  1. **예측 가능한 노이즈 구별**: MergeTree merge처럼 주기적으로 반드시 발생하는 CPU spike는 이상이 아님. z-score 베이스라인이 충분히 쌓이면 이 패턴도 "평균"에 흡수되어 오알람이 억제됨.
+  2. **CPU보다 메모리 drift와 IO 지속 상승이 더 위험한 신호**: CPU spike는 짧고 복구되지만, 메모리 완만한 증가는 누수(leak) 또는 캐시 미반환의 전조일 수 있음.
+  3. **메트릭 간 상관관계**: "CPU 60% + IO 17MB/s 동시" → merge. "CPU 60% + IO 0" → 순수 연산(쿼리 집중). 단일 메트릭만으로는 오판 가능.
+  4. **지속 시간(Duration)이 severity를 결정**: 60% CPU 30초 → 정상 merge. 60% CPU 5분 지속 → 비정상 쿼리 또는 루프.
+  5. **홈랩 CPU 공유 환경**: ClickHouse merge가 활발할 때 producer CPU도 순간 상승 (`producer cpu_pct=11.82` 관찰). OS 스케줄러 경쟁 효과.
+
+- **향후 조치**:
+  - 메모리 drift를 며칠 더 관찰. 선형 증가가 지속되면 `OPTIMIZE TABLE wikimedia.events FINAL`로 파트 강제 병합하거나 ClickHouse `max_memory_usage` 설정 검토.
+  - resource-monitor 베이스라인이 충분히 학습되면 (시간대별 30+ 샘플) merge spike가 자동으로 "정상 범위"로 인식될 예정.
