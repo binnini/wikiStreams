@@ -13,6 +13,7 @@ from reporter.fetcher import (
     TopPage,
     _deduplicate_by_qid,
     _fetch_featured_article,
+    _fetch_ko_description,
     _fetch_news,
     _fetch_qid,
     fetch_news_with_keywords,
@@ -524,6 +525,54 @@ class TestFetchQid:
 
 
 # ─────────────────────────────────────────────
+# _fetch_ko_description
+# ─────────────────────────────────────────────
+
+
+class TestFetchKoDescription:
+    def test_returns_korean_description(self, mocker):
+        json_data = {
+            "entities": {
+                "Q7251": {
+                    "descriptions": {"ko": {"language": "ko", "value": "영국의 수학자"}}
+                }
+            }
+        }
+        _mock_client(mocker, json_data=json_data)
+
+        result = _fetch_ko_description("Q7251")
+
+        assert result == "영국의 수학자"
+
+    def test_returns_empty_when_no_ko_description(self, mocker):
+        json_data = {"entities": {"Q7251": {"descriptions": {}}}}
+        _mock_client(mocker, json_data=json_data)
+
+        result = _fetch_ko_description("Q7251")
+
+        assert result == ""
+
+    def test_returns_empty_on_http_error(self, mocker):
+        mock_cm = MagicMock()
+        mock_cm.__enter__.return_value = mock_cm
+        mock_cm.__exit__.return_value = False
+        mock_cm.get.side_effect = httpx.HTTPError("Timeout")
+        mocker.patch("httpx.Client", return_value=mock_cm)
+
+        result = _fetch_ko_description("Q7251")
+
+        assert result == ""
+
+    def test_returns_empty_when_entity_missing(self, mocker):
+        json_data = {"entities": {}}
+        _mock_client(mocker, json_data=json_data)
+
+        result = _fetch_ko_description("Q9999")
+
+        assert result == ""
+
+
+# ─────────────────────────────────────────────
 # _deduplicate_by_qid
 # ─────────────────────────────────────────────
 
@@ -720,11 +769,14 @@ class TestFetchReportData:
             yesterday_rows or [],  # yesterday_rank
         ]
 
-    def _patch_all(self, mocker, qid_return=None, **kwargs):
+    def _patch_all(self, mocker, qid_return=None, ko_desc_return="", **kwargs):
         mocker.patch(
             "reporter.fetcher._query", side_effect=self._query_side_effect(**kwargs)
         )
         mocker.patch("reporter.fetcher._fetch_qid", return_value=qid_return)
+        mocker.patch(
+            "reporter.fetcher._fetch_ko_description", return_value=ko_desc_return
+        )
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )
@@ -852,6 +904,7 @@ class TestFetchReportData:
             side_effect=self._query_side_effect(top_rows=top_rows),
         )
         mocker.patch("reporter.fetcher._fetch_qid", return_value=None)
+        mocker.patch("reporter.fetcher._fetch_ko_description", return_value="")
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )
@@ -885,6 +938,7 @@ class TestFetchReportData:
         )
         # Both pages map to the same Q-ID
         mocker.patch("reporter.fetcher._fetch_qid", return_value="Q22686")
+        mocker.patch("reporter.fetcher._fetch_ko_description", return_value="")
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )
@@ -894,12 +948,53 @@ class TestFetchReportData:
         assert len(data.top_pages) == 1
         assert data.top_pages[0].label == "Trump EN"
 
+    def test_ko_description_fetched_for_empty_description(self, mocker):
+        """Pages with empty description and a Q-ID get Korean description filled in."""
+        top_rows = [
+            {
+                "label": "Alan Turing",
+                "title": "Alan_Turing",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "100",
+            }
+        ]
+        self._patch_all(
+            mocker,
+            top_rows=top_rows,
+            qid_return="Q7251",
+            ko_desc_return="영국의 수학자, 컴퓨터 과학자",
+        )
+
+        data = fetch_report_data()
+
+        assert data.top_pages[0].description == "영국의 수학자, 컴퓨터 과학자"
+
+    def test_ko_description_not_fetched_when_description_already_set(self, mocker):
+        """Pages that already have a description do not trigger a Wikidata call."""
+        top_rows = [
+            {
+                "label": "Alan Turing",
+                "title": "Alan_Turing",
+                "description": "British mathematician",
+                "server_name": "en.wikipedia.org",
+                "edits": "100",
+            }
+        ]
+        self._patch_all(mocker, top_rows=top_rows, qid_return="Q7251")
+        mock_ko = mocker.patch("reporter.fetcher._fetch_ko_description")
+
+        fetch_report_data()
+
+        mock_ko.assert_not_called()
+
     def test_query_failure_returns_empty_data(self, mocker):
         """ClickHouse errors are caught; empty ReportData is returned."""
         mocker.patch(
             "reporter.fetcher._query", side_effect=Exception("ClickHouse down")
         )
         mocker.patch("reporter.fetcher._fetch_qid", return_value=None)
+        mocker.patch("reporter.fetcher._fetch_ko_description", return_value="")
         mocker.patch(
             "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
         )

@@ -300,6 +300,33 @@ def _fetch_qid(server_name: str, title: str) -> Optional[str]:
         return None
 
 
+def _fetch_ko_description(qid: str) -> str:
+    """Fetch the Korean short description for a Wikidata entity.
+
+    Returns empty string on error or when no Korean description exists.
+    """
+    params = {
+        "action": "wbgetentities",
+        "ids": qid,
+        "languages": "ko",
+        "props": "descriptions",
+        "format": "json",
+    }
+    try:
+        with httpx.Client(timeout=5) as client:
+            resp = client.get(
+                "https://www.wikidata.org/w/api.php",
+                params=params,
+                headers=_WIKI_API_HEADERS,
+            )
+            resp.raise_for_status()
+        entity = resp.json().get("entities", {}).get(qid, {})
+        return entity.get("descriptions", {}).get("ko", {}).get("value", "")
+    except Exception as e:
+        logger.warning("Korean description fetch failed for '%s': %s", qid, e)
+        return ""
+
+
 def _deduplicate_by_qid(pages: list[TopPage]) -> list[TopPage]:
     """Remove duplicate pages that share the same Wikidata Q-ID.
 
@@ -395,6 +422,19 @@ def fetch_report_data() -> ReportData:
                 futures[f].qid = f.result()
         data.top_pages = _deduplicate_by_qid(data.top_pages)
         logger.info("After Q-ID dedup: %d unique topic candidates", len(data.top_pages))
+
+    # 2c. Fetch Korean descriptions in parallel for pages with empty description
+    pages_needing_desc = [p for p in data.top_pages if not p.description and p.qid]
+    if pages_needing_desc:
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            futures = {
+                executor.submit(_fetch_ko_description, p.qid): p
+                for p in pages_needing_desc
+            }
+            for f in as_completed(futures):
+                desc = f.result()
+                if desc:
+                    futures[f].description = desc
 
     # 3. Spike pages (recent 15m vs previous 60m)
     try:
