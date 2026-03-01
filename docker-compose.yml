@@ -14,17 +14,14 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     restart: always
 
-  promtail:
-    image: grafana/promtail:3.0.0
-    container_name: promtail
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
     volumes:
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./monitoring/promtail-config.yaml:/etc/promtail/config.yaml
-    command: -config.file=/etc/promtail/config.yaml
+      - ./monitoring/alloy-config.alloy:/etc/alloy/config.alloy
+    command: run /etc/alloy/config.alloy
     restart: always
-    # Promtail needs root to read docker logs
-    user: root
 
   grafana:
     image: grafana/grafana:latest
@@ -117,3 +114,16 @@ services:
       - ./monitoring/collect_docker_stats.sh:/collect_docker_stats.sh
     entrypoint: ["/bin/sh", "/collect_docker_stats.sh"]
     restart: always
+
+  reporter:
+    build: ./src/reporter
+    container_name: reporter
+    depends_on:
+      - clickhouse
+    restart: always
+    environment:
+      CLICKHOUSE_HOST: 'clickhouse'
+      CLICKHOUSE_PORT: '8123'
+      ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
+      DISCORD_WEBHOOK_URL: '${DISCORD_WEBHOOK_URL}'
+      REPORT_HOUR_KST: '9'
