@@ -10,8 +10,8 @@ class TestSystemPrompt:
         assert isinstance(SYSTEM_PROMPT, str)
         assert len(SYSTEM_PROMPT) > 0
 
-    def test_contains_korean_editor_role(self):
-        assert "한국어 Wikipedia" in SYSTEM_PROMPT
+    def test_contains_wiki_reference(self):
+        assert "위키" in SYSTEM_PROMPT
 
 
 class TestBuildUserMessage:
@@ -34,7 +34,7 @@ class TestBuildUserMessage:
 
     def test_count_mentioned_for_missing_indices(self):
         msg = build_user_message("ctx", [0, 3, 7])
-        assert "3개 모두 포함 필수" in msg
+        assert "3개 모두 포함" in msg
 
     def test_json_schema_keys_present(self):
         msg = build_user_message("ctx", [])

@@ -40,6 +40,10 @@ class TestRunReport:
         mock_news = mocker.patch(
             "reporter.main.fetch_news_with_keywords", return_value=[]
         )
+        mocker.patch("reporter.main.save_report")
+        mocker.patch(
+            "reporter.main.load_report", return_value=(mock_sections, mock_data)
+        )
         mock_publish = mocker.patch("reporter.main.publish_report")
 
         run_report()
@@ -98,6 +102,10 @@ class TestRunReport:
         mocker.patch("reporter.main.build_report", return_value=(mock_sections, []))
         mocker.patch("reporter.main.fetch_thumbnail", return_value="")
         mocker.patch("reporter.main.fetch_news_with_keywords", return_value=news_items)
+        mocker.patch("reporter.main.save_report")
+        mocker.patch(
+            "reporter.main.load_report", return_value=(mock_sections, mock_data)
+        )
         mock_publish = mocker.patch("reporter.main.publish_report")
 
         run_report()
