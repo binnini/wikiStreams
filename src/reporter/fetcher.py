@@ -34,6 +34,14 @@ class OverallStats:
 
 
 @dataclass
+class LangEdition:
+    """One language edition of a Q-ID-grouped page."""
+
+    server_name: str = ""
+    edits: int = 0
+
+
+@dataclass
 class TopPage:
     label: str = ""
     title: str = ""
@@ -48,6 +56,10 @@ class TopPage:
     spike_ratio_val: float = 0.0
     crosswiki_count: int = 0  # 0 = not cross-wiki
     qid: Optional[str] = None  # Wikidata Q-ID (cross-language dedup key)
+    # Populated when multiple language editions share the same Q-ID.
+    # Contains ALL editions (index 0 = this representative page).
+    # Empty when no cross-language grouping occurred.
+    lang_editions: list[LangEdition] = field(default_factory=list)
 
 
 @dataclass
@@ -224,8 +236,8 @@ def fetch_news_with_keywords(
         relevance = {
             word.lower() for kw in kws for word in kw.split() if len(word) >= 3
         }
-        all_news.extend(_fetch_news(query, relevance_keywords=relevance))
-    return all_news[:5]
+        all_news.extend(_fetch_news(query, relevance_keywords=relevance, max_items=3))
+    return all_news
 
 
 def _fetch_featured_article(date: datetime) -> FeaturedArticle:
@@ -292,15 +304,28 @@ def _deduplicate_by_qid(pages: list[TopPage]) -> list[TopPage]:
     """Remove duplicate pages that share the same Wikidata Q-ID.
 
     Pages without a Q-ID are always kept (each gets a unique fallback key).
-    When duplicates exist, the first occurrence (highest edit count) is kept.
+    When duplicates exist, the first occurrence (highest edit count) is kept as
+    the representative. All editions (including the representative) are recorded
+    in `representative.lang_editions` so publishers can show per-language edits
+    and a total.
     """
-    seen: set[str] = set()
+    seen: dict[str, TopPage] = {}
     result = []
     for page in pages:
         key = page.qid if page.qid else f"_{page.server_name}/{page.title}"
         if key not in seen:
-            seen.add(key)
+            seen[key] = page
             result.append(page)
+        else:
+            rep = seen[key]
+            # First duplicate: seed lang_editions with the representative itself
+            if not rep.lang_editions:
+                rep.lang_editions.append(
+                    LangEdition(server_name=rep.server_name, edits=rep.edits)
+                )
+            rep.lang_editions.append(
+                LangEdition(server_name=page.server_name, edits=page.edits)
+            )
     return result
 
 

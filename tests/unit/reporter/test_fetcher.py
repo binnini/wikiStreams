@@ -8,6 +8,7 @@ import httpx
 
 from reporter.fetcher import (
     FeaturedArticle,
+    LangEdition,
     NewsItem,
     TopPage,
     _deduplicate_by_qid,
@@ -343,7 +344,8 @@ class TestFetchNewsWithKeywords:
 
         assert mock_fn.call_count == 3
 
-    def test_results_capped_at_5(self, mocker):
+    def test_returns_3_items_per_topic(self, mocker):
+        """Each of the 3 topics gets up to 3 news items (total up to 9)."""
         news_per_page = [
             NewsItem(title=f"News {i}", link=f"https://example.com/{i}")
             for i in range(3)
@@ -358,7 +360,16 @@ class TestFetchNewsWithKeywords:
 
         result = fetch_news_with_keywords(pages, [["kw"] for _ in range(3)])
 
-        assert len(result) <= 5
+        assert len(result) == 9  # 3 items × 3 topics
+
+    def test_fetch_news_called_with_max_items_3(self, mocker):
+        """_fetch_news must be called with max_items=3."""
+        mock_fn = mocker.patch("reporter.fetcher._fetch_news", return_value=[])
+        pages = [TopPage(label="P", title="P", server_name="en.wikipedia.org")]
+
+        fetch_news_with_keywords(pages, [["kw"]])
+
+        assert mock_fn.call_args.kwargs.get("max_items") == 3
 
 
 # ─────────────────────────────────────────────
@@ -542,28 +553,31 @@ class TestDeduplicateByQid:
         assert len(result) == 1
         assert result[0].label == "Donald Trump"
 
+    def test_same_qid_lang_editions_populated(self):
+        """Both editions appear in lang_editions of the representative."""
+        pages = [
+            TopPage(label="EN", title="T", server_name="en.wikipedia.org", edits=100, qid="Q1"),
+            TopPage(label="KO", title="T_ko", server_name="ko.wikipedia.org", edits=80, qid="Q1"),
+        ]
+
+        result = _deduplicate_by_qid(pages)
+
+        assert len(result[0].lang_editions) == 2
+        assert result[0].lang_editions[0] == LangEdition("en.wikipedia.org", 100)
+        assert result[0].lang_editions[1] == LangEdition("ko.wikipedia.org", 80)
+
     def test_no_qid_all_kept(self):
         """Pages without Q-IDs each get a unique fallback key and are all kept."""
         pages = [
-            TopPage(
-                label="Page A",
-                title="Page_A",
-                server_name="en.wikipedia.org",
-                edits=100,
-                qid=None,
-            ),
-            TopPage(
-                label="Page B",
-                title="Page_B",
-                server_name="ko.wikipedia.org",
-                edits=80,
-                qid=None,
-            ),
+            TopPage(label="Page A", title="Page_A", server_name="en.wikipedia.org", edits=100, qid=None),
+            TopPage(label="Page B", title="Page_B", server_name="ko.wikipedia.org", edits=80, qid=None),
         ]
 
         result = _deduplicate_by_qid(pages)
 
         assert len(result) == 2
+        assert result[0].lang_editions == []
+        assert result[1].lang_editions == []
 
     def test_mixed_qid_and_no_qid(self):
         """Duplicate Q-ID removed; pages without Q-ID always kept."""
@@ -577,7 +591,9 @@ class TestDeduplicateByQid:
 
         assert len(result) == 2
         assert result[0].label == "A-en"
+        assert len(result[0].lang_editions) == 2  # A-en + A-ko grouped
         assert result[1].label == "B"
+        assert result[1].lang_editions == []  # not grouped
 
     def test_order_preserved_for_unique_pages(self):
         pages = [
@@ -589,6 +605,7 @@ class TestDeduplicateByQid:
         result = _deduplicate_by_qid(pages)
 
         assert [p.label for p in result] == ["X", "Y", "Z"]
+        assert all(p.lang_editions == [] for p in result)  # no duplicates → empty
 
     def test_triple_duplicate_keeps_only_first(self):
         pages = [
@@ -601,6 +618,8 @@ class TestDeduplicateByQid:
 
         assert len(result) == 1
         assert result[0].label == "En"
+        assert len(result[0].lang_editions) == 3
+        assert sum(e.edits for e in result[0].lang_editions) == 600
 
     def test_empty_list_returns_empty(self):
         assert _deduplicate_by_qid([]) == []

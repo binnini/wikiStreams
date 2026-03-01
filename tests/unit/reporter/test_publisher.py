@@ -6,6 +6,7 @@ import pytest
 
 from reporter.fetcher import (
     FeaturedArticle,
+    LangEdition,
     NewsItem,
     OverallStats,
     PeakHour,
@@ -230,6 +231,38 @@ class TestBuildTop5Embed:
 
         # empty string is falsy — description should not be set
         assert embed.get("description") is None or embed.get("description") == ""
+
+    def test_lang_editions_shows_each_edition_and_total(self):
+        """Grouped page: each language edition's edit count + total are displayed."""
+        page = TopPage(
+            label="Iran Strikes",
+            url="https://en.wikipedia.org/wiki/Iran_Strikes",
+            server_name="en.wikipedia.org",
+            edits=450,
+            lang_editions=[
+                LangEdition(server_name="en.wikipedia.org", edits=450),
+                LangEdition(server_name="ru.wikipedia.org", edits=320),
+                LangEdition(server_name="es.wikipedia.org", edits=280),
+            ],
+        )
+        data = ReportData(top_pages=[page])
+        embed = _build_top5_embed(data, "")
+        value = embed["fields"][0]["value"]
+
+        assert "450" in value   # EN edits
+        assert "320" in value   # RU edits
+        assert "280" in value   # ES edits
+        assert "1,050" in value  # total (450+320+280)
+        assert "합계" in value
+
+    def test_single_edition_shows_standard_format(self, sample_data):
+        """Non-grouped page (lang_editions empty) shows the original single-line format."""
+        # sample_data has lang_editions=[] (default)
+        embed = _build_top5_embed(sample_data, "")
+        value = embed["fields"][0]["value"]
+
+        assert "편집" in value   # "100회 편집"
+        assert "합계" not in value  # no total line
 
 
 # ─────────────────────────────────────────────

@@ -71,10 +71,26 @@ def _build_top5_embed(data: ReportData, top5_analysis: str) -> dict:
         signal_line = ("  ·  " + "  ·  ".join(signal_parts)) if signal_parts else ""
 
         desc_part = f"\n> {p.description}" if p.description else ""
-        value = (
-            f"[🔗 문서 보기]({p.url}) · {flag} {lang} · **{p.edits}회** 편집"
-            f"{signal_line}{desc_part}"
-        )
+
+        if p.lang_editions:
+            # Multi-language grouped: show each edition's edit count + total
+            ed_parts = []
+            for ed in p.lang_editions:
+                ed_flag = _wiki_flag(ed.server_name)
+                ed_lang = (
+                    ed.server_name.split(".")[0].upper()
+                    if "." in ed.server_name
+                    else ed.server_name
+                )
+                ed_parts.append(f"{ed_flag} {ed_lang} {ed.edits:,}회")
+            total = sum(ed.edits for ed in p.lang_editions)
+            lang_str = "  ·  ".join(ed_parts) + f"  |  **합계 {total:,}회**"
+            value = f"[🔗 문서 보기]({p.url})\n{lang_str}{signal_line}{desc_part}"
+        else:
+            value = (
+                f"[🔗 문서 보기]({p.url}) · {flag} {lang} · **{p.edits:,}회** 편집"
+                f"{signal_line}{desc_part}"
+            )
         fields.append(
             {
                 "name": _truncate(f"{_RANKS[i]}{badge}  {display}", 256),
