@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     # 모니터링 대상 컨테이너 (쉼표 구분)
     monitor_targets: str = "producer,clickhouse"
 
-    # Discord Webhook URL (reporter와 동일 or 별도)
-    discord_webhook_url: str = ""
+    # Discord Webhook URL (리소스 이상 알림 전용 — Reporter의 DISCORD_WEBHOOK_URL과 별도)
+    resource_monitor_discord_webhook_url: str = ""
 
     # 이상 감지 z-score 임계값
     anomaly_threshold: float = 2.5
