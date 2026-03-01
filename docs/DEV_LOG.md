@@ -433,3 +433,23 @@
   - f-string 로그 메시지 → `%s` lazy 포맷으로 변경 (불필요한 문자열 생성 방지)
 
 - **테스트**: `test_exponential_backoff` 추가 — HTTP 오류 2회 연속 발생 시 `sleep(2.0)` → `sleep(4.0)` 순서로 호출되는지 검증 → **136개 전부 통과**.
+
+### 10. Reporter 프롬프트 패키지화 및 스타일 선택 기능 추가
+
+- **배경**: Claude 호출에 사용하는 프롬프트 파일이 `prompts.py`(기본 뉴스 에디터)와 `prompts_doro.py`(도로롱 캐릭터) 두 개의 플랫 파일로 분리되어 있어, 스타일 추가 시 관리가 어렵고 실행 중 스타일 전환이 불가능했음.
+
+- **작업**:
+  - `src/reporter/prompts.py`, `src/reporter/prompts_doro.py` → `src/reporter/prompts/` 패키지로 이전.
+    - `prompts/default.py`: 기존 기본 에디터 프롬프트 (한국어 뉴스 에디터 역할).
+    - `prompts/doro.py`: 도로롱(Doro) 캐릭터 프롬프트 (아가씨 말투 + 광기).
+    - `prompts/__init__.py`: `settings.prompt_style`을 읽어 `importlib.import_module()`으로 해당 스타일 모듈을 동적 로드. `SYSTEM_PROMPT`와 `build_user_message`를 패키지 레벨로 re-export.
+  - `src/reporter/config.py`에 `prompt_style: str = "default"` 설정 추가. `PROMPT_STYLE` 환경변수로 런타임 제어 가능.
+  - `builder.py` 임포트는 `from reporter.prompts import ...` 그대로 유지 — 변경 불필요.
+
+- **새 스타일 추가 방법**: `src/reporter/prompts/` 디렉터리에 `SYSTEM_PROMPT`와 `build_user_message()`를 정의한 `{name}.py` 파일 추가 → `PROMPT_STYLE={name}` 환경변수만 설정하면 즉시 적용.
+
+- **테스트**: `test_prompts.py` 대폭 보강.
+  - `TestDefaultPrompts` (6개): default 모듈 독립 검증.
+  - `TestDoroPrompts` (6개): doro 모듈 캐릭터·말투·스키마 검증.
+  - `TestPromptStyleDispatch` (3개): 두 스타일 인터페이스 동일성, 콘텐츠 상이성 검증.
+  - 기존 6개 유지 → **총 21개 통과** (reporter 단위 전체 52개 통과).
