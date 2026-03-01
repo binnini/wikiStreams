@@ -1,4 +1,6 @@
+import json
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 
 import anthropic
@@ -34,26 +36,16 @@ def _build_context(data: ReportData, report_date: str) -> str:
     lines.append("")
 
     if data.top_pages:
-        lines.append("## 편집량 상위 문서 (봇 제외, 24시간)")
+        lines.append("## 편집량 상위 문서 (봇 제외, 실제 편집만, 24시간)")
         for i, p in enumerate(data.top_pages[:5], 1):
             desc = f" — {p.description}" if p.description else ""
-            lines.append(f"{i}. {p.label} ({p.server_name}, {p.edits}회 편집){desc}")
-        lines.append("")
-
-    if data.spike_pages:
-        lines.append("## 실시간 급등 문서 (최근 15분 스파이크)")
-        for p in data.spike_pages[:5]:
-            lines.append(
-                f"- {p.label} ({p.server_name}): spike_ratio={p.spike_ratio}x, 15분간 {p.edits_15m}회 편집"
-            )
-        lines.append("")
-
-    if data.crosswiki_pages:
-        lines.append("## 다국어 동시 트렌딩 (최근 15분)")
-        for p in data.crosswiki_pages[:5]:
-            lines.append(
-                f"- {p.title}: {p.wiki_count}개 언어판 동시 편집 ({p.total_edits}회) — {p.wikis}"
-            )
+            badges = []
+            if p.is_spike:
+                badges.append(f"스파이크 {p.spike_ratio_val}x")
+            if p.crosswiki_count >= 2:
+                badges.append(f"다국어 {p.crosswiki_count}개 언어판")
+            badge_str = f" [{', '.join(badges)}]" if badges else ""
+            lines.append(f"{i}. {p.label} ({p.server_name}, {p.edits}회){badge_str}{desc}")
         lines.append("")
 
     if data.revert_pages:
@@ -77,58 +69,80 @@ def _build_context(data: ReportData, report_date: str) -> str:
     return "\n".join(lines)
 
 
-def build_report(data: ReportData) -> dict[str, str]:
+def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
+    """Build the daily report using Claude.
+
+    Returns:
+        sections: Dict of section name → text content for Discord embeds.
+        news_keywords: List of keyword lists (one per top-3 page) for news searching.
+    """
     report_date = datetime.now(KST).strftime("%Y년 %m월 %d일")
     context = _build_context(data, report_date)
 
+    top3_labels = [
+        p.label or p.title for p in data.top_pages[:3]
+    ]
+    top3_list = "\n".join(f"{i+1}. {lbl}" for i, lbl in enumerate(top3_labels))
+
     user_message = f"""{context}
 
-위 데이터를 바탕으로 다음 6개 섹션으로 한국어 뉴스 브리핑을 작성해주세요.
-각 섹션은 JSON 키로 반환하되, 아래 형식을 정확히 따르세요.
+위 데이터를 바탕으로 다음 6개 섹션과 뉴스 키워드를 JSON 형식으로 작성해주세요.
 
 섹션 구성:
 1. headline: 오늘 가장 주목할 Wikipedia 동향 1-2개를 선정해 2-3문장으로 요약. 왜 오늘 이 문서들이 주목받는지 맥락을 포함하세요.
-2. global_interest: 다국어 동시 트렌딩 문서 중심의 글로벌 관심사 분석 (2-3문장). 몇 개 언어판에서 동시에 편집됐는지 숫자를 포함하세요.
-3. top_edits: 편집량 1-2위 문서의 하이라이트 (2-3문장). 단순 나열이 아닌 "왜 오늘 이 문서인가"에 초점을 맞추세요.
-4. controversy: 되돌리기(revert) 상위 문서의 현황과 의미 (2-3문장). 데이터가 없으면 "특이사항 없음"
-5. numbers: 오늘의 핵심 수치 요약 — 총 편집 수, 활성 편집자, 봇 비율, 신규 문서, 피크 시간대를 자연스러운 한 문단으로 서술하세요.
-6. featured: 오늘의 Wikipedia 특집 문서 소개 — 제목을 한국어로 번역하고, 어떤 내용인지, 왜 주목할 만한지 2-3문장. 데이터 없으면 "특집 문서 정보 없음"
+2. top5_analysis: 편집량 상위 문서들의 통합 분석 (2-3문장). 스파이크·다국어 문서를 강조하고, 단순 나열이 아닌 "왜 오늘 이 문서인가"에 초점을 맞추세요.
+3. controversy: 되돌리기(revert) 상위 문서의 현황과 의미 (2-3문장). 데이터가 없으면 "특이사항 없음"
+4. numbers: 오늘의 핵심 수치 요약 — 총 편집 수, 활성 편집자, 봇 비율, 신규 문서, 피크 시간대를 자연스러운 한 문단으로 서술하세요.
+5. featured: 오늘의 Wikipedia 특집 문서 소개 — 제목을 한국어로 번역하고, 어떤 내용인지, 왜 주목할 만한지 2-3문장. 데이터 없으면 "특집 문서 정보 없음"
+6. news_keywords: 아래 상위 3개 문서에 대한 Google 뉴스 검색용 핵심 키워드 추출.
+   - 고유명사(인물명, 국가명, 사건명)만 1-3개씩 추출하세요.
+   - 검색 효율을 위해 문서 원어(영어/한국어 등) 기준으로 작성하세요.
+   대상 문서:
+{top3_list}
 
 반드시 아래 형식으로 응답하세요 (JSON):
 {{
   "headline": "...",
-  "global_interest": "...",
-  "top_edits": "...",
+  "top5_analysis": "...",
   "controversy": "...",
   "numbers": "...",
-  "featured": "..."
+  "featured": "...",
+  "news_keywords": [["키워드1A", "키워드1B"], ["키워드2A"], ["키워드3A", "키워드3B"]]
 }}"""
 
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
     message = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1200,
+        max_tokens=1400,
         system=SYSTEM_PROMPT,
         messages=[{"role": "user", "content": user_message}],
     )
 
     raw = message.content[0].text.strip()
-    import json
-    import re
-
     json_match = re.search(r"\{.*\}", raw, re.DOTALL)
     if json_match:
-        sections = json.loads(json_match.group())
+        parsed = json.loads(json_match.group())
     else:
-        sections = {
+        parsed = {
             "headline": raw,
-            "global_interest": "",
-            "top_edits": "",
+            "top5_analysis": "",
             "controversy": "",
             "numbers": "",
             "featured": "",
+            "news_keywords": [],
         }
 
+    # Separate news_keywords (list[list[str]]) from text sections (dict[str, str])
+    news_keywords: list[list[str]] = parsed.pop("news_keywords", [])
+    if not isinstance(news_keywords, list):
+        news_keywords = []
+
+    sections: dict[str, str] = {k: str(v) for k, v in parsed.items()}
     sections["date"] = report_date
-    logger.info("Report built for %s", report_date)
-    return sections
+
+    logger.info(
+        "Report built for %s — keywords: %s",
+        report_date,
+        news_keywords,
+    )
+    return sections, news_keywords

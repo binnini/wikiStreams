@@ -41,11 +41,16 @@ class TopPage:
     url: str = ""
     thumbnail_url: str = ""
     rank_change: Optional[int] = None  # None=new entry, 0=same, +N=improved, -N=dropped
+    # Enriched from spike/crosswiki data
+    is_spike: bool = False
+    spike_ratio_val: float = 0.0
+    crosswiki_count: int = 0  # 0 = not cross-wiki
 
 
 @dataclass
 class SpikePage:
     label: str = ""
+    title: str = ""
     server_name: str = ""
     edits_15m: int = 0
     spike_ratio: float = 0.0
@@ -114,12 +119,26 @@ def _query(sql: str) -> list[dict]:
     return rows
 
 
-def _fetch_news(query: str, max_items: int = 2) -> list[NewsItem]:
+def _fetch_news(
+    query: str,
+    relevance_keywords: Optional[set[str]] = None,
+    max_items: int = 2,
+) -> list[NewsItem]:
+    """Fetch news from Google News RSS.
+
+    Args:
+        query: Search query string.
+        relevance_keywords: If provided, only keep news whose headline contains
+            at least one of these keywords (case-insensitive).
+            Falls back to words of length >= 4 from query when None.
+    """
     encoded = quote(query)
     rss_url = f"https://news.google.com/rss/search?q={encoded}&hl=ko&gl=KR&ceid=KR:ko"
     cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-    # Keywords: words of length >= 4 for relevance check
-    keywords = {w.lower() for w in query.split() if len(w) >= 4}
+
+    if relevance_keywords is None:
+        relevance_keywords = {w.lower() for w in query.split() if len(w) >= 4}
+
     try:
         with httpx.Client(timeout=5, follow_redirects=True) as client:
             resp = client.get(rss_url)
@@ -150,8 +169,10 @@ def _fetch_news(query: str, max_items: int = 2) -> list[NewsItem]:
                 continue
 
             news_title = title_el.text or ""
-            # Keyword relevance: at least one keyword must appear in the headline
-            if keywords and not any(kw in news_title.lower() for kw in keywords):
+            # Keyword relevance filter
+            if relevance_keywords and not any(
+                kw in news_title.lower() for kw in relevance_keywords
+            ):
                 continue
 
             items.append(
@@ -165,6 +186,27 @@ def _fetch_news(query: str, max_items: int = 2) -> list[NewsItem]:
     except Exception as e:
         logger.warning("News fetch failed for '%s': %s", query, e)
         return []
+
+
+def fetch_news_with_keywords(
+    pages: list[TopPage], keywords_per_page: list[list[str]]
+) -> list[NewsItem]:
+    """Fetch news using Claude-extracted keywords for better relevance.
+
+    Args:
+        pages: Top pages to fetch news for (uses first 3).
+        keywords_per_page: Claude-extracted keyword lists, one per page.
+    """
+    all_news: list[NewsItem] = []
+    for i, page in enumerate(pages[:3]):
+        kws = keywords_per_page[i] if i < len(keywords_per_page) else []
+        if not kws:
+            kws = [page.label or page.title]
+        # Primary search query: join first two keywords
+        query = " ".join(kws[:2])
+        relevance = {kw.lower() for kw in kws if len(kw) >= 3}
+        all_news.extend(_fetch_news(query, relevance_keywords=relevance))
+    return all_news[:5]
 
 
 def _fetch_featured_article(date: datetime) -> FeaturedArticle:
@@ -233,7 +275,7 @@ def fetch_report_data() -> ReportData:
     except Exception as e:
         logger.error("Failed to fetch overall stats: %s", e)
 
-    # 2. Top edited pages (bot excluded, 24h, top 10)
+    # 2. Top edited pages (bot excluded, actual edits only, 24h, top 10)
     try:
         rows = _query(
             f"SELECT if(wikidata_label != '', wikidata_label, title) AS label, "
@@ -261,7 +303,7 @@ def fetch_report_data() -> ReportData:
     try:
         rows = _query(
             "SELECT if(wikidata_label NOT IN ('', '-'), wikidata_label, title) AS label, "
-            "server_name, "
+            "title, server_name, "
             "countIf(event_time > now() - INTERVAL 15 MINUTE) AS edits_15m, "
             "round(countIf(event_time > now() - INTERVAL 15 MINUTE) * 4.0 / "
             "(countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) + 1), 1) AS spike_ratio "
@@ -274,6 +316,7 @@ def fetch_report_data() -> ReportData:
         data.spike_pages = [
             SpikePage(
                 label=r["label"],
+                title=r["title"],
                 server_name=r["server_name"],
                 edits_15m=int(r["edits_15m"]),
                 spike_ratio=float(r["spike_ratio"]),
@@ -331,15 +374,7 @@ def fetch_report_data() -> ReportData:
     except Exception as e:
         logger.error("Failed to fetch revert pages: %s", e)
 
-    # 6. Related news for top 3 trending pages (Google News RSS, no API key required)
-    if data.top_pages:
-        all_news: list[NewsItem] = []
-        for page in data.top_pages[:3]:
-            query_term = page.label if page.label else page.title
-            all_news.extend(_fetch_news(query_term))
-        data.news_items = all_news[:5]
-
-    # 7. Peak edit hour (24h)
+    # 6. Peak edit hour (24h)
     try:
         rows = _query(
             "SELECT toHour(event_time) AS hour, count() AS edits "
@@ -352,7 +387,7 @@ def fetch_report_data() -> ReportData:
     except Exception as e:
         logger.error("Failed to fetch peak hour: %s", e)
 
-    # 8. Yesterday's top pages → compute rank_change for today's top 5
+    # 7. Yesterday's top pages → rank_change for today's top 5
     if data.top_pages:
         try:
             rows = _query(
@@ -371,6 +406,18 @@ def fetch_report_data() -> ReportData:
         except Exception as e:
             logger.error("Failed to fetch yesterday ranks: %s", e)
 
+    # 8. Enrich top 5 pages with spike / cross-wiki metadata
+    spike_map = {(p.title, p.server_name): p for p in data.spike_pages}
+    crosswiki_map = {p.title: p for p in data.crosswiki_pages}
+    for page in data.top_pages[:5]:
+        spike = spike_map.get((page.title, page.server_name))
+        if spike:
+            page.is_spike = True
+            page.spike_ratio_val = spike.spike_ratio
+        cw = crosswiki_map.get(page.title)
+        if cw:
+            page.crosswiki_count = cw.wiki_count
+
     # 9. Thumbnail for #1 page
     if data.top_pages:
         data.top_pages[0].thumbnail_url = _fetch_thumbnail(
@@ -382,13 +429,12 @@ def fetch_report_data() -> ReportData:
 
     logger.info(
         "Fetched: %d edits, %d top pages, %d spikes, %d cross-wiki, %d reverts, "
-        "%d news, peak=%dh, featured='%s'",
+        "peak=%dh, featured='%s'",
         data.stats.total_edits,
         len(data.top_pages),
         len(data.spike_pages),
         len(data.crosswiki_pages),
         len(data.revert_pages),
-        len(data.news_items),
         data.peak_hour.hour,
         data.featured_article.title,
     )

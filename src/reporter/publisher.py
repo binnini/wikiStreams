@@ -50,15 +50,27 @@ def _rank_badge(rank_change: Optional[int]) -> str:
     return " →"
 
 
-def _build_top5_embed(data: ReportData) -> dict:
+def _build_top5_embed(data: ReportData, top5_analysis: str) -> dict:
     fields = []
     for i, p in enumerate(data.top_pages[:5]):
         display = p.label or p.title
-        badge = _rank_badge(p.rank_change) if i < 5 else ""
+        badge = _rank_badge(p.rank_change)
         flag = _wiki_flag(p.server_name)
         lang = p.server_name.split(".")[0].upper() if "." in p.server_name else p.server_name
+
+        # Spike / cross-wiki badges
+        signal_parts = []
+        if p.is_spike:
+            signal_parts.append(f"⚡ {p.spike_ratio_val}x")
+        if p.crosswiki_count >= 2:
+            signal_parts.append(f"🌍 {p.crosswiki_count}개 언어판")
+        signal_line = ("  ·  " + "  ·  ".join(signal_parts)) if signal_parts else ""
+
         desc_part = f"\n> {p.description}" if p.description else ""
-        value = f"[🔗 문서 보기]({p.url}) · {flag} {lang} · **{p.edits}회** 편집{desc_part}"
+        value = (
+            f"[🔗 문서 보기]({p.url}) · {flag} {lang} · **{p.edits}회** 편집"
+            f"{signal_line}{desc_part}"
+        )
         fields.append(
             {
                 "name": _truncate(f"{_RANKS[i]}{badge}  {display}", 256),
@@ -69,7 +81,8 @@ def _build_top5_embed(data: ReportData) -> dict:
 
     if data.news_items:
         news_lines = [
-            f"• [{_truncate(n.title, 80)}]({n.link})" + (f" *— {n.source}*" if n.source else "")
+            f"• [{_truncate(n.title, 80)}]({n.link})"
+            + (f" *— {n.source}*" if n.source else "")
             for n in data.news_items
         ]
         fields.append(
@@ -82,9 +95,14 @@ def _build_top5_embed(data: ReportData) -> dict:
 
     embed: dict = {
         "title": "📝 오늘의 Top 5 위키 문서",
+        "description": _truncate(top5_analysis, 4096) if top5_analysis else None,
         "color": BLURPLE,
         "fields": fields,
     }
+    # Remove None description to keep payload clean
+    if embed["description"] is None:
+        del embed["description"]
+
     if data.top_pages and data.top_pages[0].thumbnail_url:
         embed["thumbnail"] = {"url": data.top_pages[0].thumbnail_url}
 
@@ -97,7 +115,7 @@ def _build_featured_embed(data: ReportData, featured_text: str) -> Optional[dict
         return None
 
     embed: dict = {
-        "title": "⭐ Wikipedia 오늘의 특집 문서",
+        "title": "📚 교양 코너 — Wikipedia 오늘의 특집 문서",
         "color": GOLD,
         "fields": [
             {
@@ -106,7 +124,7 @@ def _build_featured_embed(data: ReportData, featured_text: str) -> Optional[dict
                 "inline": False,
             }
         ],
-        "footer": {"text": "Wikipedia · Featured Article of the Day"},
+        "footer": {"text": "Wikipedia · Featured Article of the Day · en.wikipedia.org 선정"},
     }
     if fa.url:
         embed["url"] = fa.url
@@ -119,8 +137,7 @@ def _build_featured_embed(data: ReportData, featured_text: str) -> Optional[dict
 def publish_report(sections: dict[str, str], data: ReportData) -> None:
     date = sections.get("date", "")
     headline = _truncate(sections.get("headline", ""))
-    global_interest = _truncate(sections.get("global_interest", ""))
-    top_edits = _truncate(sections.get("top_edits", ""))
+    top5_analysis = sections.get("top5_analysis", "")
     controversy = _truncate(sections.get("controversy", "특이사항 없음"))
     numbers = _truncate(sections.get("numbers", ""))
     featured_text = sections.get("featured", "")
@@ -148,17 +165,12 @@ def publish_report(sections: dict[str, str], data: ReportData) -> None:
             "color": BLURPLE,
             "footer": {"text": "WikiStreams · Powered by Claude Haiku"},
         },
-        _build_top5_embed(data),
+        _build_top5_embed(data, top5_analysis),
         *([] if featured_embed is None else [featured_embed]),
         {
             "title": "숫자 브리핑",
             "color": BLURPLE,
             "fields": numbers_fields,
-        },
-        {
-            "title": "🌐 글로벌 관심사 & 트렌딩",
-            "description": f"**글로벌 관심사**\n{global_interest}\n\n**핵심 편집 하이라이트**\n{top_edits}",
-            "color": BLURPLE,
         },
         {
             "title": "⚠️ 논쟁/반달리즘 문서",
