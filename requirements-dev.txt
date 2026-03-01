@@ -1,0 +1,8 @@
+# Code quality
+black==25.12.0
+flake8
+
+# Testing
+pytest
+pytest-mock
+pytest-docker

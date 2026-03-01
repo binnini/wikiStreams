@@ -1,4 +1,5 @@
 """Unit tests for reporter.publisher module."""
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -57,7 +58,9 @@ def sample_data(sample_top_page):
             thumbnail_url="https://example.com/marie.jpg",
         ),
         news_items=[
-            NewsItem(title="Tech News", link="https://example.com/news", source="TechSource")
+            NewsItem(
+                title="Tech News", link="https://example.com/news", source="TechSource"
+            )
         ],
     )
 
@@ -285,7 +288,9 @@ class TestPublishReport:
         payload = mock_cm.post.call_args.kwargs["json"]
         assert "embeds" in payload
 
-    def test_five_embeds_when_featured_present(self, mocker, sample_data, sample_sections):
+    def test_five_embeds_when_featured_present(
+        self, mocker, sample_data, sample_sections
+    ):
         """Headline + Numbers + Top5 + Controversy + Featured = 5."""
         mock_cm = _mock_discord(mocker)
 
@@ -316,7 +321,9 @@ class TestPublishReport:
         assert "논쟁" in embeds[3]["title"]
         assert "교양 코너" in embeds[4]["title"]
 
-    def test_peak_hour_field_in_numbers_embed(self, mocker, sample_data, sample_sections):
+    def test_peak_hour_field_in_numbers_embed(
+        self, mocker, sample_data, sample_sections
+    ):
         mock_cm = _mock_discord(mocker)
 
         publish_report(sample_sections, sample_data)
@@ -325,7 +332,9 @@ class TestPublishReport:
         field_names = [f["name"] for f in numbers_embed["fields"]]
         assert "⏰ 편집 피크 시간대" in field_names
 
-    def test_no_peak_hour_field_when_hour_negative(self, mocker, sample_data, sample_sections):
+    def test_no_peak_hour_field_when_hour_negative(
+        self, mocker, sample_data, sample_sections
+    ):
         """PeakHour.hour == -1 (default) means no peak hour field."""
         sample_data.peak_hour = PeakHour(hour=-1, edits=0)
         mock_cm = _mock_discord(mocker)

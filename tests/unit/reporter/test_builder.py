@@ -1,4 +1,5 @@
 """Unit tests for reporter.builder module."""
+
 import json
 from unittest.mock import MagicMock
 
@@ -105,10 +106,10 @@ class TestBuildContext:
     def test_includes_overall_stats(self, sample_data):
         ctx = _build_context(sample_data, "2026년 03월 01일")
 
-        assert "5,000" in ctx   # formatted total_edits
-        assert "200" in ctx     # active_users
-        assert "25.0" in ctx    # bot_ratio_pct
-        assert "50" in ctx      # new_articles
+        assert "5,000" in ctx  # formatted total_edits
+        assert "200" in ctx  # active_users
+        assert "25.0" in ctx  # bot_ratio_pct
+        assert "50" in ctx  # new_articles
 
     def test_includes_top_page_labels(self, sample_data):
         ctx = _build_context(sample_data, "2026년 03월 01일")
@@ -156,7 +157,9 @@ class TestBuildContext:
 
 
 class TestBuildReport:
-    def test_returns_sections_dict_and_keywords_list(self, mocker, sample_data, claude_response_json):
+    def test_returns_sections_dict_and_keywords_list(
+        self, mocker, sample_data, claude_response_json
+    ):
         _mock_claude(mocker, claude_response_json)
 
         sections, news_keywords = build_report(sample_data)
@@ -164,24 +167,41 @@ class TestBuildReport:
         assert isinstance(sections, dict)
         assert isinstance(news_keywords, list)
 
-    def test_sections_contain_expected_keys(self, mocker, sample_data, claude_response_json):
+    def test_sections_contain_expected_keys(
+        self, mocker, sample_data, claude_response_json
+    ):
         _mock_claude(mocker, claude_response_json)
 
         sections, _ = build_report(sample_data)
 
-        for key in ("headline", "top5_analysis", "controversy", "numbers", "featured", "date"):
+        for key in (
+            "headline",
+            "top5_analysis",
+            "controversy",
+            "numbers",
+            "featured",
+            "date",
+        ):
             assert key in sections
 
-    def test_news_keywords_not_in_sections(self, mocker, sample_data, claude_response_json):
+    def test_news_keywords_not_in_sections(
+        self, mocker, sample_data, claude_response_json
+    ):
         """news_keywords must be extracted from sections dict."""
         _mock_claude(mocker, claude_response_json)
 
         sections, news_keywords = build_report(sample_data)
 
         assert "news_keywords" not in sections
-        assert news_keywords == [["Alan Turing", "AI"], ["파이썬", "programming"], ["Test"]]
+        assert news_keywords == [
+            ["Alan Turing", "AI"],
+            ["파이썬", "programming"],
+            ["Test"],
+        ]
 
-    def test_date_injected_into_sections(self, mocker, sample_data, claude_response_json):
+    def test_date_injected_into_sections(
+        self, mocker, sample_data, claude_response_json
+    ):
         _mock_claude(mocker, claude_response_json)
 
         sections, _ = build_report(sample_data)
@@ -189,7 +209,7 @@ class TestBuildReport:
         assert "년" in sections["date"]  # Korean date format
 
     def test_invalid_json_falls_back_gracefully(self, mocker, sample_data):
-        """Non-JSON Claude response: raw text becomes headline, keywords=[]. """
+        """Non-JSON Claude response: raw text becomes headline, keywords=[]."""
         mock_anthropic = mocker.patch("reporter.builder.anthropic.Anthropic")
         mock_client = MagicMock()
         mock_anthropic.return_value = mock_client
@@ -229,8 +249,11 @@ class TestBuildReport:
     def test_non_list_news_keywords_normalised_to_empty(self, mocker, sample_data):
         """If Claude returns news_keywords as non-list, normalise to []."""
         response = {
-            "headline": "h", "top5_analysis": "t", "controversy": "c",
-            "numbers": "n", "featured": "f",
+            "headline": "h",
+            "top5_analysis": "t",
+            "controversy": "c",
+            "numbers": "n",
+            "featured": "f",
             "news_keywords": "not a list",
         }
         _mock_claude(mocker, response)

@@ -269,10 +269,14 @@ def fetch_report_data() -> ReportData:
     # 1. Overall stats (24h)
     time_filter = "event_time >= now() - INTERVAL 24 HOUR"
     try:
-        rows = _query(f"SELECT count() AS value FROM wikimedia.events WHERE {time_filter}")
+        rows = _query(
+            f"SELECT count() AS value FROM wikimedia.events WHERE {time_filter}"
+        )
         data.stats.total_edits = int(rows[0]["value"]) if rows else 0
 
-        rows = _query(f"SELECT uniq(user) AS value FROM wikimedia.events WHERE {time_filter}")
+        rows = _query(
+            f"SELECT uniq(user) AS value FROM wikimedia.events WHERE {time_filter}"
+        )
         data.stats.active_users = int(rows[0]["value"]) if rows else 0
 
         rows = _query(
@@ -397,7 +401,9 @@ def fetch_report_data() -> ReportData:
             "GROUP BY hour ORDER BY edits DESC LIMIT 1"
         )
         if rows:
-            data.peak_hour = PeakHour(hour=int(rows[0]["hour"]), edits=int(rows[0]["edits"]))
+            data.peak_hour = PeakHour(
+                hour=int(rows[0]["hour"]), edits=int(rows[0]["edits"])
+            )
     except Exception as e:
         logger.error("Failed to fetch peak hour: %s", e)
 

@@ -1,15 +1,14 @@
 """Unit tests for reporter.fetcher module."""
+
 from datetime import datetime, timezone, timedelta
 from email.utils import format_datetime
 from unittest.mock import MagicMock
 
 import httpx
-import pytest
 
 from reporter.fetcher import (
     FeaturedArticle,
     NewsItem,
-    ReportData,
     TopPage,
     _fetch_featured_article,
     _fetch_news,
@@ -89,7 +88,10 @@ def _make_http_cm(resp):
 
 class TestWikiUrl:
     def test_simple_title(self):
-        assert wiki_url("en.wikipedia.org", "Python") == "https://en.wikipedia.org/wiki/Python"
+        assert (
+            wiki_url("en.wikipedia.org", "Python")
+            == "https://en.wikipedia.org/wiki/Python"
+        )
 
     def test_spaces_replaced_with_underscores(self):
         result = wiki_url("en.wikipedia.org", "Alan Turing")
@@ -112,14 +114,16 @@ class TestWikiUrl:
 
 class TestFetchNews:
     def test_korean_edition_returns_results(self, mocker):
-        rss = _rss_xml([
-            {
-                "title": "테스트 뉴스 제목",
-                "link": "https://example.com/1",
-                "source": "연합뉴스",
-                "pubdate": _recent_pubdate(1),
-            }
-        ])
+        rss = _rss_xml(
+            [
+                {
+                    "title": "테스트 뉴스 제목",
+                    "link": "https://example.com/1",
+                    "source": "연합뉴스",
+                    "pubdate": _recent_pubdate(1),
+                }
+            ]
+        )
         _mock_client(mocker, text=rss)
 
         result = _fetch_news("테스트 쿼리", max_items=2)
@@ -131,14 +135,16 @@ class TestFetchNews:
 
     def test_korean_empty_falls_back_to_english(self, mocker):
         empty_rss = _rss_xml([])
-        en_rss = _rss_xml([
-            {
-                "title": "Wikipedia Trending Article",
-                "link": "https://example.com/en1",
-                "source": "Reuters",
-                "pubdate": _recent_pubdate(2),
-            }
-        ])
+        en_rss = _rss_xml(
+            [
+                {
+                    "title": "Wikipedia Trending Article",
+                    "link": "https://example.com/en1",
+                    "source": "Reuters",
+                    "pubdate": _recent_pubdate(2),
+                }
+            ]
+        )
 
         ko_resp = MagicMock()
         ko_resp.raise_for_status.return_value = None
@@ -148,7 +154,9 @@ class TestFetchNews:
         en_resp.raise_for_status.return_value = None
         en_resp.text = en_rss
 
-        mocker.patch("httpx.Client", side_effect=[_make_http_cm(ko_resp), _make_http_cm(en_resp)])
+        mocker.patch(
+            "httpx.Client", side_effect=[_make_http_cm(ko_resp), _make_http_cm(en_resp)]
+        )
 
         # Pass relevance keyword that matches the English title
         result = _fetch_news("wikipedia", relevance_keywords={"wikipedia"}, max_items=2)
@@ -157,20 +165,22 @@ class TestFetchNews:
         assert result[0].title == "Wikipedia Trending Article"
 
     def test_48h_filter_removes_old_news(self, mocker):
-        rss = _rss_xml([
-            {
-                "title": "Old News",
-                "link": "https://example.com/old",
-                "source": "Src",
-                "pubdate": _old_pubdate(),
-            },
-            {
-                "title": "Recent News",
-                "link": "https://example.com/new",
-                "source": "Src",
-                "pubdate": _recent_pubdate(1),
-            },
-        ])
+        rss = _rss_xml(
+            [
+                {
+                    "title": "Old News",
+                    "link": "https://example.com/old",
+                    "source": "Src",
+                    "pubdate": _old_pubdate(),
+                },
+                {
+                    "title": "Recent News",
+                    "link": "https://example.com/new",
+                    "source": "Src",
+                    "pubdate": _recent_pubdate(1),
+                },
+            ]
+        )
         _mock_client(mocker, text=rss)
 
         result = _fetch_news("query", max_items=5)
@@ -181,18 +191,22 @@ class TestFetchNews:
 
     def test_korean_edition_skips_relevance_filter(self, mocker):
         """Korean RSS results are not filtered by relevance_keywords."""
-        rss = _rss_xml([
-            {
-                "title": "한국어 뉴스 제목",
-                "link": "https://example.com/ko",
-                "source": "MBC",
-                "pubdate": _recent_pubdate(1),
-            }
-        ])
+        rss = _rss_xml(
+            [
+                {
+                    "title": "한국어 뉴스 제목",
+                    "link": "https://example.com/ko",
+                    "source": "MBC",
+                    "pubdate": _recent_pubdate(1),
+                }
+            ]
+        )
         _mock_client(mocker, text=rss)
 
         # The headline has no English keyword; Korean edition must still pass through
-        result = _fetch_news("Korea", relevance_keywords={"unrelated_english_word"}, max_items=5)
+        result = _fetch_news(
+            "Korea", relevance_keywords={"unrelated_english_word"}, max_items=5
+        )
 
         assert len(result) == 1
         assert result[0].title == "한국어 뉴스 제목"
@@ -200,20 +214,22 @@ class TestFetchNews:
     def test_english_edition_applies_relevance_filter(self, mocker):
         """English fallback filters by relevance_keywords."""
         empty_rss = _rss_xml([])
-        en_rss = _rss_xml([
-            {
-                "title": "Relevant Python Story",
-                "link": "https://example.com/py",
-                "source": "TechNews",
-                "pubdate": _recent_pubdate(2),
-            },
-            {
-                "title": "Irrelevant Story About Cats",
-                "link": "https://example.com/cats",
-                "source": "PetNews",
-                "pubdate": _recent_pubdate(3),
-            },
-        ])
+        en_rss = _rss_xml(
+            [
+                {
+                    "title": "Relevant Python Story",
+                    "link": "https://example.com/py",
+                    "source": "TechNews",
+                    "pubdate": _recent_pubdate(2),
+                },
+                {
+                    "title": "Irrelevant Story About Cats",
+                    "link": "https://example.com/cats",
+                    "source": "PetNews",
+                    "pubdate": _recent_pubdate(3),
+                },
+            ]
+        )
 
         ko_resp = MagicMock()
         ko_resp.raise_for_status.return_value = None
@@ -223,7 +239,9 @@ class TestFetchNews:
         en_resp.raise_for_status.return_value = None
         en_resp.text = en_rss
 
-        mocker.patch("httpx.Client", side_effect=[_make_http_cm(ko_resp), _make_http_cm(en_resp)])
+        mocker.patch(
+            "httpx.Client", side_effect=[_make_http_cm(ko_resp), _make_http_cm(en_resp)]
+        )
 
         result = _fetch_news("python", relevance_keywords={"python"}, max_items=5)
 
@@ -242,15 +260,17 @@ class TestFetchNews:
         assert result == []
 
     def test_max_items_respected(self, mocker):
-        rss = _rss_xml([
-            {
-                "title": f"News {i}",
-                "link": f"https://example.com/{i}",
-                "source": "Src",
-                "pubdate": _recent_pubdate(1),
-            }
-            for i in range(5)
-        ])
+        rss = _rss_xml(
+            [
+                {
+                    "title": f"News {i}",
+                    "link": f"https://example.com/{i}",
+                    "source": "Src",
+                    "pubdate": _recent_pubdate(1),
+                }
+                for i in range(5)
+            ]
+        )
         _mock_client(mocker, text=rss)
 
         result = _fetch_news("query", max_items=2)
@@ -266,7 +286,11 @@ class TestFetchNews:
 class TestFetchNewsWithKeywords:
     def test_uses_first_two_keywords_as_query(self, mocker):
         mock_fn = mocker.patch("reporter.fetcher._fetch_news", return_value=[])
-        pages = [TopPage(label="Test Page", title="Test_Page", server_name="en.wikipedia.org")]
+        pages = [
+            TopPage(
+                label="Test Page", title="Test_Page", server_name="en.wikipedia.org"
+            )
+        ]
 
         fetch_news_with_keywords(pages, [["KeywordA", "KeywordB", "KeywordC"]])
 
@@ -275,7 +299,11 @@ class TestFetchNewsWithKeywords:
 
     def test_falls_back_to_label_when_no_keywords(self, mocker):
         mock_fn = mocker.patch("reporter.fetcher._fetch_news", return_value=[])
-        pages = [TopPage(label="My Article", title="My_Article", server_name="en.wikipedia.org")]
+        pages = [
+            TopPage(
+                label="My Article", title="My_Article", server_name="en.wikipedia.org"
+            )
+        ]
 
         fetch_news_with_keywords(pages, [])
 
@@ -285,7 +313,9 @@ class TestFetchNewsWithKeywords:
     def test_processes_at_most_first_3_pages(self, mocker):
         mock_fn = mocker.patch("reporter.fetcher._fetch_news", return_value=[])
         pages = [
-            TopPage(label=f"Page {i}", title=f"Page_{i}", server_name="en.wikipedia.org")
+            TopPage(
+                label=f"Page {i}", title=f"Page_{i}", server_name="en.wikipedia.org"
+            )
             for i in range(5)
         ]
 
@@ -300,7 +330,9 @@ class TestFetchNewsWithKeywords:
         ]
         mocker.patch("reporter.fetcher._fetch_news", return_value=news_per_page)
         pages = [
-            TopPage(label=f"Page {i}", title=f"Page_{i}", server_name="en.wikipedia.org")
+            TopPage(
+                label=f"Page {i}", title=f"Page_{i}", server_name="en.wikipedia.org"
+            )
             for i in range(3)
         ]
 
@@ -321,7 +353,9 @@ class TestFetchFeaturedArticle:
                 "title": "Alan Turing",
                 "description": "British mathematician",
                 "extract": "Alan Turing was a famous mathematician.",
-                "content_urls": {"desktop": {"page": "https://en.wikipedia.org/wiki/Alan_Turing"}},
+                "content_urls": {
+                    "desktop": {"page": "https://en.wikipedia.org/wiki/Alan_Turing"}
+                },
                 "thumbnail": {"source": "https://example.com/turing.jpg"},
             }
         }
@@ -375,7 +409,9 @@ class TestFetchFeaturedArticle:
 
 class TestFetchThumbnail:
     def test_success(self, mocker):
-        _mock_client(mocker, json_data={"thumbnail": {"source": "https://example.com/thumb.jpg"}})
+        _mock_client(
+            mocker, json_data={"thumbnail": {"source": "https://example.com/thumb.jpg"}}
+        )
 
         result = _fetch_thumbnail("en.wikipedia.org", "Alan Turing")
 
@@ -425,22 +461,26 @@ class TestFetchReportData:
     ):
         """Return ordered side_effect list matching all _query() calls."""
         return [
-            [{"value": "10000"}],   # total_edits
-            [{"value": "500"}],     # active_users
-            [{"value": "20.5"}],    # bot_ratio_pct
-            [{"value": "100"}],     # new_articles
-            top_rows or [],         # top_pages
-            spike_rows or [],       # spike_pages
-            crosswiki_rows or [],   # crosswiki_pages
-            [],                     # revert_pages
+            [{"value": "10000"}],  # total_edits
+            [{"value": "500"}],  # active_users
+            [{"value": "20.5"}],  # bot_ratio_pct
+            [{"value": "100"}],  # new_articles
+            top_rows or [],  # top_pages
+            spike_rows or [],  # spike_pages
+            crosswiki_rows or [],  # crosswiki_pages
+            [],  # revert_pages
             [{"hour": "14", "edits": "1000"}],  # peak_hour
-            yesterday_rows or [],   # yesterday_rank
+            yesterday_rows or [],  # yesterday_rank
         ]
 
     def _patch_all(self, mocker, **kwargs):
-        mocker.patch("reporter.fetcher._query", side_effect=self._query_side_effect(**kwargs))
+        mocker.patch(
+            "reporter.fetcher._query", side_effect=self._query_side_effect(**kwargs)
+        )
         mocker.patch("reporter.fetcher._fetch_thumbnail", return_value="")
-        mocker.patch("reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle())
+        mocker.patch(
+            "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
+        )
 
     def test_overall_stats_parsed(self, mocker):
         self._patch_all(mocker)
@@ -463,15 +503,20 @@ class TestFetchReportData:
     def test_spike_enrichment(self, mocker):
         top_rows = [
             {
-                "label": "Page A", "title": "Page_A", "description": "",
-                "server_name": "en.wikipedia.org", "edits": "50",
+                "label": "Page A",
+                "title": "Page_A",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "50",
             }
         ]
         spike_rows = [
             {
-                "label": "Page A", "title": "Page_A",
+                "label": "Page A",
+                "title": "Page_A",
                 "server_name": "en.wikipedia.org",
-                "edits_15m": "30", "spike_ratio": "5.2",
+                "edits_15m": "30",
+                "spike_ratio": "5.2",
             }
         ]
         self._patch_all(mocker, top_rows=top_rows, spike_rows=spike_rows)
@@ -484,14 +529,19 @@ class TestFetchReportData:
     def test_crosswiki_enrichment(self, mocker):
         top_rows = [
             {
-                "label": "Global Topic", "title": "Global_Topic", "description": "",
-                "server_name": "en.wikipedia.org", "edits": "80",
+                "label": "Global Topic",
+                "title": "Global_Topic",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "80",
             }
         ]
         crosswiki_rows = [
             {
-                "title": "Global_Topic", "wiki_count": "5",
-                "total_edits": "200", "wikis": "en, ko, de, fr, ja",
+                "title": "Global_Topic",
+                "wiki_count": "5",
+                "total_edits": "200",
+                "wikis": "en, ko, de, fr, ja",
             }
         ]
         self._patch_all(mocker, top_rows=top_rows, crosswiki_rows=crosswiki_rows)
@@ -504,8 +554,11 @@ class TestFetchReportData:
         """Page was rank 3 yesterday, rank 1 today → rank_change = +2."""
         top_rows = [
             {
-                "label": "Rising Page", "title": "Rising_Page", "description": "",
-                "server_name": "en.wikipedia.org", "edits": "100",
+                "label": "Rising Page",
+                "title": "Rising_Page",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "100",
             }
         ]
         yesterday_rows = [
@@ -523,8 +576,11 @@ class TestFetchReportData:
         """Page absent from yesterday's top → rank_change is None."""
         top_rows = [
             {
-                "label": "New Page", "title": "New_Page", "description": "",
-                "server_name": "en.wikipedia.org", "edits": "100",
+                "label": "New Page",
+                "title": "New_Page",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "100",
             }
         ]
         self._patch_all(mocker, top_rows=top_rows, yesterday_rows=[])
@@ -536,16 +592,24 @@ class TestFetchReportData:
     def test_thumbnail_fetched_for_first_page(self, mocker):
         top_rows = [
             {
-                "label": "Top Page", "title": "Top_Page", "description": "",
-                "server_name": "en.wikipedia.org", "edits": "100",
+                "label": "Top Page",
+                "title": "Top_Page",
+                "description": "",
+                "server_name": "en.wikipedia.org",
+                "edits": "100",
             }
         ]
-        mocker.patch("reporter.fetcher._query", side_effect=self._query_side_effect(top_rows=top_rows))
+        mocker.patch(
+            "reporter.fetcher._query",
+            side_effect=self._query_side_effect(top_rows=top_rows),
+        )
         mock_thumb = mocker.patch(
             "reporter.fetcher._fetch_thumbnail",
             return_value="https://example.com/thumb.jpg",
         )
-        mocker.patch("reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle())
+        mocker.patch(
+            "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
+        )
 
         data = fetch_report_data()
 
@@ -554,9 +618,13 @@ class TestFetchReportData:
 
     def test_query_failure_returns_empty_data(self, mocker):
         """ClickHouse errors are caught; empty ReportData is returned."""
-        mocker.patch("reporter.fetcher._query", side_effect=Exception("ClickHouse down"))
+        mocker.patch(
+            "reporter.fetcher._query", side_effect=Exception("ClickHouse down")
+        )
         mocker.patch("reporter.fetcher._fetch_thumbnail", return_value="")
-        mocker.patch("reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle())
+        mocker.patch(
+            "reporter.fetcher._fetch_featured_article", return_value=FeaturedArticle()
+        )
 
         data = fetch_report_data()
 

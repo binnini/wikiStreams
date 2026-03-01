@@ -26,7 +26,9 @@ def run_report() -> None:
 
         # 3. Fetch news using Claude-extracted keywords for better relevance
         data.news_items = fetch_news_with_keywords(data.top_pages, news_keywords)
-        logger.info("News fetched: %d items (keywords: %s)", len(data.news_items), news_keywords)
+        logger.info(
+            "News fetched: %d items (keywords: %s)", len(data.news_items), news_keywords
+        )
 
         # 4. Publish to Discord
         publish_report(sections, data)
@@ -41,9 +43,7 @@ def main() -> None:
         run_report,
         CronTrigger(hour=settings.report_hour_kst, minute=0, timezone="Asia/Seoul"),
     )
-    logger.info(
-        "Reporter scheduled at %02d:00 KST daily", settings.report_hour_kst
-    )
+    logger.info("Reporter scheduled at %02d:00 KST daily", settings.report_hour_kst)
     scheduler.start()
 
 

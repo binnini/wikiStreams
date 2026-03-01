@@ -6,6 +6,7 @@ rate-limiting or API unavailability.
 Run with:
     PYTHONPATH=src pytest tests/integration/test_reporter_integration.py -m integration -v
 """
+
 from datetime import datetime, timezone
 
 import pytest
@@ -28,7 +29,9 @@ class TestWikipediaFeaturedArticleAPI:
     def test_article_has_non_empty_title(self):
         result = _fetch_featured_article(self._DATE)
 
-        assert result.title != "", "Wikipedia always has a featured article; title should not be empty"
+        assert (
+            result.title != ""
+        ), "Wikipedia always has a featured article; title should not be empty"
 
     def test_url_points_to_english_wikipedia(self):
         result = _fetch_featured_article(self._DATE)

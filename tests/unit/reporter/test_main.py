@@ -1,9 +1,8 @@
 """Unit tests for reporter.main.run_report()."""
-from unittest.mock import MagicMock
 
 import pytest
 
-from reporter.fetcher import FeaturedArticle, NewsItem, PeakHour, ReportData
+from reporter.fetcher import NewsItem, PeakHour, ReportData
 from reporter.main import run_report
 
 
@@ -31,11 +30,15 @@ class TestRunReport:
     def test_full_pipeline_executes_in_order(self, mocker, mock_data, mock_sections):
         mock_keywords = [["kw1", "kw2"]]
 
-        mock_fetch = mocker.patch("reporter.main.fetch_report_data", return_value=mock_data)
+        mock_fetch = mocker.patch(
+            "reporter.main.fetch_report_data", return_value=mock_data
+        )
         mock_build = mocker.patch(
             "reporter.main.build_report", return_value=(mock_sections, mock_keywords)
         )
-        mock_news = mocker.patch("reporter.main.fetch_news_with_keywords", return_value=[])
+        mock_news = mocker.patch(
+            "reporter.main.fetch_news_with_keywords", return_value=[]
+        )
         mock_publish = mocker.patch("reporter.main.publish_report")
 
         run_report()
@@ -45,7 +48,9 @@ class TestRunReport:
         mock_news.assert_called_once_with(mock_data.top_pages, mock_keywords)
         mock_publish.assert_called_once_with(mock_sections, mock_data)
 
-    def test_fetched_news_assigned_to_data_before_publish(self, mocker, mock_data, mock_sections):
+    def test_fetched_news_assigned_to_data_before_publish(
+        self, mocker, mock_data, mock_sections
+    ):
         news_items = [NewsItem(title="News", link="https://example.com")]
 
         mocker.patch("reporter.main.fetch_report_data", return_value=mock_data)
@@ -60,7 +65,9 @@ class TestRunReport:
 
     def test_exception_in_fetch_is_caught(self, mocker):
         """Exceptions must not propagate; run_report() should always return."""
-        mocker.patch("reporter.main.fetch_report_data", side_effect=Exception("ClickHouse down"))
+        mocker.patch(
+            "reporter.main.fetch_report_data", side_effect=Exception("ClickHouse down")
+        )
 
         run_report()  # must not raise
 
@@ -74,7 +81,9 @@ class TestRunReport:
 
     def test_exception_in_build_prevents_publish(self, mocker, mock_data):
         mocker.patch("reporter.main.fetch_report_data", return_value=mock_data)
-        mocker.patch("reporter.main.build_report", side_effect=Exception("Claude error"))
+        mocker.patch(
+            "reporter.main.build_report", side_effect=Exception("Claude error")
+        )
         mock_publish = mocker.patch("reporter.main.publish_report")
 
         run_report()

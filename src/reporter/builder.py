@@ -32,7 +32,9 @@ def _build_context(data: ReportData, report_date: str) -> str:
     lines.append(f"- 봇 편집 비율: {data.stats.bot_ratio_pct}%")
     lines.append(f"- 신규 문서 생성: {data.stats.new_articles:,}건")
     if data.peak_hour.hour >= 0:
-        lines.append(f"- 편집 피크 시간대: {data.peak_hour.hour}시 KST ({data.peak_hour.edits:,}건)")
+        lines.append(
+            f"- 편집 피크 시간대: {data.peak_hour.hour}시 KST ({data.peak_hour.edits:,}건)"
+        )
     lines.append("")
 
     if data.top_pages:
@@ -45,7 +47,9 @@ def _build_context(data: ReportData, report_date: str) -> str:
             if p.crosswiki_count >= 2:
                 badges.append(f"다국어 {p.crosswiki_count}개 언어판")
             badge_str = f" [{', '.join(badges)}]" if badges else ""
-            lines.append(f"{i}. {p.label} ({p.server_name}, {p.edits}회){badge_str}{desc}")
+            lines.append(
+                f"{i}. {p.label} ({p.server_name}, {p.edits}회){badge_str}{desc}"
+            )
         lines.append("")
 
     if data.revert_pages:
@@ -79,9 +83,7 @@ def build_report(data: ReportData) -> tuple[dict[str, str], list[list[str]]]:
     report_date = datetime.now(KST).strftime("%Y년 %m월 %d일")
     context = _build_context(data, report_date)
 
-    top3_labels = [
-        p.label or p.title for p in data.top_pages[:3]
-    ]
+    top3_labels = [p.label or p.title for p in data.top_pages[:3]]
     top3_list = "\n".join(f"{i+1}. {lbl}" for i, lbl in enumerate(top3_labels))
 
     user_message = f"""{context}

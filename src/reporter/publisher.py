@@ -56,7 +56,11 @@ def _build_top5_embed(data: ReportData, top5_analysis: str) -> dict:
         display = p.label or p.title
         badge = _rank_badge(p.rank_change)
         flag = _wiki_flag(p.server_name)
-        lang = p.server_name.split(".")[0].upper() if "." in p.server_name else p.server_name
+        lang = (
+            p.server_name.split(".")[0].upper()
+            if "." in p.server_name
+            else p.server_name
+        )
 
         # Spike / cross-wiki badges
         signal_parts = []
@@ -124,7 +128,9 @@ def _build_featured_embed(data: ReportData, featured_text: str) -> Optional[dict
                 "inline": False,
             }
         ],
-        "footer": {"text": "Wikipedia · Featured Article of the Day · en.wikipedia.org 선정"},
+        "footer": {
+            "text": "Wikipedia · Featured Article of the Day · en.wikipedia.org 선정"
+        },
     }
     if fa.url:
         embed["url"] = fa.url
