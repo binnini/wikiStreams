@@ -3,6 +3,7 @@ volumes:
   grafana_data: {}
   clickhouse_data: {}
   resource_monitor_data: {}
+  loki_data: {}
 
 services:
   loki:
@@ -12,6 +13,7 @@ services:
       - "3100:3100"
     volumes:
       - ./monitoring/loki-config.yaml:/etc/loki/local-config.yaml
+      - loki_data:/loki
     command: -config.file=/etc/loki/local-config.yaml
     restart: always
 
