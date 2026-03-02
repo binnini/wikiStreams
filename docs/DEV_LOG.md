@@ -619,3 +619,24 @@
     - Docker Compose 기동 → sleep 60 → `tests/integration/` 전체 실행.
 
 - **결과**: PR 피드백 속도 향상, main 머지 시에만 인프라 의존 테스트 실행.
+
+## 2026-03-03
+
+### 1. Loki 데이터 영속화 및 30일 Retention 설정
+
+- **이슈**: `docker compose down` 후 재시작 시 Error Monitor, Producer Performance, Resources Monitor 대시보드의 모든 로그 데이터가 소실됨.
+- **원인**:
+  - `loki-config.yaml`의 `path_prefix`가 `/tmp/loki`로 설정되어, 컨테이너 종료 시 임시 경로의 데이터가 함께 삭제됨.
+  - `docker-compose.yml`의 loki 서비스에 데이터 저장용 named volume이 없어 영속화가 불가능한 구조였음.
+  - ClickHouse(`clickhouse_data`), Grafana(`grafana_data`) 등 다른 서비스는 named volume을 사용하고 있어 재시작 후에도 데이터가 유지됨.
+- **해결**:
+  - `docker-compose.yml`: `loki_data` named volume 추가 + loki 서비스에 `loki_data:/loki` 마운트.
+  - `loki-config.yaml`: `path_prefix` 및 `chunks_directory`, `rules_directory`를 `/tmp/loki` → `/loki`로 변경.
+  - `compactor` + `limits_config` 추가로 30일(720h) retention 설정 — 오래된 로그 자동 삭제로 용량 무한 증가 방지.
+
+### 2. Loki 설정 오류 수정 (`delete_request_store` 누락)
+
+- **이슈**: retention 설정 적용 후 loki 컨테이너가 반복 재시작하며 로그 수집 중단.
+- **원인**: Loki 3.0에서 `retention_enabled: true` 사용 시 `compactor.delete_request_store`를 반드시 명시해야 함. 누락 시 `CONFIG ERROR: invalid compactor config: compactor.delete-request-store should be configured when retention is enabled` 에러로 기동 실패.
+- **해결**: `loki-config.yaml`의 `compactor`에 `delete_request_store: filesystem` 추가.
+- **결과**: `Loki started` 정상 기동 확인. 이후 `docker compose down/up` 사이클에서도 로그 데이터 유지됨.
