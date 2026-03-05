@@ -13,5 +13,8 @@ venv/
 
 docker-sompose.override.yml
 
+# docs
+docs/evaluation_result/
+
 # Reporter output (keep directory structure, ignore actual reports)
 reports/*.json
