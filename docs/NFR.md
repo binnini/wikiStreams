@@ -8,7 +8,7 @@
 
 ## 1. 배경 및 컴포넌트 정의
 
-WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독립적으로 배포·운영되며, Docker Compose 단일 호스트 환경에서 실행된다.
+WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독립적으로 배포·운영되며, Docker Compose 단일 호스트 환경에서 실행된다.
 
 | ID | 컴포넌트 | 역할 | 실행 형태 |
 |----|----------|------|-----------|
@@ -17,6 +17,7 @@ WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | C3 | ClickHouse | 이벤트 저장 및 분석 쿼리 제공 | 상시 실행 |
 | C4 | Reporter | 일일 트렌드 분석 → Discord 발송 | 스케줄 실행 (09:00 KST) |
 | C5 | Grafana | 실시간 대시보드 제공 | 상시 실행 |
+| C6 | S3 Datalake | ClickHouse 이벤트 데이터 오프호스트 백업 저장소 | 스케줄 실행 (전체: 일 1회 / 증분: 시간당 1회) |
 
 ---
 
@@ -31,6 +32,7 @@ WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | Anthropic Claude API | C4 Reporter | 리포트 생성 불가 |
 | Discord Webhook | C4 Reporter | 리포트 발송 불가 |
 | Google News RSS | C4 Reporter | 뉴스 섹션 누락 (부분 발송 가능) |
+| S3 Compatible Storage | C6 Datalake | 백업 저장 불가 → RPO 보장 불가 (파이프라인 동작 자체는 유지) |
 
 ---
 
@@ -49,10 +51,10 @@ WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독
 
 | ID | 대상 | 요구사항 | 근거 |
 |----|------|----------|------|
-| NFR-P1 | C1 Producer | 배치당 처리 완료 시간 ≤ 10초 | `BATCH_TIMEOUT_SECONDS = 10.0` |
-| NFR-P2 | C1 Producer | 배치 크기 500개 이벤트 처리 지원 | `BATCH_SIZE = 500` |
-| NFR-P3 | C3 ClickHouse | Grafana 패널 쿼리 응답 ≤ 10초 (일반 쿼리 기준) | 대시보드 사용성 |
-| NFR-P4 | C4 Reporter | 리포트 전체 생성·발송 완료 ≤ 5분 (Claude API 응답 포함) | 09:00 KST 발송 허용 오차 내 |
+| NFR-P1 | C1 Producer | 배치당 처리 완료 시간 ≤ 5초 (Wikidata 캐시 히트 기준, enrich → Kafka 발행 완료) | 캐시 히트율 정상 시 달성 가능 목표; API 레이턴시 의존 구간은 외부 의존성으로 별도 처리 |
+| NFR-P2 | C1 Producer | 배치 크기 500개 이벤트 처리 지원 | `BATCH_SIZE = 500` (Wikidata API 50개 청크 × 10회 일괄 조회 효율 최적화) |
+| NFR-P3 | C3 ClickHouse | Grafana 패널 쿼리 응답 ≤ 1초 (일반 쿼리 기준) | 대시보드 사용성 |
+| NFR-P4 | C4 Reporter | 리포트 전체 생성·발송 완료 ≤ 30초 (Claude API 응답 포함) | 09:00 KST 발송 허용 오차 내 |
 
 ### 3.3 신뢰성 (Reliability)
 
@@ -67,9 +69,9 @@ WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독
 
 | ID | 대상 | 요구사항 | 근거 |
 |----|------|----------|------|
-| NFR-D1 | C3 ClickHouse | 적재된 최신 이벤트의 타임스탬프가 현재 시각 기준 5분 이내 (정상 수집 중) | 실시간 대시보드 신선도 |
+| NFR-D1 | C3 ClickHouse | 적재된 최신 이벤트의 타임스탬프가 현재 시각 기준 30초 이내 (정상 수집 중) | 실시간 대시보드 신선도 |
 | NFR-D2 | C1 Producer | Wikidata Q-ID 이벤트에 대한 레이블 보강 시도 (캐시 미스 시 API 조회) | 분석 품질 |
-| NFR-D3 | C1 Producer | Wikidata 레이블 캐시 TTL: 정상 엔티티 30일, missing 엔티티 24시간 | `CACHE_TTL_SECONDS`, `CACHE_MISSING_TTL_SECONDS` |
+| NFR-D3 | C1 Producer | Wikidata 레이블 캐시 TTL: 정상 엔티티 30일, missing 엔티티 3시간 | `CACHE_TTL_SECONDS`, `CACHE_MISSING_TTL_SECONDS` |
 
 ### 3.5 복구성 (Recoverability)
 
@@ -78,6 +80,8 @@ WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | NFR-RC1 | 전체 파이프라인 | 단일 컴포넌트 재시작 시 다른 컴포넌트에 영향 없이 독립 복구 | Docker Compose 독립 컨테이너 구조 |
 | NFR-RC2 | C1 Producer | 재시작 후 Kafka 오프셋 기반으로 중단 지점부터 재개 (메시지 중복 허용, 유실 불허) | Kafka 컨슈머 오프셋 |
 | NFR-RC3 | C3 ClickHouse | 컨테이너 재시작 후 데이터 영속성 보장 (볼륨 마운트) | Docker volume 설정 |
+| NFR-RC4 | C6 S3 Datalake | RPO ≤ 1시간: 호스트 전체 장애 시 최대 1시간 분량의 이벤트 데이터 손실 허용 | 시간당 증분 백업 주기 기준 (일 1회 전체 백업 + 시간당 증분, ClickHouse 네이티브 BACKUP 사용) |
+| NFR-RC5 | C3 ClickHouse + C6 | RTO ≤ 30분: S3 백업으로부터 ClickHouse 데이터 복원 및 전체 서비스 재기동 완료 | S3 다운로드 + ClickHouse RESTORE + 컨테이너 재시작 소요 시간 기준 |
 
 ### 3.6 유지보수성 (Maintainability)
 
@@ -95,5 +99,4 @@ WikiStreams는 다음 5개 컴포넌트로 구성된다. 각 컴포넌트는 독
 |------|-----------|
 | 수평 확장 (Scale-out) | 단일 호스트 홈랩 환경, 현재 요구 없음 |
 | 보안 인증/인가 | 로컬 네트워크 한정, 외부 노출 없음 |
-| 데이터 백업·복구 RTO/RPO | 홈랩 특성상 데이터 손실 허용 범위 별도 정의 불필요 |
 | 99.9% 이상 고가용성 | 단일 호스트 구조상 물리적으로 달성 불가 |
