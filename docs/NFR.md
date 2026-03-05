@@ -55,6 +55,9 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | NFR-P2 | C1 Producer | 배치 크기 500개 이벤트 처리 지원 | `BATCH_SIZE = 500` (Wikidata API 50개 청크 × 10회 일괄 조회 효율 최적화) |
 | NFR-P3 | C3 ClickHouse | Grafana 패널 쿼리 응답 ≤ 1초 (일반 쿼리 기준) | 대시보드 사용성 |
 | NFR-P4 | C4 Reporter | 리포트 전체 생성·발송 완료 ≤ 30초 (Claude API 응답 포함) | 09:00 KST 발송 허용 오차 내 |
+| NFR-P5 | C1 Producer | 지속 처리량 ≥ 300 events/min (정상 수집 중) | Wikimedia 평균 편집 속도 기준; 처리량 부족 시 Kafka 레그 누적 |
+| NFR-P6 | C3 ClickHouse | Kafka 컨슈머 레그 ≤ 1,000 messages | Kafka 보존 기간 내 소비 보장; 레그 누적 시 미적재 이벤트 유실 위험 |
+| NFR-P7 | C1 Producer | Wikidata 캐시 히트율 ≥ 80% (정상 운영 기준) | 캐시 히트율 저하 시 Wikidata API 호출 급증 → 배치 처리 지연 (NFR-P1 연동) |
 
 ### 3.3 신뢰성 (Reliability)
 
@@ -64,6 +67,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | NFR-R2 | C2 DLQ Consumer | DLQ 이벤트 최대 3회 재처리 시도 | `DLQ_MAX_RETRIES = 3` |
 | NFR-R3 | C1 Producer | Wikimedia SSE 연결 끊김 시 자동 재연결 (지수 백오프 2s → 60s) | `_RETRY_BASE_DELAY`, `_RETRY_MAX_DELAY` |
 | NFR-R4 | C4 Reporter | Claude API 또는 Discord 실패 시 오류 로그 기록 및 다음 스케줄에 재시도 | 리포트 누락 최소화 |
+| NFR-R5 | C1 Producer + C3 | SSE → ClickHouse 파이프라인 완전성: 이벤트 유실률 ≤ 2% | DLQ 비율(R1)과 별개 — SSE 연결 끊김·ClickHouse 적재 누락 포함한 엔드투엔드 유실 허용 임계 |
 
 ### 3.4 데이터 품질 (Data Quality)
 
@@ -90,6 +94,15 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | NFR-M1 | 전체 | 코드 변경 후 단일 컴포넌트만 재빌드·재시작 가능 | `docker compose build {service} && up -d {service}` |
 | NFR-M2 | 전체 | 모든 컴포넌트 로그는 Loki에 집계되어 Grafana에서 조회 가능 | 운영 가시성 |
 | NFR-M3 | C4 Reporter | 프롬프트 스타일 변경 시 코드 수정 없이 환경변수(`PROMPT_STYLE`)로 전환 가능 | `prompts/__init__.py` 동적 로드 |
+| NFR-M4 | C5 Loki | 로그 보존 기간 ≥ 30일 | SLO 측정 롤링 기간(30일) 확보; 보존 기간 미달 시 SLI 측정 공백 발생 |
+
+### 3.7 용량 (Capacity)
+
+| ID | 대상 | 요구사항 | 근거 |
+|----|------|----------|------|
+| NFR-CAP1 | C3 ClickHouse | 상시 메모리 사용률 ≤ 80% (컨테이너 할당 메모리 기준) | OOM으로 인한 전체 서비스 중단 방지; ClickHouse 메모리 drift 관찰 중 (TODO 참조) |
+| NFR-CAP2 | C1 Producer | 상시 CPU 사용률 ≤ 70% (컨테이너 할당 기준) | CPU 포화 시 배치 처리 지연 → NFR-P1 달성 불가 |
+| NFR-CAP3 | 전체 호스트 | 호스트 디스크 사용률 ≤ 85% (ClickHouse 볼륨 기준) | ClickHouse TTL 90일 데이터 + 로그 누적 여유 확보; 초과 시 ClickHouse 쓰기 중단 |
 
 ---
 
