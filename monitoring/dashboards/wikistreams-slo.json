@@ -199,7 +199,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "Loki" },
-      "description": "SLI-P1 추이: 배치 처리 소요 시간 시계열",
+      "description": "SLI-P1 추이: 배치 처리 소요 시간 5분 이동평균. 목표: ≤ 5s",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -208,7 +208,8 @@
             "fillOpacity": 10,
             "lineInterpolation": "smooth",
             "lineWidth": 2,
-            "spanNulls": true
+            "spanNulls": true,
+            "thresholdsStyle": { "mode": "line" }
           },
           "thresholds": {
             "mode": "absolute",
@@ -217,10 +218,9 @@
               { "color": "red", "value": 5 }
             ]
           },
-          "unit": "s",
-          "custom": {
-            "thresholdsStyle": { "mode": "line" }
-          }
+          "min": 0,
+          "softMax": 5,
+          "unit": "s"
         },
         "overrides": []
       },
@@ -234,21 +234,13 @@
         {
           "datasource": { "type": "loki", "uid": "Loki" },
           "editorMode": "code",
-          "expr": "max_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [$__interval])",
-          "legendFormat": "최대",
+          "expr": "avg(avg_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [5m]))",
+          "legendFormat": "5분 평균",
           "queryType": "range",
           "refId": "A"
-        },
-        {
-          "datasource": { "type": "loki", "uid": "Loki" },
-          "editorMode": "code",
-          "expr": "avg_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [$__interval])",
-          "legendFormat": "평균",
-          "queryType": "range",
-          "refId": "B"
         }
       ],
-      "title": "SLI-P1: 배치 처리 소요 시간 추이",
+      "title": "SLI-P1: 배치 처리 소요 시간 추이 (5분 이동평균)",
       "type": "timeseries"
     },
     {
@@ -378,7 +370,7 @@
     },
     {
       "datasource": { "type": "loki", "uid": "Loki" },
-      "description": "SLI-P2: 배치당 이벤트 수 및 SLI-R5: SSE 수신 이벤트 누적",
+      "description": "SLI-P2: 배치당 이벤트 수 5분 이동평균.",
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -390,7 +382,9 @@
             "spanNulls": true
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
         },
         "overrides": []
       },
@@ -404,13 +398,13 @@
         {
           "datasource": { "type": "loki", "uid": "Loki" },
           "editorMode": "code",
-          "expr": "max_over_time({container=\"producer\"} |= \"batch_size\" | logfmt | unwrap batch_size [$__interval])",
-          "legendFormat": "배치 크기",
+          "expr": "avg(avg_over_time({container=\"producer\"} |= \"batch_size\" | logfmt | unwrap batch_size [5m]))",
+          "legendFormat": "5분 평균",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "SLI-P2: 배치 크기 추이",
+      "title": "SLI-P2: 배치 크기 추이 (5분 이동평균)",
       "type": "timeseries"
     },
     {
@@ -731,6 +725,8 @@
             "spanNulls": true
           },
           "mappings": [],
+          "min": 0,
+          "max": 100,
           "unit": "percent"
         },
         "overrides": []
@@ -745,7 +741,7 @@
         {
           "datasource": { "type": "loki", "uid": "Loki" },
           "editorMode": "code",
-          "expr": "max_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"clickhouse\" | unwrap mem_pct [$__interval])",
+          "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"clickhouse\" | unwrap mem_pct [5m]) by (target_container)",
           "legendFormat": "ClickHouse 메모리",
           "queryType": "range",
           "refId": "A"
@@ -753,7 +749,7 @@
         {
           "datasource": { "type": "loki", "uid": "Loki" },
           "editorMode": "code",
-          "expr": "max_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"producer\" | unwrap cpu_pct [$__interval])",
+          "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"producer\" | unwrap cpu_pct [1m]) by (target_container)",
           "legendFormat": "Producer CPU",
           "queryType": "range",
           "refId": "B"
