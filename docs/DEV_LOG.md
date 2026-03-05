@@ -749,3 +749,46 @@
   - idle timeout 구간 총 소요: **약 79분** (UTC 15:30 ~ 17:06)
   - 재연결 횟수: 19회 (모두 HTTP 200 성공 후 이벤트 없이 60초 대기)
   - 복구 방식: Wikimedia 트래픽 자연 재개 + `Last-Event-ID` 백필로 누락 이벤트 일괄 수신
+
+### 5. SLO 대시보드 그래프 가독성 개선
+
+- **이슈**: SLO Dashboard의 3개 추이 패널(SLI-P1 배치 처리 소요 시간, SLI-P2 배치 크기, SLI-CAP 리소스 사용률)에서 y축 값이 과도하게 파편화되어 그래프 판독 불가.
+
+- **원인 1 — `[$__interval]` 가변 윈도우**: Loki `unwrap` + `max_over_time([$__interval])` 조합에서 패널 크기 대비 시간 범위가 넓을 경우 윈도우가 너무 작아져 단발성 최댓값만 스파이크 형태로 출력됨.
+  - 해결: 모든 추이 패널의 윈도우를 `[5m]` 고정으로 변경.
+
+- **원인 2 — Loki 다중 스트림 레전드 분산**: `avg_over_time({container="producer"} | unwrap value [5m])` 쿼리가 컨테이너 재시작으로 생성된 Loki 스트림 수만큼 시리즈를 반환 → 동일 레이블의 레전드 항목이 수십 개 생성되며 각각 다른 Max/Mean 표시.
+  - 해결: 외부에 `avg()` 집계 래퍼 추가 → `avg(avg_over_time(...[5m]))` — 모든 스트림을 단일 시리즈로 병합.
+
+- **원인 3 — `max` 시리즈 노이즈**: 평균 + 최대 두 시리즈를 동시에 그릴 때 `max`가 순간 스파이크를 증폭시켜 평균선이 바닥에 붙어 판독 불가.
+  - 해결: max 시리즈 제거. 평균 단일 시리즈만 유지.
+
+- **원인 4 — Resources Monitor vs SLO CPU 불일치**: SLI-CAP 패널의 Producer CPU가 Resources Monitor 대시보드 대비 현저히 낮게 표시.
+  - 원인: `avg(avg_over_time(...))` 방식에서 컨테이너 재시작으로 동시에 복수 스트림이 존재하는 경우, `avg()`가 스트림 수로 나누어 값 희석 가능.
+  - Loki API 직접 쿼리로 검증: 두 쿼리의 실제 반환값이 동일(producer 최근 CPU ~1.21%)함을 확인.
+  - 해결: `avg()` 래퍼 제거 후 `avg_over_time(...) by (target_container)` 방식으로 교체 (Resources Monitor 쿼리 패턴과 일치). CPU는 [1m] 윈도우 유지 (메모리는 [5m]).
+  - **결론**: producer CPU는 SSE 수집·Kafka 발행이 I/O 대기 중심이므로 실제로 1–2% 수준이 정상. Resources Monitor에서 높아 보였던 수치는 ClickHouse CPU(6–18%)였음.
+
+### 6. [버그수정] SLI-A2 ClickHouse 쿼리 성공률 항상 ~50% 반환
+
+- **현상**: SLO 대시보드의 SLI-A2 패널(ClickHouse 쿼리 성공률 24h)이 시간이 지나도 값이 변하지 않음.
+
+- **원인**: `system.query_log`는 쿼리당 두 개의 행을 기록:
+  - `QueryStart` — 쿼리 시작 시점
+  - `QueryFinish` / `ExceptionWhileProcessing` / `ExceptionBeforeStart` — 쿼리 완료 시점
+
+  기존 쿼리:
+  ```sql
+  SELECT countIf(type = 'QueryFinish') * 100.0 / count() AS value
+  FROM system.query_log
+  WHERE ... AND query NOT LIKE '%system.query_log%'
+  ```
+  분모에 `QueryStart`(1263건)와 `QueryFinish`(1263건)가 모두 포함 → 성공률 = 1263 / 2527 ≈ **50%** (고정값).
+
+- **해결**: `AND type NOT IN ('QueryStart')` 추가로 분모에서 `QueryStart` 제외.
+  ```sql
+  SELECT countIf(type = 'QueryFinish') * 100.0 / count() AS value
+  FROM system.query_log
+  WHERE ... AND query NOT LIKE '%system.query_log%' AND type NOT IN ('QueryStart')
+  ```
+  수정 후 실제 값: **99.92%** (1289건 성공 / 1290건 완료) — 의미 있는 수치.
