@@ -1,0 +1,777 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "WikiStreams SLI/SLO 현황 대시보드. NFR.md → SLI.md → SLO.md 기반.",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "가용성 (Availability)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "description": "SLI-A2: 24시간 ClickHouse 쿼리 성공률. 목표: ≥ 99%",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 95 },
+              { "color": "green", "value": 99 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+          "format": 1,
+          "rawSql": "SELECT countIf(type = 'QueryFinish') * 100.0 / count() AS value FROM system.query_log WHERE event_time >= now() - INTERVAL 24 HOUR AND query NOT LIKE '%system.query_log%'",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-A2: ClickHouse 쿼리 성공률 (24h) — 목표 ≥ 99%",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-A3: 당일 Reporter 발송 성공 여부. 1=성공, 0=미발송. 목표: 매일 1회",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [
+            { "options": { "0": { "color": "red", "index": 0, "text": "미발송" }, "1": { "color": "green", "index": 1, "text": "발송 완료" } }, "type": "value" }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "count_over_time({container=\"reporter\"} |= \"Publish complete\" [1d])",
+          "legendFormat": "발송 횟수",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-A3: Reporter 일일 발송 성공 — 목표 매일 1회",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-A3: Reporter 발송 이력 (30일)",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "spanNulls": false
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 1 },
+      "id": 3,
+      "options": {
+        "legend": { "calcs": ["count"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "count_over_time({container=\"reporter\"} |= \"Publish complete\" [1d])",
+          "legendFormat": "발송",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-A3: Reporter 발송 이력",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "id": 200,
+      "title": "성능 (Performance)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-P1: 배치 처리 소요 시간 (enrich + Kafka flush). 목표: ≤ 5초 (캐시 히트 기준)",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 10 },
+      "id": 10,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "max_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [5m])",
+          "legendFormat": "최대 처리 시간",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-P1: 배치 처리 소요 시간 (최근 5m) — 목표 ≤ 5s",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-P1 추이: 배치 처리 소요 시간 시계열",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 5 }
+            ]
+          },
+          "unit": "s",
+          "custom": {
+            "thresholdsStyle": { "mode": "line" }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 10 },
+      "id": 11,
+      "options": {
+        "legend": { "calcs": ["max", "mean"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "max_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [$__interval])",
+          "legendFormat": "최대",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "avg_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [$__interval])",
+          "legendFormat": "평균",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "SLI-P1: 배치 처리 소요 시간 추이",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "description": "SLI-P3: ClickHouse 쿼리 응답 p99. 목표: ≤ 1초",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 18 },
+      "id": 12,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+          "format": 1,
+          "rawSql": "SELECT quantile(0.99)(query_duration_ms) / 1000.0 AS value FROM system.query_log WHERE type = 'QueryFinish' AND event_time >= now() - INTERVAL 1 HOUR AND query NOT LIKE '%system.%'",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-P3: 쿼리 응답 p99 (1h) — 목표 ≤ 1s",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "description": "SLI-P5: Producer 처리량. 목표: ≥ 300 events/min",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 200 },
+              { "color": "green", "value": 300 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 18 },
+      "id": 13,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+          "format": 1,
+          "rawSql": "SELECT count() / greatest(dateDiff('minute', min(event_time), max(event_time)), 1) AS value FROM wikimedia.events WHERE event_time >= now() - INTERVAL 5 MINUTE",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-P5: 처리량 events/min (최근 5m) — 목표 ≥ 300",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-P7: Wikidata 캐시 히트율. 목표: ≥ 80%",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "green", "value": 80 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 18 },
+      "id": 14,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "(sum(sum_over_time({container=\"producer\"} |= \"정보 보강 후\" | regexp \"정보 보강 후 (?P<total>\\\\d+)개의 이벤트를 전송했습니다\" | unwrap total [10m])) - sum(sum_over_time({container=\"producer\"} |= \"정보 보강 후\" | regexp \"신규 API 호출: (?P<api>\\\\d+)개\" | unwrap api [10m]))) / sum(sum_over_time({container=\"producer\"} |= \"정보 보강 후\" | regexp \"정보 보강 후 (?P<total>\\\\d+)개의 이벤트를 전송했습니다\" | unwrap total [10m])) * 100",
+          "legendFormat": "캐시 히트율",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-P7: 캐시 히트율 (10m) — 목표 ≥ 80%",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-P2: 배치당 이벤트 수 및 SLI-R5: SSE 수신 이벤트 누적",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 18 },
+      "id": 15,
+      "options": {
+        "legend": { "calcs": ["max", "mean"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "max_over_time({container=\"producer\"} |= \"batch_size\" | logfmt | unwrap batch_size [$__interval])",
+          "legendFormat": "배치 크기",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-P2: 배치 크기 추이",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 26 },
+      "id": 300,
+      "title": "신뢰성 (Reliability)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-R1: DLQ 유입 비율. 목표: ≤ 1%",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "mappings": [],
+          "max": 10,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 27 },
+      "id": 20,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "sum(rate({container=\"producer\"} |= \"DLQ로 라우팅\" | regexp \"(?P<count>\\\\d+)개\" | unwrap count [5m])) / (sum(rate({container=\"producer\"} |= \"으로 전송했습니다\" | regexp \"(?P<count>\\\\d+)개의 이벤트\" | unwrap count [5m])) + sum(rate({container=\"producer\"} |= \"DLQ로 라우팅\" | regexp \"(?P<count>\\\\d+)개\" | unwrap count [5m]))) * 100",
+          "legendFormat": "DLQ 비율",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-R1: DLQ 유입 비율 (5m) — 목표 ≤ 1%",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-R1 추이: DLQ 이벤트 발생 시계열",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60,
+            "lineWidth": 1,
+            "spanNulls": false
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 18, "x": 6, "y": 27 },
+      "id": 21,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "sum(count_over_time({container=\"producer\"} |= \"DLQ로 라우팅\" [$__interval]))",
+          "legendFormat": "DLQ 이벤트",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-R1: DLQ 이벤트 발생 추이",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+      "id": 400,
+      "title": "데이터 품질 (Data Quality)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "description": "SLI-D1: 최신 이벤트 신선도. 목표: ≤ 30초",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 15 },
+              { "color": "red", "value": 30 }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 36 },
+      "id": 30,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+          "format": 1,
+          "rawSql": "SELECT dateDiff('second', max(event_time), now()) AS value FROM wikimedia.events",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-D1: 데이터 신선도 Lag — 목표 ≤ 30s",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "description": "SLI-D2: Q-ID 이벤트 중 wikidata_label 보강 성공 비율. 목표: ≥ 90%",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "green", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 36 },
+      "id": 31,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+          "format": 1,
+          "rawSql": "SELECT countIf(wikidata_label != '') * 100.0 / count() AS value FROM wikimedia.events WHERE event_time >= now() - INTERVAL 24 HOUR AND title LIKE 'Q%'",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-D2: Wikidata 레이블 보강률 (24h) — 목표 ≥ 90%",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "description": "SLI-R5: SSE 수신 이벤트 대비 ClickHouse 적재 이벤트 수 (배치별 비교용 참고 패널)",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 36 },
+      "id": 32,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+          "format": 1,
+          "rawSql": "SELECT count() AS value FROM wikimedia.events WHERE event_time >= now() - INTERVAL 1 HOUR",
+          "refId": "A"
+        }
+      ],
+      "title": "ClickHouse 적재 이벤트 수 (1h)",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 44 },
+      "id": 500,
+      "title": "용량 (Capacity)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-CAP1: ClickHouse 메모리 사용률. 목표: ≤ 80%",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 80 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 45 },
+      "id": 40,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"clickhouse\" | unwrap mem_pct [2m])",
+          "legendFormat": "ClickHouse 메모리",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-CAP1: ClickHouse 메모리 사용률 — 목표 ≤ 80%",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-CAP2: Producer CPU 사용률. 목표: ≤ 70%",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 1,
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 70 }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 45 },
+      "id": 41,
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "text": {}
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"producer\" | unwrap cpu_pct [2m])",
+          "legendFormat": "Producer CPU",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-CAP2: Producer CPU 사용률 — 목표 ≤ 70%",
+      "type": "gauge"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "Loki" },
+      "description": "SLI-CAP1/CAP2: 메모리·CPU 사용률 추이 (30일)",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "mappings": [],
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 45 },
+      "id": 42,
+      "options": {
+        "legend": { "calcs": ["max", "mean"], "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "max_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"clickhouse\" | unwrap mem_pct [$__interval])",
+          "legendFormat": "ClickHouse 메모리",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "Loki" },
+          "editorMode": "code",
+          "expr": "max_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"producer\" | unwrap cpu_pct [$__interval])",
+          "legendFormat": "Producer CPU",
+          "queryType": "range",
+          "refId": "B"
+        }
+      ],
+      "title": "SLI-CAP: 리소스 사용률 추이",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["slo", "sli", "wikistreams"],
+  "templating": { "list": [] },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "Asia/Seoul",
+  "title": "WikiStreams SLO Dashboard",
+  "uid": "wikistreams-slo",
+  "version": 1
+}

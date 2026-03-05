@@ -35,11 +35,15 @@ services:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
       - ./monitoring/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml
+      - ./monitoring/grafana-contact-points.yaml:/etc/grafana/provisioning/alerting/contact-points.yaml
+      - ./monitoring/grafana-notification-policy.yaml:/etc/grafana/provisioning/alerting/notification-policy.yaml
+      - ./monitoring/grafana-alert-rules.yaml:/etc/grafana/provisioning/alerting/alert-rules.yaml
       - ./monitoring/dashboards:/var/lib/grafana/dashboards
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     depends_on:
       - loki
     restart: always

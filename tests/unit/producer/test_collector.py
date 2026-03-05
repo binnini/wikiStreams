@@ -61,7 +61,7 @@ def collector():
         pytest.param(
             "by_timeout",
             sse_timeout,
-            [0.0, 0.2],
+            [0.0, 0.2, 0.2],  # 0.0: 첫 빈 이벤트 체크, 0.2: 두번째 체크(타임아웃), 0.2: logger.info 내부 LogRecord 생성 시 호출
             [event_data_timeout],
             None,
             id="by_timeout",
@@ -95,13 +95,14 @@ def test_collector_scenarios(
 ):
     # --- Arrange ---
     collector_instance, mock_callback = collector
-    collector_instance.last_processed_time = 0.0
 
     mocker.patch("producer.collector.httpx.Client")
     mock_connect_sse = mocker.patch("producer.collector.connect_sse")
     mocker.patch("producer.collector.time.sleep", return_value=None)
 
     if time_side_effect:
+        # by_timeout 시나리오: last_processed_time을 0으로 설정해 타임아웃이 쉽게 발동하도록 함
+        collector_instance.last_processed_time = 0.0
         mocker.patch("producer.collector.time.time", side_effect=time_side_effect)
 
     # 무한 스트림 제너레이터

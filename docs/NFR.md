@@ -75,7 +75,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 |----|------|----------|------|
 | NFR-D1 | C3 ClickHouse | 적재된 최신 이벤트의 타임스탬프가 현재 시각 기준 30초 이내 (정상 수집 중) | 실시간 대시보드 신선도 |
 | NFR-D2 | C1 Producer | Wikidata Q-ID 이벤트에 대한 레이블 보강 시도 (캐시 미스 시 API 조회) | 분석 품질 |
-| NFR-D3 | C1 Producer | Wikidata 레이블 캐시 TTL: 정상 엔티티 30일, missing 엔티티 3시간 | `CACHE_TTL_SECONDS`, `CACHE_MISSING_TTL_SECONDS` |
+| NFR-D3 | C1 Producer | Wikidata 레이블 캐시 TTL: 정상 엔티티 30일, missing 엔티티 24시간 | `CACHE_TTL_SECONDS`, `CACHE_MISSING_TTL_SECONDS` |
 
 ### 3.5 복구성 (Recoverability)
 

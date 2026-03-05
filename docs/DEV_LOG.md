@@ -640,3 +640,112 @@
 - **원인**: Loki 3.0에서 `retention_enabled: true` 사용 시 `compactor.delete_request_store`를 반드시 명시해야 함. 누락 시 `CONFIG ERROR: invalid compactor config: compactor.delete-request-store should be configured when retention is enabled` 에러로 기동 실패.
 - **해결**: `loki-config.yaml`의 `compactor`에 `delete_request_store: filesystem` 추가.
 - **결과**: `Loki started` 정상 기동 확인. 이후 `docker compose down/up` 사이클에서도 로그 데이터 유지됨.
+
+## 2026-03-06
+
+### 1. SLO 수립 로드맵 완료 (Stage 1–3, 5–6)
+
+- **배경**: 운영 품질을 정량적으로 측정하고 관리하기 위한 SLI/SLO/SLA 프레임워크 수립.
+- **작업**:
+  - `docs/NFR.md` + `docs/SRE.md`: 비기능 요구사항 및 SRE 운영 원칙 정의 (Stage 1).
+  - `docs/SLI.md`: 14개 SLI 계측 정의 — 가용성(A), 성능(P), 신뢰성(R), 데이터 품질(D), 용량(CAP), 복구(RC) 6개 카테고리 (Stage 2).
+  - `docs/SLO.md`: 11개 SLO + 에러 버짓 + 측정 방법 + 제외 조건 정의 (Stage 3).
+  - `docs/SLA.md`: 가용성 약속, 위반 처리 절차, 월간 리뷰 주기, 데이터 보존 목표 (Stage 5).
+  - `monitoring/grafana-alert-rules.yaml`: SLI-D1, A3, R1, P7, CAP1, CAP2 6개 알림 규칙 (Stage 6).
+  - `monitoring/grafana-contact-points.yaml`: Discord Webhook 연락처 설정.
+  - `monitoring/grafana-notification-policy.yaml`: 심각도별 라우팅 (critical 1시간 반복, warning 4시간 반복).
+  - `monitoring/dashboards/wikistreams-slo.json`: Grafana SLO 대시보드 — 5개 Row(가용성·성능·신뢰성·데이터 품질·용량), 15개 패널 (Stage 6).
+- **현재 상태**: Stage 4(관측 기간, 1–4주)는 진행 중. SLO 초기값은 관측 데이터 수집 후 확정 예정.
+
+### 2. Producer 침묵 버그 수정 (배치 타임아웃 미발동)
+
+- **이슈**: Producer 컨테이너 재빌드 후에도 배치가 처리되지 않아 ClickHouse에 데이터가 적재되지 않음.
+- **원인**:
+  - 배치 타임아웃 체크가 `if not sse.data:` 분기 내부에 위치 — Wikimedia heartbeat는 SSE comment(`:ok`) 형식이라 `httpx-sse`가 `iter_sse()` 이벤트로 노출하지 않음. 따라서 저트래픽 상황에서 데이터 이벤트가 배치 크기(500)에 도달하기 전까지 타임아웃이 영원히 발동되지 않음.
+- **해결**: 타임아웃 체크를 `for sse in event_source.iter_sse():` 루프 최상단으로 이동. 모든 SSE 이벤트(데이터·비데이터 무관)마다 타임아웃 조건을 평가.
+- **추가 개선**:
+  - `_sse_received_total` 카운터 추가 — 배치 처리 로그에 누적 수신 이벤트 수 표시 (`SLI-R5`).
+  - `_last_event_id` 추적 + 재연결 시 `Last-Event-ID` 헤더 전송 — 재연결 후 서버 백필로 이벤트 손실 최소화.
+  - `main.py`에 `time.perf_counter()` 기반 배치 처리 시간 계측 추가 (`SLI-P1`).
+- **테스트 수정**:
+  - `by_timeout` 시나리오: `time.time()` mock `side_effect`에 3번째 값 추가 (`[0.0, 0.2, 0.2]`) — Python `LogRecord.__init__`가 `time.time()`을 내부적으로 호출하여 side_effect를 소비하는 문제.
+  - `last_processed_time = 0.0` 설정을 `if time_side_effect:` 블록 안으로 이동 — 다른 시나리오에서 초기 타임아웃이 오발동되는 문제 수정.
+
+### 3. Grafana 재시작 불가 수정 (alerting provisioning 환경변수 누락)
+
+- **이슈**: `docker compose up -d` 후 Grafana 컨테이너가 `Restarting (1)` 루프에 빠져 접속 불가.
+- **원인**: `grafana-contact-points.yaml`에서 `${DISCORD_WEBHOOK_URL}`을 참조하나, Grafana 컨테이너 환경변수에 해당 값이 주입되지 않아 provisioning 단계에서 hard fail.
+- **해결**: `docker-compose.yml` Grafana 서비스 `environment`에 `DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}` 추가.
+- **교훈**: Grafana provisioning YAML의 `${VAR}` 치환은 Grafana 프로세스의 환경변수를 참조. `.env`에 정의된 변수라도 해당 컨테이너의 `environment` 섹션에 명시적으로 전달해야 함.
+
+### 4. [트러블슈팅] Wikimedia SSE Rate Limit으로 인한 28분 데이터 유실
+
+- **현상**: Producer가 Wikimedia EventStreams에 연결했으나 이벤트를 전혀 수신하지 못하는 상태가 반복됨. 약 60초 간격으로 아래 에러와 함께 재연결:
+  ```
+  peer closed connection without sending complete message body (incomplete chunked read)
+  ```
+  1주일 넘게 운영하면서 한 번도 발생하지 않은 현상이었음.
+
+- **원인 분석**: 처음에는 **클라이언트 IP의 동시 연결 과다로 인한 rate limit**으로 추정했으나 실제 원인은 **Wikimedia 백엔드 서버에서의 모든 유저 Write 권한 박탈**로 밝혀졌다.
+
+  진단 세션 중 동일 호스트 IP에서 열린 연결:
+  1. 운영 중인 producer 컨테이너 (상시 연결)
+  2. 진단 목적 curl 명령어 (호스트에서 직접 SSE 접속 시도)
+  3. Python 스크립트 테스트 (추가 연결)
+  4. 이전 코드의 고정 10초 재시도 루프 (분당 6회 재연결 시도)
+
+  실제로 curl 테스트 중 HTTP 응답에서 **"Too Many Concurrent Connections From Your Client IP"** 메시지가 확인됨. Wikimedia가 IP당 동시 연결 수를 제한하고 있었음.
+
+- **rate limit 동작 메커니즘**:
+  ```
+  동시 연결 수 초과
+    → Wikimedia: HTTP 200으로 연결은 수락 (차단이 아닌 soft-ban)
+    → 이벤트 전송 없이 연결만 유지
+    → 60초 후 서버 측에서 연결 강제 종료
+    → Producer 재연결 시도 → 또 rate limit → 루프 반복
+  ```
+
+- **`Last-Event-ID`와의 관계**: 이번에 추가한 `Last-Event-ID` 기능은 rate limit 문제를 해결하지 않음. 일반적인 짧은 재연결(네트워크 순단 등) 시 서버가 백필을 제공하여 이벤트 손실을 최소화하는 기능. rate limit 상태에서는 서버가 데이터를 보내지 않으므로 무효.
+
+- **[후속] 두 번째 발생 — 원인은 rate limit이 아닌 Wikimedia idle timeout (정상 동작)**:
+
+  같은 날 UTC 16:46 이후 동일한 60초 끊김 패턴이 재발. 이번에는 추가 연결이 전혀 없었음. 핸드폰 LTE(완전히 다른 IP)로 Wikimedia EventStreams에 직접 접속해보니 `:ok` heartbeat만 수신되고 이벤트 데이터가 전혀 오지 않음.
+
+  **결론**: Wikimedia 서버는 보낼 이벤트가 없을 때 `:ok` SSE comment만 전송하며, 약 60초 idle 후 연결을 강제 종료. 이는 모든 클라이언트에 동일하게 적용되는 서버 측 정상 동작.
+            이후 phabricator.wikimedia.org 에서 확인 결과, 해당 시간대에 세션 하이재킹 공격이 있었고 이로 인해 피해를 입어 보안상의 목적으로 쓰기 권한을 박탈했던 것이었다.
+
+  **전체 타임라인 (UTC 기준, KST = UTC+9)**:
+
+  ```
+  15:30:00  연결 끊김
+
+  16:37:24  ✅ Producer 시작, Wikimedia SSE 연결 (00:30 KST)
+  16:37:58
+  ~ 16:45:31  정상 운영 (2~3 events/batch, sse_received_total=85)
+  16:40:48  첫 끊김 → 16:40:52 재연결, 즉시 이벤트 수신 재개 (정상)
+  16:44:16  두번째 끊김 → 16:44:20 재연결, 즉시 이벤트 수신 재개 (정상)
+
+  ── idle timeout 구간 시작 (01:46 KST) ──────────────────────────
+  16:46:31  ❌ → 16:46:34 재연결, 이벤트 0개
+  16:47:34  ❌ → 16:47:37 재연결, 이벤트 0개
+  16:48:37  ❌ → 16:48:40 재연결, 이벤트 0개
+  16:49:24  ❌ → 16:49:27 재연결, 이벤트 0개
+  16:50:27  ❌ → 16:50:30 재연결, 이벤트 0개
+  16:51:30  ❌ → 16:51:33 재연결, 이벤트 0개
+  16:52:36  재연결 → 이벤트 3개 수신 (total=86,87,88) — 일시적 트래픽
+  16:54:36
+  ~ 17:05:42  ❌ 60초 idle timeout 루프 11회 반복, 이벤트 0개
+
+  ── 복구 (02:06 KST) ────────────────────────────────────────────
+  17:05:45  재연결
+  17:06:00  sse_received_total=89 (이벤트 수신 재개 신호)
+  17:06:10  Last-Event-ID 백필 시작: batch_size=48  (total=137)
+  17:06:21  batch_size=107 (total=244)
+  17:06:31  batch_size=133 (total=377)
+  17:06:42  batch_size=96  (total=473)
+  ...이후 100~170 events/batch 속도로 79분치 누락 이벤트 순차 수신
+  ```
+
+  - idle timeout 구간 총 소요: **약 79분** (UTC 15:30 ~ 17:06)
+  - 재연결 횟수: 19회 (모두 HTTP 200 성공 후 이벤트 없이 60초 대기)
+  - 복구 방식: Wikimedia 트래픽 자연 재개 + `Last-Event-ID` 백필로 누락 이벤트 일괄 수신

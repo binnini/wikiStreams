@@ -1,0 +1,243 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: WikiStreams SLO Alerts
+    folder: WikiStreams SLO
+    interval: 1m
+    rules:
+
+      # SLI-D1: 데이터 신선도 lag > 30초
+      - uid: slo-d1-freshness-lag
+        title: "[SLI-D1] 데이터 신선도 lag > 30초"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ClickHouse
+            model:
+              format: 1
+              rawSql: "SELECT dateDiff('second', max(event_time), now()) AS value FROM wikimedia.events"
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [30], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "WikiStreams 데이터 신선도 SLO 위반"
+          description: "ClickHouse 최신 이벤트 lag이 30초를 초과했습니다. Producer 또는 Kafka→ClickHouse 연결 확인 필요."
+        labels:
+          sli: SLI-D1
+          severity: warning
+          service: wikistreams
+
+      # SLI-A3: 당일 09:00~10:00 KST 내 Reporter 발송 없음
+      - uid: slo-a3-reporter-missing
+        title: "[SLI-A3] Reporter 일일 발송 누락 감지"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 3600, to: 0 }
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: 'count_over_time({container="reporter"} |= "Publish complete" [1h])'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [1], type: lt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: Alerting
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "WikiStreams Reporter 발송 누락"
+          description: "지난 1시간 내 Reporter 발송 완료 로그가 없습니다. 09:00~10:00 KST 시간대에만 의미 있는 알림입니다."
+        labels:
+          sli: SLI-A3
+          severity: warning
+          service: wikistreams
+
+      # SLI-R1: DLQ 비율 > 1%
+      - uid: slo-r1-dlq-ratio
+        title: "[SLI-R1] DLQ 유입 비율 > 1%"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: 'count_over_time({container="producer"} |= "DLQ로 라우팅" [5m])'
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: 'count_over_time({container="producer"} |= "으로 전송했습니다" [5m])'
+              queryType: instant
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              expression: "$A / ($A + $B) * 100"
+              type: math
+              refId: C
+          - refId: D
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [1], type: gt }
+                  operator: { type: and }
+                  query: { params: [C] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: C
+              refId: D
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 3m
+        annotations:
+          summary: "WikiStreams DLQ 유입 비율 SLO 위반"
+          description: "최근 5분간 DLQ 유입 비율이 1%를 초과했습니다. 이벤트 유실 또는 스키마 오류 급증 가능성."
+        labels:
+          sli: SLI-R1
+          severity: warning
+          service: wikistreams
+
+      # SLI-P7: 캐시 히트율 < 80% 지속
+      - uid: slo-p7-cache-hit
+        title: "[SLI-P7] Wikidata 캐시 히트율 < 80%"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 1800, to: 0 }
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: '(sum(sum_over_time({container="producer"} |= "정보 보강 후" | regexp "정보 보강 후 (?P<total>\\d+)개의 이벤트를 전송했습니다" | unwrap total [10m])) - sum(sum_over_time({container="producer"} |= "정보 보강 후" | regexp "신규 API 호출: (?P<api>\\d+)개" | unwrap api [10m]))) / sum(sum_over_time({container="producer"} |= "정보 보강 후" | regexp "정보 보강 후 (?P<total>\\d+)개의 이벤트를 전송했습니다" | unwrap total [10m])) * 100'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [80], type: lt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "WikiStreams 캐시 히트율 SLO 위반"
+          description: "Wikidata 캐시 히트율이 80% 미만으로 지속되고 있습니다. Wikidata API 호출 급증으로 배치 처리 지연 가능성."
+        labels:
+          sli: SLI-P7
+          severity: warning
+          service: wikistreams
+
+      # SLI-CAP1: ClickHouse 메모리 > 80%
+      - uid: slo-cap1-ch-memory
+        title: "[SLI-CAP1] ClickHouse 메모리 사용률 > 80%"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: 'last_over_time({container="resource-monitor"} |= "DockerStats" | logfmt | target_container="clickhouse" | unwrap mem_pct [5m])'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [80], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 5m
+        annotations:
+          summary: "WikiStreams ClickHouse 메모리 용량 경고"
+          description: "ClickHouse 컨테이너 메모리 사용률이 80%를 초과했습니다. OOM 위험. OPTIMIZE TABLE 또는 메모리 설정 검토 필요."
+        labels:
+          sli: SLI-CAP1
+          severity: critical
+          service: wikistreams
+
+      # SLI-CAP2: Producer CPU > 70% 지속
+      - uid: slo-cap2-producer-cpu
+        title: "[SLI-CAP2] Producer CPU 사용률 > 70%"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: Loki
+            model:
+              editorMode: code
+              expr: 'last_over_time({container="resource-monitor"} |= "DockerStats" | logfmt | target_container="producer" | unwrap cpu_pct [5m])'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [70], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 10m
+        annotations:
+          summary: "WikiStreams Producer CPU 과부하 경고"
+          description: "Producer 컨테이너 CPU 사용률이 70%를 초과하여 지속되고 있습니다. 배치 처리 지연 위험."
+        labels:
+          sli: SLI-CAP2
+          severity: warning
+          service: wikistreams

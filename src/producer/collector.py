@@ -24,12 +24,20 @@ class WikimediaCollector:
         self.event_buffer = []
         self.last_processed_time = time.time()
         self.callback = None
+        self._sse_received_total = 0  # SLI-R5: SSE 수신 이벤트 누적 카운터
+        self._last_event_id: str | None = None  # Last-Event-ID: 재연결 시 중단 지점부터 재개
 
     def set_callback(self, callback_func):
         self.callback = callback_func
 
     def _process_buffer(self):
         if self.event_buffer and self.callback:
+            batch_size = len(self.event_buffer)
+            logger.info(
+                "batch_size=%d sse_received_total=%d",
+                batch_size,
+                self._sse_received_total,
+            )
             try:
                 # 버퍼의 복사본을 콜백에 전달합니다.
                 self.callback(self.event_buffer[:])
@@ -42,6 +50,8 @@ class WikimediaCollector:
         while True:
             try:
                 headers = {"User-Agent": "wikiStreams-project/0.3"}
+                if self._last_event_id:
+                    headers["Last-Event-ID"] = self._last_event_id
                 with httpx.Client(timeout=None, headers=headers) as client:
                     with connect_sse(client, "GET", WIKIMEDIA_URL) as event_source:
                         logger.info(
@@ -49,17 +59,24 @@ class WikimediaCollector:
                         )
                         retry_delay = _RETRY_BASE_DELAY  # 연결 성공 시 초기화
                         for sse in event_source.iter_sse():
+                            # 타임아웃 체크: 빈 이벤트(heartbeat)에만 의존하지 않고 매 이벤트마다 수행
+                            # Wikimedia heartbeat는 SSE comment 형식이라 httpx-sse가 노출하지 않으므로
+                            # 빈 이벤트에만 의존하면 저트래픽 시 timeout이 영원히 발동되지 않음
+                            if self.event_buffer and (
+                                time.time() - self.last_processed_time
+                                >= self.batch_timeout_seconds
+                            ):
+                                self._process_buffer()
+
                             if not sse.data:
-                                if self.event_buffer and (
-                                    time.time() - self.last_processed_time
-                                    >= self.batch_timeout_seconds
-                                ):
-                                    self._process_buffer()
                                 continue
 
                             try:
                                 event_data = json.loads(sse.data)
                                 self.event_buffer.append(event_data)
+                                self._sse_received_total += 1
+                                if sse.id:
+                                    self._last_event_id = sse.id
                             except json.JSONDecodeError:
                                 logger.warning(
                                     "⚠️ 잘못된 JSON 데이터를 건너뜀: %s", sse.data

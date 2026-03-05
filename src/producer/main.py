@@ -1,5 +1,6 @@
 import logging
 import threading
+import time
 
 from pydantic import ValidationError
 
@@ -30,6 +31,9 @@ def run_producer():
     )
 
     def process_batch(events: list):
+        t0 = time.perf_counter()
+        batch_size = len(events)
+
         valid_events = []
         for event in events:
             try:
@@ -41,6 +45,14 @@ def run_producer():
 
         enriched_events = enricher.enrich_events(valid_events)
         sender.send_events(enriched_events)
+
+        elapsed = time.perf_counter() - t0
+        logging.info(
+            "batch_processing_seconds=%.3f batch_size=%d valid=%d",
+            elapsed,
+            batch_size,
+            len(valid_events),
+        )
 
     collector = WikimediaCollector(settings.batch_size, settings.batch_timeout_seconds)
     collector.set_callback(process_batch)
