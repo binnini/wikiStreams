@@ -63,7 +63,7 @@
         {
           "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
           "format": 1,
-          "rawSql": "SELECT countIf(type = 'QueryFinish') * 100.0 / count() AS value FROM system.query_log WHERE event_time >= now() - INTERVAL 24 HOUR AND query NOT LIKE '%system.query_log%'",
+          "rawSql": "SELECT countIf(type = 'QueryFinish') * 100.0 / count() AS value FROM system.query_log WHERE event_time >= now() - INTERVAL 24 HOUR AND query NOT LIKE '%system.query_log%' AND type NOT IN ('QueryStart')",
           "refId": "A"
         }
       ],
