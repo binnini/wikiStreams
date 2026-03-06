@@ -69,12 +69,11 @@
     - `src/dlq_consumer/`, 관련 테스트 제거
     - 절감: ~27 MiB
 
-  - [ ] **2단계: Kafka → Redis Streams 전환** *(핵심 경량화, t4g.medium 전제 조건)*
+  - [ ] **2단계: Kafka → Redpanda 전환** *(핵심 경량화, t4g.medium 전제 조건)*
     - 절감: ~1,184 MiB → 전환 후 예상 총 메모리 ~3,125 MiB (t4g.medium 76%)
-    - `sender.py`: Kafka producer → Redis Streams `XADD` 로 교체
-    - `clickhouse/init-db.sql`: Kafka 테이블 엔진 제거 → Python consumer가 Redis `XREAD` 후 ClickHouse HTTP INSERT
-    - `docker-compose.yml`: `kafka-kraft` 제거, `redis` 추가
-    - SQLite Wikidata 캐시 → Redis로 통합 가능 (선택)
+    - **선택 이유**: Kafka API 완전 호환 → `docker-compose.yml` 이미지 한 줄 교체만으로 완료. Producer/ClickHouse Kafka 엔진/DLQ Consumer 코드 변경 없음.
+    - **Redis Streams 대비**: Redis는 sender.py·ClickHouse Kafka 엔진·DLQ 전면 재작성 필요. 150 MiB 추가 절감보다 코드 변경 리스크가 큼.
+    - `docker-compose.yml`: `kafka-kraft` → `redpandadata/redpanda` 이미지 교체
     - 완료 후 SLI-P1·P2·P5·D1 재측정, 경량화 전후 수치 비교 기록
 
   - [ ] **3단계: ClickHouse → DuckDB 전환** *(t4g.small 목표 시)*
@@ -110,10 +109,10 @@
   - 처리량(Throughput) 및 10초 타임아웃 의존도 개선 기대
 
 
-- [ ] **SQLite 캐시를 Redis로 교체**
+- [ ] **SQLite 캐시를 공유 캐시로 교체**
   - 현재 SQLite는 단일 프로세스에서만 유효 (Producer scale-out 불가)
-  - `docker-compose.yml`에 Redis 서비스 추가 필요 (Superset 제거로 기존 Redis도 제거됨)
-  - 여러 Producer 인스턴스가 캐시를 공유하게 되어 API 중복 호출 제거
+  - 2단계(Kafka → Redpanda)에서 Redis를 도입하지 않으므로, scale-out이 필요해지는 시점에 재검토
+  - 대안: Redpanda 전환 완료 후 Redis를 캐시 전용으로 별도 추가하거나, DuckDB 전환 시 DuckDB 내 캐시 테이블로 통합
 
 
 
