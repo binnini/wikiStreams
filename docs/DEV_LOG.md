@@ -792,3 +792,58 @@
   WHERE ... AND query NOT LIKE '%system.query_log%' AND type NOT IN ('QueryStart')
   ```
   수정 후 실제 값: **99.92%** (1289건 성공 / 1290건 완료) — 의미 있는 수치.
+### 7. SLI 측정 검증 및 대시보드 쿼리 버그 수정
+
+- **배경**: SLO 관측 기간 진입 전 전체 SLI 자동 측정 항목의 실제 동작 여부를 일괄 검증.
+
+- **SLI-R1 DLQ 유입 비율 — 필터 불일치 버그**
+  - **원인**: 대시보드 쿼리 필터가 `"DLQ로 라우팅"`이었으나, 실제 발생하는 로그는 `"DLQ로 이벤트 라우팅:"` (sender.py:69) 및 `"DLQ로 격리:"` (main.py:43). 두 문자열 모두 `"DLQ로 라우팅"`을 포함하지 않아 항상 No data.
+  - **해결**: 필터를 `"DLQ로 이벤트 라우팅"`으로 변경. 게이지 쿼리도 `rate + unwrap` 방식에서 `count_over_time / sum_over_time` 방식으로 교체 (스키마 검증 실패는 이벤트당 1줄 로그로, 숫자 추출이 불가능한 구조).
+  - **추가**: DLQ 이벤트 없는 구간에서 게이지가 "No data" 대신 `0%`를 표시하도록 `noValue: "0"` 설정.
+
+- **SLI-P5 처리량 — 대시보드 쿼리 누락**
+  - **원인**: 대시보드 SLI-P5 패널의 `expr` 필드가 빈 문자열.
+  - **해결**: `sum(rate({container="producer"} |= "으로 전송했습니다" | regexp "(?P<count>[0-9]+)개의 이벤트" | unwrap count [5m])) * 60` 추가. 현재값: **1,063 events/min** (목표 ≥ 300 달성).
+
+- **SLI-CAP3 전체 메모리 합산 — 쿼리 중복 합산 버그**
+  - **원인**: `sum(last_over_time(...| unwrap mem_mb [1m]))` 쿼리가 logfmt 파싱 필드(cpu_pct, mem_pct, block_io_mb 등)를 모두 레이블로 취급, 동일 컨테이너의 10초 간격 샘플 4개를 각각 다른 시리즈로 분류 → 14,841 MB (실제 ~3,900 MB의 약 4배).
+  - **해결**: `sum(avg by (target_container) (last_over_time(...)))` 로 교체. `avg by (target_container)`가 컨테이너당 하나의 값으로 축약 후 합산.
+  - 수정 후 값: **~3,014 MB** (docker stats 합산 ~3,909 MiB와 근사 일치).
+
+- **검증 결과 요약** (자동 측정 11개):
+
+  | SLI | 현재값 | 목표 | 상태 |
+  |-----|--------|------|------|
+  | SLI-A2 ClickHouse 가용성 | 99.83% | ≥ 99% | ✅ |
+  | SLI-A3 Reporter 발송 | 1회/일 | 1회/일 | ✅ |
+  | SLI-P1 배치 처리 시간 | 0.67s | ≤ 5s | ✅ |
+  | SLI-P2 배치 크기 | 211개 | ≤ 500개 | ✅ |
+  | SLI-P3 쿼리 응답 p99 | 0.043s | ≤ 1s | ✅ |
+  | SLI-P5 처리량 | 1,063 events/min | ≥ 300 | ✅ |
+  | SLI-P7 캐시 히트율 | 93% | ≥ 80% | ✅ |
+  | SLI-R1 DLQ 비율 | 0% (정상 구간) | ≤ 1% | ✅ |
+  | SLI-CAP1 CH 메모리 | 20.93% | ≤ 80% | ✅ |
+  | SLI-CAP2 Producer CPU | 0.69% | ≤ 70% | ✅ |
+  | SLI-CAP3 전체 메모리 | 3,014 MB | 관측 중 | ✅ |
+
+### 8. SLI/NFR 정리 및 아키텍처 경량화 로드맵 수립
+
+- **SLI-P6 (Kafka 컨슈머 레그) 제거**
+  - 18 msg/sec 처리량에서 ClickHouse Kafka 엔진이 offset을 즉시 커밋하여 lag가 항상 0.
+  - `kafka-lag-monitor` 서비스(30초 폴링, confluentinc/cp-kafka 이미지 재사용)를 구현하고 실측했으나 항상 0 확인 → 서비스 제거, 대시보드 패널 제거, NFR-P6/SLI-P6 문서 삭제.
+  - SLI-D1(데이터 신선도)이 실질적으로 동일한 정보를 제공.
+
+- **SLI-CAP3 교체** (디스크 사용률 → 전체 컨테이너 합산 메모리)
+  - 기존 SLI-CAP3(호스트 디스크 사용률)은 node-exporter 없이 측정 불가로 제거.
+  - 신규 SLI-CAP3: `resource-monitor`의 컨테이너별 `mem_mb` 합산 → 별도 인프라 추가 없이 즉시 측정 가능.
+  - NFR-CAP3 목표: "전체 컨테이너 합산 메모리를 Grafana에서 실시간 관측 가능".
+
+- **아키텍처 경량화 로드맵 수립** (TODO.md 구체화)
+  - 배경: 컨테이너 합산 ~3,909 MiB + OS ~400 MiB = ~4,309 MiB → t4g.medium(4 GiB) 초과.
+  - 4단계 로드맵 수립:
+    1. DLQ Consumer 제거 (~27 MiB, 리스크 없음)
+    2. Kafka → Redis Streams 전환 (~1,184 MiB 절감 → t4g.medium 76%)
+    3. ClickHouse → DuckDB 전환 (~1,882 MiB 절감 → t4g.small 60%)
+    4. Loki + Alloy 제거 (~288 MiB 절감, SLO 대시보드 전면 재작성 필요)
+  - 각 단계 완료 후 SLI 재측정 → Trade-Off 수치화 원칙 명시.
+  - 전제 조건: SLO 관측 기간(4단계) 완료 후 baseline 확보.
