@@ -60,7 +60,6 @@ count_over_time({container="reporter"} |= "Publish complete" [1d])
 | SLI-P3 | NFR-P3 | ClickHouse 쿼리 응답 시간 | 쿼리 실행 시간 p99 (초) | ClickHouse `system.query_log` | 자동 측정 |
 | SLI-P4 | NFR-P4 | Reporter 파이프라인 소요 시간 | "Starting report build" ~ "Publish complete" 로그 간 초 | Loki | 수동 측정 |
 | SLI-P5 | NFR-P5 | Producer 지속 처리량 | 단위 시간당 Kafka 발행 이벤트 수 (events/min) | Grafana (기존 패널) | 자동 측정 |
-| SLI-P6 | NFR-P6 | Kafka 컨슈머 레그 | ClickHouse Kafka 컨슈머 미소비 메시지 수 (messages) | — | **계측 불가** |
 | SLI-P7 | NFR-P7 | Wikidata 캐시 히트율 | 전체 Wikidata 조회 중 캐시에서 응답한 비율 (%) | Grafana (기존 패널) | 자동 측정 |
 
 **SLI-P1 측정 방법 (Loki)**
@@ -107,10 +106,6 @@ FROM wikimedia.events
 WHERE event_time >= now() - INTERVAL 5 MINUTE
 ```
 Grafana Producer Performance 대시보드 `Events/Min` 패널과 동일 지표. 이미 자동 집계 중.
-
-**SLI-P6 계측 공백**
-
-ClickHouse Kafka 엔진의 컨슈머 레그는 Kafka JMX(포트 9101 노출 중) 또는 `kafka-consumer-groups.sh`로 조회 가능하나, 현재 Grafana에 연동되지 않음. JMX Exporter 또는 별도 polling 스크립트 추가 필요.
 
 **SLI-P7 측정 방법 (Grafana)**
 
@@ -220,15 +215,17 @@ FROM wikimedia.events
 |--------|----------|-----------|--------|-----------|------|
 | SLI-CAP1 | NFR-CAP1 | ClickHouse 메모리 사용률 | 컨테이너 메모리 사용률 (%) | Grafana (resource-monitor) | 자동 측정 |
 | SLI-CAP2 | NFR-CAP2 | Producer CPU 사용률 | 컨테이너 CPU 사용률 (%) | Grafana (resource-monitor) | 자동 측정 |
-| SLI-CAP3 | NFR-CAP3 | 호스트 디스크 사용률 | ClickHouse 볼륨 마운트 경로 디스크 사용률 (%) | — | **계측 불가** |
+| SLI-CAP3 | NFR-CAP3 | 전체 컨테이너 합산 메모리 사용량 | 전체 컨테이너 `mem_mb` 합계 (MB) | Grafana (resource-monitor) | 자동 측정 |
 
 **SLI-CAP1, SLI-CAP2 측정 방법 (Grafana)**
 
 `resource-monitor` 서비스가 10초 간격으로 `mem_pct`, `cpu_pct`를 수집하여 Loki에 구조화 로그로 기록. Grafana Resources 대시보드에서 실시간 확인 및 이상 감지(z-score > 2.5) 알림 연동.
 
-**SLI-CAP3 계측 공백**
-
-`resource-monitor`는 컨테이너 레벨(CPU/메모리/블록 I/O)만 수집하며, 호스트 디스크 사용률은 추적하지 않음. `node-exporter` 추가 또는 `df -h` 기반 polling 스크립트로 보강 필요.
+**SLI-CAP3 측정 쿼리 (Loki)**
+```logql
+sum(avg by (target_container) (last_over_time({container="resource-monitor"} |= "DockerStats" | logfmt | unwrap mem_mb [1m])))
+```
+`avg by (target_container)`로 컨테이너당 1개 시리즈로 축소 후 합산. logfmt이 cpu_pct·mem_pct 등 변동 필드를 레이블로 취급해 동일 컨테이너의 샘플이 여러 시리즈로 분리되는 문제를 방지. 컨테이너 추가·제거 시 자동 반영.
 
 ---
 
@@ -239,9 +236,7 @@ FROM wikimedia.events
 | SLI-P1 | NFR-P1 | **완료** (2026-03-06) | `batch_processing_seconds` logfmt 로그 추가 |
 | SLI-P2 | NFR-P2 | **완료** (2026-03-06) | `batch_size` logfmt 로그 추가 |
 | SLI-R5 | NFR-R5 | **부분 완료** (2026-03-06) | `sse_received_total` 추가, ClickHouse 대조 기준 관측 중 |
-| SLI-P6 | NFR-P6 | **미완료** | Kafka JMX Exporter 또는 `kafka-consumer-groups.sh` polling → Grafana 연동 필요 |
+| SLI-CAP3 | NFR-CAP3 | **완료** (2026-03-06) | `resource-monitor` `mem_mb` 합산 Loki 쿼리로 측정 가능 |
 | SLI-RC4 | NFR-RC4 | **미완료** | S3 백업 구현 후 백업 완료 타임스탬프 로그 기록 |
 | SLI-RC5 | NFR-RC5 | **미완료** | 복원 runbook 실행 시 소요 시간 수동 기록 체계 마련 |
-| SLI-CAP3 | NFR-CAP3 | **미완료** | `node-exporter` 추가 또는 `df -h` 기반 polling 스크립트 필요 |
-
 미완료 SLI는 **SLO 범위에서 제외**하며, 보강 완료 후 다음 리뷰 주기에 SLO 포함 여부를 결정합니다.
