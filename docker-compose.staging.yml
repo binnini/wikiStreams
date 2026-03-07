@@ -1,0 +1,81 @@
+# Staging stack for architecture validation (Redpanda replacing Kafka)
+#
+# Run with:
+#   docker compose -f docker-compose.staging.yml -p wikistreams-staging up -d
+#
+# Stop with:
+#   docker compose -f docker-compose.staging.yml -p wikistreams-staging down
+#
+# Ports (production → staging):
+#   Kafka/Redpanda : 9092  → 19092
+#   ClickHouse HTTP: 8123  → 18123
+#   ClickHouse TCP : 9000  → 19000
+#
+# SLI 비교:
+#   운영 ClickHouse : http://localhost:8123
+#   스테이징 ClickHouse: http://localhost:18123
+#   로그(Loki)      : production alloy가 producer-staging 컨테이너 로그도 수집
+#                    → 운영 Grafana에서 {container_name="producer-staging"} 필터로 분리 가능
+
+volumes:
+  producer_cache: {}
+  clickhouse_data: {}
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --mode dev-container
+      - --smp 1
+      - --memory 512M
+    ports:
+      - "19092:19092"
+    restart: always
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    container_name: clickhouse-staging
+    ports:
+      - "18123:8123"
+      - "19000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse/init-db-staging.sql:/docker-entrypoint-initdb.d/init-db.sql
+      - ./clickhouse/override-users.xml:/etc/clickhouse-server/users.d/override-users.xml
+    depends_on:
+      - redpanda
+    restart: always
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
+  producer:
+    build: ./src/producer
+    container_name: producer-staging
+    volumes:
+      - producer_cache:/cache
+    depends_on:
+      - redpanda
+    restart: on-failure
+    environment:
+      KAFKA_BROKER: 'redpanda:9092'
+      KAFKA_TOPIC: 'wikimedia.recentchange'
+      KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
+
+  dlq-consumer:
+    build: ./src/dlq_consumer
+    container_name: dlq-consumer-staging
+    depends_on:
+      - redpanda
+    restart: on-failure
+    environment:
+      KAFKA_BROKER: 'redpanda:9092'
+      KAFKA_TOPIC: 'wikimedia.recentchange'
+      KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
+      DLQ_MAX_RETRIES: '3'

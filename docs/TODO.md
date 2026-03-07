@@ -75,6 +75,10 @@
     - **Redis Streams 대비**: Redis는 sender.py·ClickHouse Kafka 엔진·DLQ 전면 재작성 필요. 150 MiB 추가 절감보다 코드 변경 리스크가 큼.
     - `docker-compose.yml`: `kafka-kraft` → `redpandadata/redpanda` 이미지 교체
     - 완료 후 SLI-P1·P2·P5·D1 재측정, 경량화 전후 수치 비교 기록
+    - **진행 중 (2026-03-07)**: 스테이징 환경 구축 완료 (`feat/arch-lightening` 브랜치)
+      - `docker-compose.staging.yml` + `clickhouse/init-db-staging.sql` 작성
+      - 운영(Kafka)과 스테이징(Redpanda)이 동일 Wikimedia 스트림을 동시 구독 중 (섀도우 테스트)
+      - SLO 4단계 관측 기간 완료 후 SLI 수치 비교 → 운영 전환 결정
 
   - [ ] **3단계: ClickHouse → DuckDB 전환** *(t4g.small 목표 시)*
     - 절감: ~1,882 MiB → 전환 후 예상 총 메모리 ~1,243 MiB (t4g.small 60%)

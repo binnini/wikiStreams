@@ -842,8 +842,41 @@
   - 배경: 컨테이너 합산 ~3,909 MiB + OS ~400 MiB = ~4,309 MiB → t4g.medium(4 GiB) 초과.
   - 4단계 로드맵 수립:
     1. DLQ Consumer 제거 (~27 MiB, 리스크 없음)
-    2. Kafka → Redis Streams 전환 (~1,184 MiB 절감 → t4g.medium 76%)
+    2. Kafka → Redpanda 전환 (~1,184 MiB 절감 → t4g.medium 76%)
     3. ClickHouse → DuckDB 전환 (~1,882 MiB 절감 → t4g.small 60%)
     4. Loki + Alloy 제거 (~288 MiB 절감, SLO 대시보드 전면 재작성 필요)
   - 각 단계 완료 후 SLI 재측정 → Trade-Off 수치화 원칙 명시.
   - 전제 조건: SLO 관측 기간(4단계) 완료 후 baseline 확보.
+
+## 2026-03-07
+
+### 1. 아키텍처 경량화 스테이징 환경 구축 (Kafka → Redpanda 섀도우 테스트)
+
+- **배경**
+  - 아키텍처 경량화 작업(Kafka → Redpanda)을 진행하는 동안 SLO 4단계 관측 기간이 진행 중.
+  - 운영 파이프라인(SLI 수집)을 중단하지 않고 개발·검증을 병행하는 방법이 필요.
+
+- **결정: 섀도우 테스트(Shadow Testing) 방식**
+  - 동일한 Wikimedia SSE 스트림을 운영·스테이징 두 스택이 각각 독립 구독.
+  - 동일 시간대 데이터에 대해 SLI를 나란히 수집 → 순차 before/after 비교가 아닌 **동시 A/B 비교** 가능.
+  - 로컬 맥미니 16GB 환경이므로 병렬 스택 실행에 메모리 제약 없음.
+
+- **구현**
+  - 브랜치: `feat/arch-lightening`
+  - `docker-compose.staging.yml` 신규 작성 (기존 compose와 독립 standalone 파일)
+    - `kafka-kraft` → `redpanda` (Redpanda Kafka API 호환 이미지)
+    - 포트 오프셋: Kafka 19092 / ClickHouse HTTP 18123 / ClickHouse TCP 19000
+    - `-p wikistreams-staging` 프로젝트 격리 → 볼륨·네트워크 자동 분리
+  - `clickhouse/init-db-staging.sql` 신규 작성
+    - `kafka_broker_list = 'redpanda:9092'` (init-db.sql의 `kafka-kraft:29092` 대체)
+    - 나머지 스키마는 운영과 동일 유지
+
+- **기동 결과**
+  - `docker compose -f docker-compose.staging.yml -p wikistreams-staging up -d` 로 4개 컨테이너 정상 기동
+    - `redpanda`, `clickhouse-staging`, `producer-staging`, `dlq-consumer-staging`
+  - 기동 15초 후 스테이징 ClickHouse에 424개 이벤트 적재 확인
+  - `producer-staging` 배치 처리 시간: 0.697s ~ 0.748s (batch_size 238~260)
+
+- **SLI 비교 방법**
+  - ClickHouse 기반 SLI (P5 처리량, D1 신선도, D2 보강률): 운영 `:8123` vs 스테이징 `:18123` 직접 쿼리
+  - 로그 기반 SLI (P1 배치 처리, P2 배치 크기): 운영 alloy가 `producer-staging` 컨테이너 로그도 자동 수집 → 운영 Grafana에서 `{container_name="producer-staging"}` 필터로 분리
