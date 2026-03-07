@@ -1,0 +1,66 @@
+# 3단계 스테이징: ClickHouse → QuestDB 검증
+#
+# 목적: 2단계 스테이징(docker-compose.staging.yml)과 동시 운영하여
+#       "Redpanda + ClickHouse" vs "Redpanda + QuestDB" SLI 격리 비교
+#
+# 실행:
+#   docker compose -f docker-compose.staging3.yml -p wikistreams-staging3 up -d
+#
+# 중지:
+#   docker compose -f docker-compose.staging3.yml -p wikistreams-staging3 down
+#
+# Redpanda 공유:
+#   - 2단계 스테이징의 Redpanda(localhost:19092)를 host.docker.internal:19092로 접근
+#   - questdb-consumer가 별도 consumer group(questdb-consumer)으로 독립 구독
+#   - ClickHouse-staging(2단계)의 SLI 수집에 영향 없음
+#
+# 포트 (2단계 스테이징과 충돌 없음):
+#   QuestDB REST API   : 29000  (내부 9000)
+#   QuestDB PG wire    : 28812  (내부 8812)
+#   QuestDB Web Console: 29000  (REST API와 동일)
+#
+# SLI 비교 대상:
+#   P3 쿼리 응답 p99  : ClickHouse(18123) vs QuestDB(29000)
+#   D1 데이터 신선도   : SELECT max(timestamp) FROM wikimedia_events (QuestDB)
+#   메모리             : docker stats questdb-staging vs clickhouse-staging
+
+volumes:
+  questdb_data: {}
+
+networks:
+  # 2단계 스테이징 네트워크 참조: questdb-consumer가 redpanda:9092 (내부 주소)로 직접 접근
+  wikistreams-staging_default:
+    external: true
+
+services:
+  questdb:
+    image: questdb/questdb:8.2.1
+    container_name: questdb-staging
+    ports:
+      - "29000:9000"   # REST API + Web Console
+      - "28812:8812"   # PostgreSQL wire protocol (Grafana 연결)
+      # ILP(9009)는 내부 전용 — 외부 노출 불필요
+    volumes:
+      - questdb_data:/var/lib/questdb
+    environment:
+      QDB_CAIRO_MAX_UNCOMMITTED_ROWS: "1000"
+      QDB_LINE_TCP_MAINTENANCE_JOB_INTERVAL: "5000"
+    restart: always
+  questdb-consumer:
+    build: ./src/questdb_consumer
+    container_name: questdb-consumer-staging
+    depends_on:
+      - questdb
+    restart: on-failure
+    environment:
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_TOPIC: "wikimedia.recentchange"
+      KAFKA_GROUP_ID: "questdb-consumer"
+      QUESTDB_HOST: "questdb-staging"
+      QUESTDB_ILP_PORT: "9009"
+      BATCH_SIZE: "500"
+      BATCH_TIMEOUT_MS: "5000"
+      LOG_LEVEL: "INFO"
+    networks:
+      - default                        # questdb-staging:9009 접근용
+      - wikistreams-staging_default    # redpanda:9092 접근용
