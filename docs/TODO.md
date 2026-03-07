@@ -39,8 +39,9 @@
     - [x] `docker-compose.yml`에 alerting 프로비저닝 볼륨 마운트 추가
     - [ ] 에러 버짓 소진률 75% 초과 시 Discord 경고 *(Grafana 계산 패널로 구현 필요)*
 
-  - [ ] **4단계: 관측 기간 (1~4주)** *(2026-03-06 시작)*
-    - [ ] SLI별 baseline 수집 (SLI-D1, SLI-P3는 1~2주 / SLI-A3, SLI-R1은 2~4주)
+  - [ ] **4단계: 관측 기간 (1~4주)** *(2026-03-06 시작, 진행 중)*
+    - [x] SLI 1차 실측 baseline 확보 (39시간, 2026-03-07 리뷰) — SLO 목표 재조정 완료
+    - [ ] SLI별 충분한 baseline 수집 (SLI-D1·P3 1~2주 / SLI-A3·R1 2~4주)
     - [ ] 시간대별·요일별 패턴 파악 (특히 SLI-P5: 심야 UTC 처리량 저하 확인)
     - [ ] 이상 구간 원인 분석 및 기록
 
@@ -54,7 +55,7 @@
     - [x] 월간 리포팅 주기 및 SLO 재조정 주기 명시
 
 
-- [ ] **아키텍처 경량화**
+- [ ] **아키텍처 경량화** *(진행 중)*
   - **배경**: 현재 컨테이너 합산 메모리 ~3,909 MiB + OS ~400 MiB = ~4,309 MiB로 t4g.medium(4 GiB) 초과.
   - **목표**: AWS t3.small(2 GiB) 마이그레이션. Kafka→Redpanda(-802 MiB) + ClickHouse→QuestDB(-1,750 MiB) 로 달성.
   - **원칙**: 단계별 완료 후 SLI 재측정 → Trade-Off 수치화 → 다음 단계 진행.
@@ -63,22 +64,27 @@
     - 관측 기간 중 수집한 SLI baseline을 경량화 전 기준값으로 사용
     - 경량화 후 동일 SLI를 재측정하여 성능 회귀 여부 확인
 
-  - [ ] **1단계: DLQ Consumer 제거** *(리스크 없음)*
-    - 18 msg/sec 처리량에서 재처리 가치 없음 (스키마 검증 실패는 코드 수정으로 해결)
-    - `docker-compose.yml`에서 `dlq-consumer` 서비스 제거
-    - `src/dlq_consumer/`, 관련 테스트 제거
+  - [x] **1단계: DLQ Consumer 제거** *(2026-03-07 스테이징 완료, 운영 전환 보류)*
+    - 18 msg/sec 처리량에서 재처리 가치 없음 — log/canary 이벤트가 DLQ의 유일한 원인으로 확인
+    - [x] `docker-compose.staging.yml`에서 `dlq-consumer` 서비스 제거 완료
+    - [x] `src/producer/main.py`에 `_should_skip()` 사전 필터 추가 (log 타입·canary 도메인 드롭)
+    - [x] 단위 테스트 5개 추가, DLQ 토픽 near-zero 확인
+    - [ ] 운영 `docker-compose.yml` 반영 — 2단계 운영 전환 시 함께 적용 예정
     - 절감: ~27 MiB
 
   - [ ] **2단계: Kafka → Redpanda 전환** *(핵심 경량화, t4g.medium 전제 조건)*
-    - 절감: ~1,184 MiB → 전환 후 예상 총 메모리 ~3,125 MiB (t4g.medium 76%)
-    - **선택 이유**: Kafka API 완전 호환 → `docker-compose.yml` 이미지 한 줄 교체만으로 완료. Producer/ClickHouse Kafka 엔진/DLQ Consumer 코드 변경 없음.
-    - **Redis Streams 대비**: Redis는 sender.py·ClickHouse Kafka 엔진·DLQ 전면 재작성 필요. 150 MiB 추가 절감보다 코드 변경 리스크가 큼.
-    - `docker-compose.yml`: `kafka-kraft` → `redpandadata/redpanda` 이미지 교체
-    - 완료 후 SLI-P1·P2·P5·D1 재측정, 경량화 전후 수치 비교 기록
-    - **진행 중 (2026-03-07)**: 스테이징 환경 구축 완료 (`feat/arch-lightening` 브랜치)
-      - `docker-compose.staging.yml` + `clickhouse/init-db-staging.sql` 작성
-      - 운영(Kafka)과 스테이징(Redpanda)이 동일 Wikimedia 스트림을 동시 구독 중 (섀도우 테스트)
-      - SLO 4단계 관측 기간 완료 후 SLI 수치 비교 → 운영 전환 결정
+    - 절감: ~802 MiB → 전환 후 예상 총 메모리 ~3,214 MiB (t4g.medium 78%)
+    - **선택 이유**: Kafka API 완전 호환 → `docker-compose.yml` 이미지 한 줄 교체만으로 완료. Producer·ClickHouse Kafka 엔진 코드 변경 없음.
+    - **스테이징 현황** *(2026-03-07 시작, 섀도우 테스트 진행 중)*:
+      - [x] `docker-compose.staging.yml` + `clickhouse/init-db-staging.sql` 작성
+      - [x] 운영(Kafka)과 스테이징(Redpanda) 동시 구독 — A/B 비교 가능
+      - [x] Redpanda 메모리 실측: **399 MiB** (Kafka 1,151 MiB 대비 -65%) ✅
+      - [x] 스테이징 SLI 초기 실측: P1 0.74s ✅ / D1 5s ✅ / P5 정상
+      - [ ] **Go/No-Go 리뷰** — 7일 관측 후 (~2026-03-14) §8.3 조건 최종 확인
+    - **운영 전환 작업** (Go 판정 후):
+      - `docker-compose.yml`: `kafka-kraft` → `redpandadata/redpanda` 이미지 교체
+      - `dlq-consumer` 서비스 제거 (1단계 합산)
+      - 완료 후 SLI-P1·P2·P5·D1 재측정, 경량화 전후 수치 비교 기록
 
   - [ ] **3단계: ClickHouse → QuestDB 전환** *(t3.small 목표의 핵심 단계)* **진행 중 (2026-03-07)**
     - 절감: ~1,750 MiB → 전환 후 예상 총 메모리 ~1,464 MiB (t3.small 72% ✅)
@@ -99,7 +105,7 @@
       - `src/reporter/fetcher.py`: `_query()` 엔드포인트 + SQL 번역 패치 (ClickHouse → QuestDB)
     - 완료 후 SLI-P3(쿼리 응답시간) 재측정, ClickHouse 대비 성능 비교 기록
 
-  - [ ] **4단계: Loki + Alloy 제거** *(3단계 완료 후 검토)*
+  - [ ] **4단계: Loki + Alloy 제거** *(3단계 운영 전환 완료 후 검토)*
     - SLO 대시보드 SLI 대부분이 Loki 기반 → 제거 시 측정 방식 전면 교체 필요
     - 대안: 구조화 로그를 QuestDB 로그 테이블에 직접 INSERT → Grafana HTTP 쿼리
     - 또는 SLI 측정 기준을 QuestDB 적재 데이터만으로 재설계
