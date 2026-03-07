@@ -956,4 +956,29 @@
   - `test_process_batch_log_events_silently_dropped` — DLQ 미전송 확인.
   - `test_process_batch_canary_events_silently_dropped` — DLQ 미전송 확인.
   - 전체 10/10 통과.
+
+### 4. 3단계 DB 교체 대상: ClickHouse → QuestDB 선택
+
+- **배경**: 아키텍처 경량화 3단계(ClickHouse 교체) 진입 전 DB 옵션 검토.
+- **검토 후보**: DuckDB, QuestDB, TimescaleDB, chDB(ClickHouse 임베디드).
+
+- **핵심 비교 기준**:
+  - 메모리 절감 목표 달성 여부 (< 500 MiB)
+  - Kafka 연동 방식 (내장 vs 별도 Consumer 개발)
+  - Grafana 연동 (기존 플러그인 재사용 vs 신규 개발)
+  - 홈랩 유지보수 부담
+
+- **DuckDB 탈락 이유**:
+  - Kafka 연동 없음 → 별도 Consumer 서비스 직접 개발 필요
+  - HTTP API 없음 → FastAPI 래퍼 직접 개발 필요
+  - 신규 코드 2개 추가 = 유지보수 포인트 증가
+
+- **QuestDB 선택 이유**:
+  - Kafka 내장 연동 (설정 파일만 작성, 별도 Consumer 불필요)
+  - Grafana PostgreSQL 와이어 프로토콜 지원 (플러그인 추가 불필요)
+  - HTTP API 내장 → FastAPI 래퍼 불필요
+  - 예상 메모리: ~300~400 MiB (ClickHouse 2,048 MiB 대비 ~-1,750 MiB)
+  - 2단계(Redpanda) + 3단계(QuestDB) 완료 시 ~1,464 MiB → t3.small(2 GiB) 72% ✅
+
+- **문서 업데이트**: TODO.md 3단계, SLO.md §8.2·§8.4 전면 교체.
   - 3단계(ClickHouse→DuckDB) 예고 SLO 기준도 사전 정의.

@@ -289,10 +289,10 @@
 | 기준 | Kafka 기반 운영 스택 | — | ~4,043 MiB | 197% ❌ | 기준값 |
 | **1단계** | **DLQ Consumer 제거** | **-27 MiB** | **~4,016 MiB** | **196% ❌** | **✅ 완료 (2026-03-07, 스테이징)** |
 | **2단계** | **Kafka → Redpanda 전환** | **-802 MiB** | **~3,214 MiB** | **157% ❌** | **스테이징 검증 중** |
-| 3단계 | ClickHouse → DuckDB 전환 | ~-1,882 MiB | ~1,332 MiB | 65% ✅ | 대기 |
-| 4단계 | Loki + Alloy 제거 | ~-288 MiB | ~1,044 MiB | 51% ✅ | 대기 |
+| 3단계 | ClickHouse → QuestDB 전환 | ~-1,750 MiB | ~1,464 MiB | 72% ✅ | 대기 |
+| 4단계 | Loki + Alloy 제거 | ~-288 MiB | ~1,176 MiB | 57% ✅ | 대기 |
 
-> Redpanda 전환(2단계) 단독으로는 t3.small 충족 불가. 3단계(ClickHouse → DuckDB)까지 완료해야 2 GiB 이내 진입.
+> Redpanda 전환(2단계) 단독으로는 t3.small 충족 불가. 3단계(ClickHouse → QuestDB)까지 완료해야 2 GiB 이내 진입.
 
 ---
 
@@ -329,16 +329,36 @@ Redpanda 운영 전환은 아래 조건을 모두 충족해야 한다:
 
 ---
 
-### 8.4 3단계 예고: ClickHouse → DuckDB 트레이드오프 SLO
+### 8.4 3단계 예고: ClickHouse → QuestDB 트레이드오프 SLO
 
 3단계 완료 후 아래 기준으로 SLO를 재평가한다.
-DuckDB는 in-process 라이브러리이므로 쿼리 응답 특성이 다를 수 있다.
 
-| SLI | ClickHouse 기준 (현재 SLO) | DuckDB 검증 목표 |
+**선택 근거** (2026-03-07 결정):
+- QuestDB는 Kafka 내장 연동 + Grafana PostgreSQL 와이어 프로토콜 지원으로 신규 서비스 개발 불필요
+- DuckDB 대비 약 100~200 MiB 더 사용하지만, Consumer + HTTP 래퍼 개발·유지 비용 제거
+- 시계열 OLAP에 특화된 `SAMPLE BY` 등 TSDB 전용 문법 활용 가능
+
+**변경 범위**:
+- `docker-compose.yml`: `clickhouse` → `questdb` 이미지 교체
+- QuestDB Kafka 연동 설정 파일 작성 (Kafka 엔진 설정 → 선언형 YAML)
+- Grafana 데이터소스: ClickHouse 플러그인 → PostgreSQL (포트 8812)
+- 대시보드 쿼리 마이그레이션: ClickHouse 전용 함수 → ANSI SQL / QuestDB 함수
+
+**SLO 재평가 기준**:
+
+| SLI | ClickHouse 기준 (현재 SLO) | QuestDB 검증 목표 |
 |-----|--------------------------|-----------------|
-| P3 쿼리 응답 p99 | 36ms (실측) / **≤ 200ms (SLO)** | ≤ 500ms (회귀 허용) |
-| CAP1 메모리 사용률 | p95=26.22% (~3,661 MiB) | ≤ 30% of 2 GiB (≤ 600 MiB) |
-| ClickHouse 스택 메모리 | ~2,169 MiB | DuckDB ≤ 300 MiB (목표) |
+| P3 쿼리 응답 p99 | 36ms (실측) / **≤ 200ms (SLO)** | ≤ 500ms (회귀 허용 — TSDB 특성 다름) |
+| CAP1 메모리 사용률 | p95=26.22% (~2,048 MiB) | QuestDB ≤ 400 MiB (목표) |
+| D1 데이터 신선도 lag | 6s (실측) | ≤ 15s (Kafka 내장 연동 배치 주기) |
+| Grafana 패널 렌더링 | 전체 정상 | 전체 정상 (쿼리 마이그레이션 검증) |
+
+**Go/No-Go 조건** (스테이징 7일 이상 관측):
+- [ ] SLI-P3 p99 ≤ 500ms
+- [ ] SLI-D1 lag ≤ 15s
+- [ ] QuestDB 메모리 ≤ 400 MiB
+- [ ] Grafana 대시보드 전체 패널 정상 렌더링
+- [ ] Reporter 일일 발송 정상 동작
 
 ---
 
@@ -368,6 +388,6 @@ DuckDB는 in-process 라이브러리이므로 쿼리 응답 특성이 다를 수
 | Stage 4 관측 (진행 중) | 1~4주 관측. SLO 대시보드 + 스테이징(Redpanda) 동시 수집 | 진행 중 (~2026-04-06) |
 | 2단계 Go/No-Go 리뷰 | 스테이징 7일 이상 관측 후 §8.3 진행 조건 충족 여부 확인 | 관측 완료 후 |
 | Redpanda 운영 전환 | Go 판정 시 kafka-kraft → redpanda 이미지 교체 후 SLI 재측정 | 2단계 리뷰 후 |
-| 3단계 검토 | ClickHouse → DuckDB. §8.4 기준으로 SLO 재평가 | Redpanda 전환 후 |
+| 3단계 검토 | ClickHouse → QuestDB. §8.4 기준으로 SLO 재평가 | Redpanda 전환 후 |
 | SLO 최종 확정 | t3.small 마이그레이션 완료 후 새 아키텍처 기반으로 SLO 재설정 | 3~4단계 완료 후 |
 | SLA.md 확정 | SLO 기반 책임 범위 및 위반 처리 최종화 | SLO 확정 후 |

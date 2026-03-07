@@ -56,7 +56,7 @@
 
 - [ ] **아키텍처 경량화**
   - **배경**: 현재 컨테이너 합산 메모리 ~3,909 MiB + OS ~400 MiB = ~4,309 MiB로 t4g.medium(4 GiB) 초과.
-  - **목표**: AWS t4g.medium(4 GiB) → Kafka 제거만으로 달성. t4g.small(2 GiB) → ClickHouse → DuckDB 전환까지 필요.
+  - **목표**: AWS t3.small(2 GiB) 마이그레이션. Kafka→Redpanda(-802 MiB) + ClickHouse→QuestDB(-1,750 MiB) 로 달성.
   - **원칙**: 단계별 완료 후 SLI 재측정 → Trade-Off 수치화 → 다음 단계 진행.
 
   - [ ] **전제: SLO 수립 로드맵 4단계(관측 기간) 완료**
@@ -80,18 +80,25 @@
       - 운영(Kafka)과 스테이징(Redpanda)이 동일 Wikimedia 스트림을 동시 구독 중 (섀도우 테스트)
       - SLO 4단계 관측 기간 완료 후 SLI 수치 비교 → 운영 전환 결정
 
-  - [ ] **3단계: ClickHouse → DuckDB 전환** *(t4g.small 목표 시)*
-    - 절감: ~1,882 MiB → 전환 후 예상 총 메모리 ~1,243 MiB (t4g.small 60%)
-    - DuckDB는 in-process 라이브러리 → Grafana 연동용 FastAPI HTTP 래퍼 작성 필요
-    - ClickHouse Kafka 테이블 엔진 제거 (2단계 완료 후 가능)
-    - Grafana 데이터소스 교체: `grafana-clickhouse-datasource` → HTTP 데이터소스 또는 DuckDB 플러그인
-    - 전체 대시보드 쿼리 재작성 필요 (SQL 방언 차이)
+  - [ ] **3단계: ClickHouse → QuestDB 전환** *(t3.small 목표의 핵심 단계)*
+    - 절감: ~1,750 MiB → 전환 후 예상 총 메모리 ~1,464 MiB (t3.small 72% ✅)
+    - **선택 이유**: DuckDB 대비 QuestDB 채택 (2026-03-07 결정)
+      - Kafka 내장 연동: 별도 Consumer 서비스 개발 불필요
+      - Grafana PostgreSQL 와이어 프로토콜 지원: 플러그인 추가 없이 연동
+      - HTTP API 내장: FastAPI 래퍼 개발 불필요
+      - DuckDB는 Consumer 서비스 + HTTP 래퍼 = 신규 코드 2개 필요 → 홈랩 유지보수 부담
+    - **개발 범위**:
+      - `docker-compose.yml`: `clickhouse` → `questdb` 이미지 교체
+      - QuestDB Kafka 연동 설정 파일 작성 (`questdb-kafka.yaml`)
+      - Grafana 데이터소스 교체: ClickHouse 플러그인 → PostgreSQL (포트 8812)
+      - 대시보드 쿼리 마이그레이션: TSDB 함수 차이 패치 (`toYYYYMM` → `strftime` 등)
+    - **스테이징 검증**: `docker-compose.staging.yml`에 QuestDB 추가 후 ClickHouse와 병렬 비교
     - 완료 후 SLI-P3(쿼리 응답시간) 재측정, ClickHouse 대비 성능 비교 기록
 
   - [ ] **4단계: Loki + Alloy 제거** *(3단계 완료 후 검토)*
     - SLO 대시보드 SLI 대부분이 Loki 기반 → 제거 시 측정 방식 전면 교체 필요
-    - 대안: 구조화 로그를 DuckDB 로그 테이블에 직접 INSERT → Grafana HTTP 쿼리
-    - 또는 SLI 측정 기준을 ClickHouse(DuckDB) 적재 데이터만으로 재설계
+    - 대안: 구조화 로그를 QuestDB 로그 테이블에 직접 INSERT → Grafana HTTP 쿼리
+    - 또는 SLI 측정 기준을 QuestDB 적재 데이터만으로 재설계
     - 절감: ~288 MiB (loki + alloy)
 
 
@@ -116,7 +123,7 @@
 - [ ] **SQLite 캐시를 공유 캐시로 교체**
   - 현재 SQLite는 단일 프로세스에서만 유효 (Producer scale-out 불가)
   - 2단계(Kafka → Redpanda)에서 Redis를 도입하지 않으므로, scale-out이 필요해지는 시점에 재검토
-  - 대안: Redpanda 전환 완료 후 Redis를 캐시 전용으로 별도 추가하거나, DuckDB 전환 시 DuckDB 내 캐시 테이블로 통합
+  - 대안: Redpanda 전환 완료 후 Redis를 캐시 전용으로 별도 추가하거나, QuestDB 전환 시 SQLite 캐시 유지 (Producer 전용이므로 영향 없음)
 
 
 
