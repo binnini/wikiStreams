@@ -138,3 +138,65 @@ def test_process_batch_mixed_valid_and_invalid(mock_dependencies):
     enricher_instance.enrich_events.assert_called_once_with([valid_event])
     sender_instance.send_to_dlq.assert_called_once()
     sender_instance.send_events.assert_called_once_with([valid_event])
+
+
+# --- _should_skip() 단위 테스트 ---
+
+def test_should_skip_log_type_event():
+    """type=log 이벤트는 조용히 버려진다."""
+    assert main._should_skip({"type": "log", "meta": {"domain": "en.wikipedia.org"}}) is True
+
+
+def test_should_skip_canary_domain_event():
+    """domain=canary 이벤트는 조용히 버려진다."""
+    assert main._should_skip({"type": "edit", "meta": {"domain": "canary"}}) is True
+
+
+def test_should_not_skip_normal_edit_event():
+    """정상 edit 이벤트는 skip되지 않는다."""
+    assert main._should_skip({"type": "edit", "meta": {"domain": "en.wikipedia.org"}}) is False
+
+
+def test_should_not_skip_new_event():
+    """type=new 이벤트는 skip되지 않는다."""
+    assert main._should_skip({"type": "new", "meta": {"domain": "ko.wikipedia.org"}}) is False
+
+
+def test_process_batch_log_events_silently_dropped(mock_dependencies):
+    """type=log 이벤트는 DLQ로 보내지 않고 조용히 버려진다."""
+    main.run_producer()
+
+    collector_instance = mock_dependencies["Collector"].return_value
+    args, _ = collector_instance.set_callback.call_args
+    process_batch_callback = args[0]
+
+    log_event = {"type": "log", "meta": {"domain": "en.wikipedia.org"}}
+
+    enricher_instance = mock_dependencies["Enricher"].return_value
+    enricher_instance.enrich_events.return_value = []
+    sender_instance = mock_dependencies["Sender"].return_value
+
+    process_batch_callback([log_event])
+
+    sender_instance.send_to_dlq.assert_not_called()
+    enricher_instance.enrich_events.assert_called_once_with([])
+
+
+def test_process_batch_canary_events_silently_dropped(mock_dependencies):
+    """domain=canary 이벤트는 DLQ로 보내지 않고 조용히 버려진다."""
+    main.run_producer()
+
+    collector_instance = mock_dependencies["Collector"].return_value
+    args, _ = collector_instance.set_callback.call_args
+    process_batch_callback = args[0]
+
+    canary_event = {"type": "edit", "meta": {"domain": "canary"}}
+
+    enricher_instance = mock_dependencies["Enricher"].return_value
+    enricher_instance.enrich_events.return_value = []
+    sender_instance = mock_dependencies["Sender"].return_value
+
+    process_batch_callback([canary_event])
+
+    sender_instance.send_to_dlq.assert_not_called()
+    enricher_instance.enrich_events.assert_called_once_with([])

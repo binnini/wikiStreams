@@ -19,6 +19,19 @@ logging.basicConfig(
 )
 
 
+_SKIP_EVENT_TYPES = {"log"}  # 관리 이벤트(삭제, visibility 변경 등) — user 필드 없음
+_SKIP_DOMAINS = {"canary"}  # Wikimedia 스트림 헬스체크용 테스트 이벤트
+
+
+def _should_skip(event: dict) -> bool:
+    """DLQ 라우팅 없이 조용히 버려야 할 이벤트 여부를 판단한다."""
+    if event.get("type") in _SKIP_EVENT_TYPES:
+        return True
+    if event.get("meta", {}).get("domain") in _SKIP_DOMAINS:
+        return True
+    return False
+
+
 def run_producer():
     """
     메인 프로듀서 함수: SSE 스트림에 연결하고 마이크로 배치로 메시지를 처리합니다.
@@ -36,6 +49,13 @@ def run_producer():
 
         valid_events = []
         for event in events:
+            if _should_skip(event):
+                logging.debug(
+                    "⏭️ 이벤트 skip: type=%s domain=%s",
+                    event.get("type"),
+                    event.get("meta", {}).get("domain"),
+                )
+                continue
             try:
                 WikimediaEvent.model_validate(event)
                 valid_events.append(event)

@@ -928,4 +928,32 @@
   - t3.small (2 GiB) 달성을 위한 4단계 로드맵 및 단계별 누적 메모리 투영 기록.
   - 2단계(Kafka→Redpanda) Go/No-Go 조건 명시: P1 p95 ≤ 2.0s, P5 p5 ≥ 800/min, D1 ≤ 15s, 브로커 메모리 ≤ 500 MiB.
   - 스테이징 현재 실측: P1 0.69~0.75s ✅, D1 13s ✅, 브로커 메모리 372 MiB ✅.
+
+### 3. DLQ Consumer 제거 (1단계 경량화) + Producer 이벤트 필터 개선
+
+- **DLQ 토픽 원인 분석**
+  - DLQ Consumer 로그에서 `retry_count=0` 재시도가 ~40~60분 간격으로 발생 중.
+  - DLQ 토픽 직접 조회 결과: 모든 이벤트가 구조적으로 복구 불가능한 두 유형.
+    1. `type=log`: Wikimedia 관리 이벤트 (삭제, visibility 변경 등) — `user` 필드 없음 → Pydantic 검증 실패.
+    2. `domain=canary`: Wikimedia 스트림 헬스체크 이벤트 — 실제 편집 아님.
+  - DLQ Consumer가 재시도해도 동일 실패 반복 → **제로 가치**.
+
+- **결정 1: DLQ Consumer 제거** (staging 1단계 경량화)
+  - `docker-compose.staging.yml`에서 `dlq-consumer` 서비스 제거.
+  - 절감: ~27 MiB.
+  - 리스크 대응: DLQ 토픽은 유지 (audit trail). `rpk topic consume` 명령으로 backlog 모니터링.
+
+- **결정 2: Producer 이벤트 필터 추가** (`src/producer/main.py`)
+  - `log`-타입 및 `canary`-도메인 이벤트를 Pydantic 검증 **이전에** 조용히 드롭.
+  - 기존: 검증 실패 → DLQ 전송 (불필요한 DLQ 오염).
+  - 변경: `_should_skip()` 함수로 사전 필터링 → `continue` (DLQ 전송 없음).
+  - 기대 효과: DLQ 토픽 backlog가 near-zero로 감소.
+
+- **테스트 추가** (`tests/unit/producer/test_main.py`)
+  - `test_should_skip_log_type_event` — log 타입 이벤트 skip 확인.
+  - `test_should_skip_canary_domain_event` — canary 도메인 이벤트 skip 확인.
+  - `test_should_not_skip_normal_edit_event` — 정상 edit 이벤트 통과 확인.
+  - `test_process_batch_log_events_silently_dropped` — DLQ 미전송 확인.
+  - `test_process_batch_canary_events_silently_dropped` — DLQ 미전송 확인.
+  - 전체 10/10 통과.
   - 3단계(ClickHouse→DuckDB) 예고 SLO 기준도 사전 정의.
