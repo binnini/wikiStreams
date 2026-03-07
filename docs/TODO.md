@@ -105,11 +105,32 @@
       - `src/reporter/fetcher.py`: `_query()` 엔드포인트 + SQL 번역 패치 (ClickHouse → QuestDB)
     - 완료 후 SLI-P3(쿼리 응답시간) 재측정, ClickHouse 대비 성능 비교 기록
 
-  - [ ] **4단계: Loki + Alloy 제거** *(3단계 운영 전환 완료 후 검토)*
-    - SLO 대시보드 SLI 대부분이 Loki 기반 → 제거 시 측정 방식 전면 교체 필요
-    - 대안: 구조화 로그를 QuestDB 로그 테이블에 직접 INSERT → Grafana HTTP 쿼리
-    - 또는 SLI 측정 기준을 QuestDB 적재 데이터만으로 재설계
-    - 절감: ~288 MiB (loki + alloy)
+  - [ ] **4단계: Loki/Alloy 경량화** *(3단계 운영 전환 완료 후 옵션 선택)*
+    - **배경**: Loki(253 MiB) + Alloy(104 MiB) = 357 MiB. 대시보드 41개 Loki 쿼리 중 25개가
+      `unwrap`(로그→숫자 추출) 사용 → SLI-P1·P2·P7·R1·CAP1·CAP2·CAP3 핵심 지표.
+    - **선택은 SLO 관측 기간 완료 후 결정.**
+
+    - **Option A — 4단계 스킵** *(절감 0 MiB, 복잡도 없음)*
+      - 2+3단계 완료 시 t3.small 93% → 스왑 1 GiB 추가로 안정 운영 가능
+      - 로그 관측성 완전 유지
+      - 권장: "메모리 여유보다 운영 안정성 우선"일 때
+
+    - **Option B — Alloy → Promtail 교체만** *(절감 ~79 MiB, 복잡도 매우 낮음)*
+      - `grafana/promtail` 이미지 교체 + 설정 파일 수정 (Loki 유지)
+      - 대시보드·쿼리·코드 변경 없음
+      - 권장: "쉽게 조금 절감"할 때
+
+    - **Option C — QuestDB 직접 메트릭** *(절감 ~357 MiB, 복잡도 높음)*
+      - Producer·resource-monitor·Reporter가 메트릭을 QuestDB ILP로 직접 씀
+      - SLO 대시보드 Loki 패널 전체를 QuestDB SQL로 재작성 필요
+      - Error Monitor 로그 뷰어 포기 (docker logs로만 확인)
+      - 권장: "최대 절감 + QuestDB 단일 스택 통합"이 목표일 때
+
+    - **Option D — VictoriaLogs 교체** *(절감 ~200 MiB 예상, 복잡도 매우 높음)*
+      - `unwrap` 미지원 → SLI 수치 패널 25개 전부 깨짐 (No data)
+      - 살아남는 것: 로그 라인 뷰어·단순 count_over_time만
+      - **사실상 불가**: 이 프로젝트 구조에서 drop-in 교체 아님
+      - 권장: 없음 (참고용 기록)
 
 
 ## 우선순위 중간
