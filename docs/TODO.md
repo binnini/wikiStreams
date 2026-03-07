@@ -80,19 +80,23 @@
       - 운영(Kafka)과 스테이징(Redpanda)이 동일 Wikimedia 스트림을 동시 구독 중 (섀도우 테스트)
       - SLO 4단계 관측 기간 완료 후 SLI 수치 비교 → 운영 전환 결정
 
-  - [ ] **3단계: ClickHouse → QuestDB 전환** *(t3.small 목표의 핵심 단계)*
+  - [ ] **3단계: ClickHouse → QuestDB 전환** *(t3.small 목표의 핵심 단계)* **진행 중 (2026-03-07)**
     - 절감: ~1,750 MiB → 전환 후 예상 총 메모리 ~1,464 MiB (t3.small 72% ✅)
     - **선택 이유**: DuckDB 대비 QuestDB 채택 (2026-03-07 결정)
       - Kafka 내장 연동: 별도 Consumer 서비스 개발 불필요
       - Grafana PostgreSQL 와이어 프로토콜 지원: 플러그인 추가 없이 연동
       - HTTP API 내장: FastAPI 래퍼 개발 불필요
       - DuckDB는 Consumer 서비스 + HTTP 래퍼 = 신규 코드 2개 필요 → 홈랩 유지보수 부담
-    - **개발 범위**:
-      - `docker-compose.yml`: `clickhouse` → `questdb` 이미지 교체
-      - QuestDB Kafka 연동 설정 파일 작성 (`questdb-kafka.yaml`)
+    - **스테이징 진행 상황** (Option B — 병렬 스택, `docker-compose.staging3.yml`):
+      - [x] `docker-compose.staging3.yml` + `src/questdb_consumer/` 작성 완료
+      - [x] QuestDB SLI 검증: P3 8~27ms ✅ / D1 4~8s ✅ / P5 1,573/min ✅ / 메모리 365 MiB ✅
+      - [x] Grafana PostgreSQL 데이터소스 추가 + 대시보드 24개 패널 마이그레이션 완료
+      - [x] Reporter SQL 호환성 검증 완료 (번역 패턴 확립)
+      - [ ] 2단계 Go/No-Go 완료 후 운영 전환 진행
+    - **개발 범위 (운영 전환 시)**:
+      - `docker-compose.yml`: `clickhouse` → `questdb` 이미지 교체, `questdb-consumer` 서비스 추가
       - Grafana 데이터소스 교체: ClickHouse 플러그인 → PostgreSQL (포트 8812)
-      - 대시보드 쿼리 마이그레이션: TSDB 함수 차이 패치 (`toYYYYMM` → `strftime` 등)
-    - **스테이징 검증**: `docker-compose.staging.yml`에 QuestDB 추가 후 ClickHouse와 병렬 비교
+      - `src/reporter/fetcher.py`: `_query()` 엔드포인트 + SQL 번역 패치 (ClickHouse → QuestDB)
     - 완료 후 SLI-P3(쿼리 응답시간) 재측정, ClickHouse 대비 성능 비교 기록
 
   - [ ] **4단계: Loki + Alloy 제거** *(3단계 완료 후 검토)*

@@ -982,3 +982,92 @@
 
 - **문서 업데이트**: TODO.md 3단계, SLO.md §8.2·§8.4 전면 교체.
   - 3단계(ClickHouse→DuckDB) 예고 SLO 기준도 사전 정의.
+
+### 5. 3단계 스테이징 환경 구축 (Redpanda + QuestDB 병렬 스택)
+
+- **방식: Option B — 병렬 스테이징 스택**
+  - 2단계 스테이징(Redpanda + ClickHouse)을 종료하지 않고 3단계 스테이징(Redpanda + QuestDB)을 동시 구동.
+  - 2단계 SLI 관측 기간 지속 + 3단계 QuestDB 검증 병렬 진행.
+  - Redpanda 공유: `wikistreams-staging_default` 외부 네트워크로 2단계 Redpanda(redpanda:9092) 접근.
+
+- **구현** (`docker-compose.staging3.yml` 신규 작성)
+  - `questdb/questdb:8.2.1` 컨테이너 + `questdb-consumer` (Kafka→ILP 변환 Consumer).
+  - 포트 오프셋 (2단계와 충돌 없음): REST/Web Console 29000, PostgreSQL wire 28812.
+  - `src/questdb_consumer/` 신규 패키지:
+    - `main.py`: `kafka-python`으로 Redpanda 구독 → `event_to_ilp()` 변환 → TCP socket으로 QuestDB ILP(9009) 직접 송신.
+    - ILP 필드: `server_name`, `wiki_type` (tag), `title`, `user`, `bot`, `namespace`, `minor`, `comment`, `wikidata_label`, `wikidata_description` (field), timestamp(ns).
+    - `_should_skip()` 필터: log 타입·canary 도메인 사전 드롭.
+
+- **트러블슈팅**
+  - **Kafka advertised listener 문제**: Redpanda가 `localhost:19092`를 advertise하여 다른 네트워크의 컨테이너가 메타데이터 교환 후 `ECONNREFUSED`. `wikistreams-staging_default` 네트워크 참여 + `KAFKA_BROKER: "redpanda:9092"` (내부 주소)로 해결.
+
+- **QuestDB SLI 검증 결과** (staging3 기동 직후 실측):
+
+  | SLI | 실측값 | 목표 | 판정 |
+  |-----|--------|------|------|
+  | P3 쿼리 응답 p99 | 8~27ms | ≤ 500ms | ✅ |
+  | D1 데이터 신선도 lag | 4~8s | ≤ 15s | ✅ |
+  | P5 처리량 | 1,573/min | ≥ 800/min | ✅ |
+  | D2 레이블 보강률 | 80.67% | ≥ 80% | ⚠️ 경계 |
+  | QuestDB 메모리 | 365 MiB | ≤ 400 MiB | ✅ |
+
+### 6. Grafana QuestDB 대시보드 마이그레이션
+
+- **배경**: QuestDB는 Grafana ClickHouse 플러그인 불가 → PostgreSQL wire 프로토콜(포트 28812)로 Grafana 연동.
+
+- **데이터소스 추가**: Grafana UI에서 PostgreSQL 데이터소스 `questdb-staging` 추가 (host: `localhost:28812`, db: `qdb`, user: `admin`).
+
+- **대시보드 작성** (`monitoring/dashboards/wikistreams-analytics-questdb.json`)
+  - `wikistreams-analytics.json` 기반으로 24개 패널을 QuestDB SQL로 전환.
+  - 핵심 SQL 변환 규칙:
+
+    | ClickHouse | QuestDB |
+    |-----------|---------|
+    | `count()` | `count(1)` |
+    | `countIf(cond)` | `sum(CASE WHEN cond THEN 1 ELSE 0 END)` |
+    | `uniq(col)` | `count(DISTINCT col)` |
+    | `if(cond, a, b)` | `CASE WHEN cond THEN a ELSE b END` |
+    | `toStartOfInterval() GROUP BY` | `SAMPLE BY $__interval` |
+    | `toHour(col)` | `extract(hour from col)` |
+    | `HAVING agg >= N` | 서브쿼리 `WHERE agg >= N` |
+    | `arrayStringConcat(groupUniqArray(...))` | 제거 (QuestDB 미지원) |
+    | `startsWith(col, 'str')` | `col LIKE 'str%'` |
+    | `a * b / count()` | `cast(a as double) / count(1) * b` |
+    | `col != ''` | `col <> ''` |
+
+  - **주요 트러블슈팅**:
+    - `count(*) * N` 파서 오류: `*`를 wildcard로 인식 → `count(1) * N`으로 해결.
+    - `HAVING` 절 미지원: 서브쿼리 패턴으로 우회.
+    - `$__interval_s` 미지원 (Grafana PostgreSQL 플러그인): `$__interval_ms`로 대체.
+    - 파일 기반 프로비저닝: Grafana API로 저장 불가("Cannot save provisioned dashboard") → 파일 직접 수정 후 자동 리로드.
+
+- **검증**: 24개 패널 전부 정상 렌더링 확인.
+
+### 7. Reporter fetcher SQL QuestDB 호환성 검증
+
+- **목적**: Reporter(`src/reporter/fetcher.py`)의 ClickHouse SQL 8개 쿼리를 수정 없이 QuestDB REST API(`http://localhost:29000/exec`)에 직접 실행하여 호환성 확인 (코드 수정 없음).
+- **테이블**: `wikimedia.events` → `wikimedia_events`, `event_time` → `timestamp`, `now() - INTERVAL 24 HOUR` → `dateadd('d',-1,now())`.
+
+- **호환성 결과**:
+
+  | 쿼리 | ClickHouse 원본 | QuestDB 번역 | 상태 |
+  |------|-----------------|-------------|------|
+  | Q1 총 편집 수 | `count()` | `count(1)` | ✅ |
+  | Q2 활성 편집자 | `uniq(user)` | `count(DISTINCT user)` | ✅ |
+  | Q3 봇 비율 | `countIf(bot=1) / count()` | `sum(CASE WHEN bot=true ...) / count(1) * N` | ✅ (bot: BOOLEAN 타입) |
+  | Q4 신규 문서 수 | `count() WHERE wiki_type='new'` | 동일 패턴 | ✅ |
+  | Q5 Top 편집 페이지 | `if(wikidata_label != '', ...)` | `CASE WHEN ... <> ''` | ✅ (`!=` → `<>`) |
+  | Q6 스파이크 페이지 | `countIf() HAVING` | `sum(CASE) WHERE` (서브쿼리) | ✅ |
+  | Q7 다국어 편집 | `uniq() HAVING, arrayStringConcat()` | `count(DISTINCT) WHERE` (wikis 컬럼 제거) | ✅ (wikis 미지원) |
+  | Q8 되돌리기 페이지 | `ILIKE, startsWith()` | `ilike, LIKE 'Reverted%'` | ✅ |
+  | Q9 피크 시간대 | `toHour(event_time)` | `extract(hour from timestamp)` | ✅ |
+  | Q10 어제 순위 | `ORDER BY count() DESC` | `ORDER BY count(1) DESC` | ✅ |
+
+- **주요 발견사항**:
+  - `bot` 필드: QuestDB가 ILP `t`/`f`를 BOOLEAN으로 저장 → `bot = 1` 아닌 `bot = true` 사용 필요.
+  - `count(*) * N` 파서 오류: `count(1) * N`으로 해결.
+  - `HAVING` 절: 서브쿼리 `WHERE` 패턴으로 우회.
+  - `arrayStringConcat(groupUniqArray(...))`: 미지원 → `wikis` 컬럼 반환 포기, `wiki_count`만 반환.
+  - `!=` 연산자: 파싱 오류 발생 → `<>` 사용.
+
+- **결론**: Reporter의 8개 핵심 쿼리 모두 QuestDB에서 동작 가능. 운영 전환 시 `_query()` 함수의 엔드포인트 + SQL 번역 패치 필요.
