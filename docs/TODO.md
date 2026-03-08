@@ -39,11 +39,10 @@
     - [x] `docker-compose.yml`에 alerting 프로비저닝 볼륨 마운트 추가
     - [ ] 에러 버짓 소진률 75% 초과 시 Discord 경고 *(Grafana 계산 패널로 구현 필요)*
 
-  - [ ] **4단계: 관측 기간 (1~4주)** *(2026-03-06 시작, 진행 중)*
+  - [x] **4단계: 관측 기간** *(2026-03-08 조기 완료)*
     - [x] SLI 1차 실측 baseline 확보 (39시간, 2026-03-07 리뷰) — SLO 목표 재조정 완료
-    - [ ] SLI별 충분한 baseline 수집 (SLI-D1·P3 1~2주 / SLI-A3·R1 2~4주)
-    - [ ] 시간대별·요일별 패턴 파악 (특히 SLI-P5: 심야 UTC 처리량 저하 확인)
-    - [ ] 이상 구간 원인 분석 및 기록
+    - [x] baseline 최종 확정 (49시간 / 5,160,451건, 2026-03-08) — 전 SLO 수치 갱신
+    - 관측 기간 조기 종료 근거: 49시간 / 5.16M건으로 SLO 목표 재조정 및 수치 안정 확인. 아키텍처 경량화 로드맵 진입 조건 해제.
 
   - [x] **5단계: SLO.md 작성** *(2026-03-06 초기 목표값으로 완료)*
     - [x] NFR 기반 초기 목표 수치 정의 (관측 완료 후 확정 예정)
@@ -60,9 +59,8 @@
   - **목표**: AWS t3.small(2 GiB) 마이그레이션. Kafka→Redpanda(-802 MiB) + ClickHouse→QuestDB(-1,750 MiB) 로 달성.
   - **원칙**: 단계별 완료 후 SLI 재측정 → Trade-Off 수치화 → 다음 단계 진행.
 
-  - [ ] **전제: SLO 수립 로드맵 4단계(관측 기간) 완료**
-    - 관측 기간 중 수집한 SLI baseline을 경량화 전 기준값으로 사용
-    - 경량화 후 동일 SLI를 재측정하여 성능 회귀 여부 확인
+  - [x] **전제: SLO 수립 로드맵 4단계(관측 기간) 완료** *(2026-03-08 완료)*
+    - baseline 확정: 49시간 / 5,160,451건. 경량화 후 동일 SLI 재측정 기준값으로 사용.
 
   - [x] **1단계: DLQ Consumer 제거** *(2026-03-07 스테이징 완료, 운영 전환 보류)*
     - 18 msg/sec 처리량에서 재처리 가치 없음 — log/canary 이벤트가 DLQ의 유일한 원인으로 확인
@@ -72,38 +70,27 @@
     - [ ] 운영 `docker-compose.yml` 반영 — 2단계 운영 전환 시 함께 적용 예정
     - 절감: ~27 MiB
 
-  - [ ] **2단계: Kafka → Redpanda 전환** *(핵심 경량화, t4g.medium 전제 조건)*
+  - [x] **2단계: Kafka → Redpanda 전환** *(2026-03-08 운영 전환 완료)*
     - 절감: ~802 MiB → 전환 후 예상 총 메모리 ~3,214 MiB (t4g.medium 78%)
-    - **선택 이유**: Kafka API 완전 호환 → `docker-compose.yml` 이미지 한 줄 교체만으로 완료. Producer·ClickHouse Kafka 엔진 코드 변경 없음.
-    - **스테이징 현황** *(2026-03-07 시작, 섀도우 테스트 진행 중)*:
-      - [x] `docker-compose.staging.yml` + `clickhouse/init-db-staging.sql` 작성
-      - [x] 운영(Kafka)과 스테이징(Redpanda) 동시 구독 — A/B 비교 가능
-      - [x] Redpanda 메모리 실측: **399 MiB** (Kafka 1,151 MiB 대비 -65%) ✅
-      - [x] 스테이징 SLI 초기 실측: P1 0.74s ✅ / D1 5s ✅ / P5 정상
-      - [ ] **Go/No-Go 리뷰** — 7일 관측 후 (~2026-03-14) §8.3 조건 최종 확인
-    - **운영 전환 작업** (Go 판정 후):
-      - `docker-compose.yml`: `kafka-kraft` → `redpandadata/redpanda` 이미지 교체
-      - `dlq-consumer` 서비스 제거 (1단계 합산)
-      - 완료 후 SLI-P1·P2·P5·D1 재측정, 경량화 전후 수치 비교 기록
+    - **조기 Go 판정** (2026-03-08): 스테이징 21시간 관측, 전 수치 충분한 여유로 Go
+      - P1 p95=0.804s ✅ / P5 p5=1,477/min ✅ / D1 12s ✅ / 메모리 387.6 MiB ✅
+    - [x] `docker-compose.yml`: `kafka-kraft` → `redpanda` 교체, `dlq-consumer` 제거
+    - [x] `clickhouse/init-db.sql`: `kafka_broker_list = 'redpanda:9092'` 업데이트
+    - [x] 운영 ClickHouse `kafka_raw` 테이블 + `events_mv` 재생성 (Redpanda 브로커로)
+    - [x] 파이프라인 정상 확인: 전환 직후 2분간 3,037건 적재 ✅
+    - [ ] SLI-P1·P5·D1 재측정 — 운영 Redpanda 기준 baseline 갱신 (1주 후)
 
-  - [ ] **3단계: ClickHouse → QuestDB 전환** *(t3.small 목표의 핵심 단계)* **진행 중 (2026-03-07)**
-    - 절감: ~1,750 MiB → 전환 후 예상 총 메모리 ~1,464 MiB (t3.small 72% ✅)
-    - **선택 이유**: DuckDB 대비 QuestDB 채택 (2026-03-07 결정)
-      - Kafka 내장 연동: 별도 Consumer 서비스 개발 불필요
-      - Grafana PostgreSQL 와이어 프로토콜 지원: 플러그인 추가 없이 연동
-      - HTTP API 내장: FastAPI 래퍼 개발 불필요
-      - DuckDB는 Consumer 서비스 + HTTP 래퍼 = 신규 코드 2개 필요 → 홈랩 유지보수 부담
-    - **스테이징 진행 상황** (Option B — 병렬 스택, `docker-compose.staging3.yml`):
-      - [x] `docker-compose.staging3.yml` + `src/questdb_consumer/` 작성 완료
-      - [x] QuestDB SLI 검증: P3 8~27ms ✅ / D1 4~8s ✅ / P5 1,573/min ✅ / 메모리 365 MiB ✅
-      - [x] Grafana PostgreSQL 데이터소스 추가 + 대시보드 24개 패널 마이그레이션 완료
-      - [x] Reporter SQL 호환성 검증 완료 (번역 패턴 확립)
-      - [ ] 2단계 Go/No-Go 완료 후 운영 전환 진행
-    - **개발 범위 (운영 전환 시)**:
-      - `docker-compose.yml`: `clickhouse` → `questdb` 이미지 교체, `questdb-consumer` 서비스 추가
-      - Grafana 데이터소스 교체: ClickHouse 플러그인 → PostgreSQL (포트 8812)
-      - `src/reporter/fetcher.py`: `_query()` 엔드포인트 + SQL 번역 패치 (ClickHouse → QuestDB)
-    - 완료 후 SLI-P3(쿼리 응답시간) 재측정, ClickHouse 대비 성능 비교 기록
+  - [x] **3단계: ClickHouse → QuestDB 전환** *(2026-03-08 운영 전환 완료)*
+    - 실측 절감: ~1,756 MiB → 전환 후 총 메모리 **~1,287 MiB (t3.small 63% ✅)**
+    - [x] `docker-compose.yml`: `clickhouse` → `questdb` + `questdb-consumer` 추가
+    - [x] `monitoring/grafana-datasources.yaml`: ClickHouse 플러그인 → PostgreSQL (포트 8812)
+    - [x] `monitoring/grafana-alert-rules.yaml`: ClickHouse 참조 → QuestDB 업데이트
+    - [x] `monitoring/dashboards/wikistreams-analytics.json`: QuestDB 버전으로 교체
+    - [x] `src/reporter/config.py`: `clickhouse_host/port` → `questdb_host/port`
+    - [x] `src/reporter/fetcher.py`: `_query()` QuestDB REST API + SQL 10개 번역
+    - [x] 전환 후 검증: Q1~Q6 쿼리 정상, 5분간 수천 건 적재 ✅
+    - [x] QuestDB 메모리: 377 MiB ✅ (목표 ≤ 400 MiB)
+    - 트러블슈팅: orphan container(clickhouse) 포트 9000 충돌로 questdb 네트워크 미연결 → force-recreate로 해결
 
   - [ ] **4단계: Loki/Alloy 경량화** *(3단계 운영 전환 완료 후 옵션 선택)*
     - **배경**: Loki(253 MiB) + Alloy(104 MiB) = 357 MiB. 대시보드 41개 Loki 쿼리 중 25개가

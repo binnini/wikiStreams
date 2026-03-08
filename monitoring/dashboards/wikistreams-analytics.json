@@ -24,7 +24,6 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 1,
-  "id": null,
   "links": [],
   "liveNow": false,
   "panels": [
@@ -42,8 +41,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -87,11 +86,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT count() AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -100,8 +99,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -145,11 +144,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT uniq(user) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT user) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -158,8 +157,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -203,11 +202,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT count() AS value FROM wikimedia.events WHERE wiki_type = 'new' AND $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT count(*) AS value FROM wikimedia_events WHERE wiki_type = 'new' AND $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -216,8 +215,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -270,11 +269,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(100.0 * countIf(bot = 1) / count(), 1) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT round(avg(CASE WHEN bot THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -283,8 +282,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -337,11 +336,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(100.0 * countIf(match(user, '^\\d')) / count(), 1) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT round(avg(CASE WHEN user ~ '^[0-9]' THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -350,8 +349,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -404,11 +403,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(100.0 * countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) / count(), 1) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT round(avg(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -429,8 +428,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -498,11 +497,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 1,
-          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL greatest($__interval_s, 60) second) AS time, countIf(bot = 0) AS \"Human Edits\", countIf(bot = 1) AS \"Bot Edits\" FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
+          "format": "table",
+          "rawSql": "SELECT timestamp AS time,\n  sum(CASE WHEN NOT bot THEN 1 ELSE 0 END) AS \"Human Edits\",\n  sum(CASE WHEN bot THEN 1 ELSE 0 END) AS \"Bot Edits\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
           "refId": "A"
         }
       ],
@@ -523,8 +522,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -584,11 +583,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT server_name, count() AS edits FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY server_name ORDER BY edits DESC LIMIT 10",
+          "format": "table",
+          "rawSql": "SELECT server_name, count(*) AS edits FROM wikimedia_events WHERE $__timeFilter(timestamp) GROUP BY server_name ORDER BY edits DESC LIMIT 10",
           "refId": "A"
         }
       ],
@@ -597,8 +596,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -643,11 +642,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT wiki_type, count() AS count FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY wiki_type ORDER BY count DESC",
+          "format": "table",
+          "rawSql": "SELECT wiki_type, count(*) AS count FROM wikimedia_events WHERE $__timeFilter(timestamp) GROUP BY wiki_type ORDER BY count DESC",
           "refId": "A"
         }
       ],
@@ -668,8 +667,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -762,11 +761,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT if(wikidata_label != '', wikidata_label, title) AS label, title, wikidata_description AS description, server_name, count() AS edits FROM wikimedia.events WHERE $__timeFilter(event_time) AND namespace = 0 AND bot = 0 AND wiki_type = 'edit' GROUP BY title, wikidata_label, wikidata_description, server_name ORDER BY edits DESC LIMIT 20",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN wikidata_label != '' THEN wikidata_label ELSE title END AS label,\n  title, wikidata_description AS description, server_name, count(*) AS edits\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp) AND namespace = 0 AND NOT bot AND wiki_type = 'edit'\nGROUP BY title, wikidata_label, wikidata_description, server_name\nORDER BY edits DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -787,8 +786,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -836,11 +835,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT sum(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -849,8 +848,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -903,11 +902,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(100.0 * countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) / count(), 1) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT round(avg(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -916,8 +915,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -961,11 +960,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT countIf(bot = 1 AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted'))) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT sum(CASE WHEN bot AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%') THEN 1 ELSE 0 END) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -974,8 +973,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1019,11 +1018,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT countIf(bot = 0 AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted'))) AS value FROM wikimedia.events WHERE $__timeFilter(event_time)",
+          "format": "table",
+          "rawSql": "SELECT sum(CASE WHEN NOT bot AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%') THEN 1 ELSE 0 END) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
           "refId": "A"
         }
       ],
@@ -1032,8 +1031,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1152,11 +1151,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 1,
-          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL greatest($__interval_s, 60) second) AS time, countIf(bot = 1) AS \"Bot\", countIf(bot = 0 AND match(user, '^\\d')) AS \"Anonymous\", countIf(bot = 0 AND NOT match(user, '^\\d')) AS \"Registered\" FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
+          "format": "table",
+          "rawSql": "SELECT timestamp AS time,\n  sum(CASE WHEN bot THEN 1 ELSE 0 END) AS \"Bot\",\n  sum(CASE WHEN NOT bot AND user ~ '^[0-9]' THEN 1 ELSE 0 END) AS \"Anonymous\",\n  sum(CASE WHEN NOT bot AND user !~ '^[0-9]' THEN 1 ELSE 0 END) AS \"Registered\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
           "refId": "A"
         }
       ],
@@ -1165,8 +1164,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1295,11 +1294,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 1,
-          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL greatest($__interval_s, 60) second) AS time, countIf(bot = 0 AND match(user, '^\\d')) AS \"Anon Edits\", countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) AS \"All Reverts\", countIf(bot = 1 AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted'))) AS \"Bot Reverts\" FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
+          "format": "table",
+          "rawSql": "SELECT timestamp AS time,\n  sum(CASE WHEN NOT bot AND user ~ '^[0-9]' THEN 1 ELSE 0 END) AS \"Anon Edits\",\n  sum(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS \"All Reverts\",\n  sum(CASE WHEN bot AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%') THEN 1 ELSE 0 END) AS \"Bot Reverts\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
           "refId": "A"
         }
       ],
@@ -1308,8 +1307,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1455,11 +1454,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT if(wikidata_label != '', wikidata_label, title) AS label, server_name, count() AS total_edits, countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) AS reverts, round(100.0 * countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) / count(), 1) AS revert_rate_pct FROM wikimedia.events WHERE $__timeFilter(event_time) AND namespace = 0 GROUP BY title, wikidata_label, server_name HAVING reverts > 0 ORDER BY reverts DESC LIMIT 20",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN wikidata_label != '' THEN wikidata_label ELSE title END AS label,\n  server_name, count(*) AS total_edits,\n  sum(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS reverts,\n  round(avg(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 100.0 ELSE 0.0 END), 1) AS revert_rate\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp) AND namespace = 0\nGROUP BY title, wikidata_label, server_name\nORDER BY reverts DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -1480,8 +1479,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1528,11 +1527,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(count() / 5.0, 1) AS value FROM wikimedia.events WHERE event_time > now() - INTERVAL 5 MINUTE",
+          "format": "table",
+          "rawSql": "SELECT round(sum(1) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
           "refId": "A"
         }
       ],
@@ -1541,8 +1540,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1589,11 +1588,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(countIf(bot = 0 AND NOT match(user, '^\\d')) / 5.0, 1) AS value FROM wikimedia.events WHERE event_time > now() - INTERVAL 5 MINUTE",
+          "format": "table",
+          "rawSql": "SELECT round(sum(CASE WHEN NOT bot AND user !~ '^[0-9]' THEN 1.0 ELSE 0.0 END) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
           "refId": "A"
         }
       ],
@@ -1602,8 +1601,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1650,11 +1649,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(countIf(bot = 1) / 5.0, 1) AS value FROM wikimedia.events WHERE event_time > now() - INTERVAL 5 MINUTE",
+          "format": "table",
+          "rawSql": "SELECT round(sum(CASE WHEN bot THEN 1.0 ELSE 0.0 END) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
           "refId": "A"
         }
       ],
@@ -1663,8 +1662,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1711,11 +1710,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT round(countIf(match(user, '^\\d') AND bot = 0) / 5.0, 1) AS value FROM wikimedia.events WHERE event_time > now() - INTERVAL 5 MINUTE",
+          "format": "table",
+          "rawSql": "SELECT round(sum(CASE WHEN user ~ '^[0-9]' AND NOT bot THEN 1.0 ELSE 0.0 END) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
           "refId": "A"
         }
       ],
@@ -1724,8 +1723,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1880,11 +1879,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 1,
-          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL greatest($__interval_s, 60) second) AS time, round(count() * 60.0 / greatest($__interval_s, 60), 1) AS \"Total\", round(countIf(bot = 0 AND NOT match(user, '^\\d')) * 60.0 / greatest($__interval_s, 60), 1) AS \"Human\", round(countIf(bot = 1) * 60.0 / greatest($__interval_s, 60), 1) AS \"Bot\", round(countIf(match(user, '^\\d') AND bot = 0) * 60.0 / greatest($__interval_s, 60), 1) AS \"Anonymous\" FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
+          "format": "table",
+          "rawSql": "SELECT timestamp AS time,\n  sum(60000.0) / $__interval_ms AS \"Total\",\n  sum(CASE WHEN NOT bot AND user !~ '^[0-9]' THEN 60000.0 ELSE 0.0 END) / $__interval_ms AS \"Human\",\n  sum(CASE WHEN bot THEN 60000.0 ELSE 0.0 END) / $__interval_ms AS \"Bot\",\n  sum(CASE WHEN NOT bot AND user ~ '^[0-9]' THEN 60000.0 ELSE 0.0 END) / $__interval_ms AS \"Anon\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
           "refId": "A"
         }
       ],
@@ -1893,8 +1892,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -2056,11 +2055,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT if(wikidata_label NOT IN ('', '-'), wikidata_label, title) AS label, server_name, countIf(event_time > now() - INTERVAL 15 MINUTE) AS edits_15m, countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) AS edits_prev_60m, round(countIf(event_time > now() - INTERVAL 15 MINUTE) * 4.0 / (countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) + 1), 1) AS spike_ratio FROM wikimedia.events WHERE event_time > now() - INTERVAL 75 MINUTE AND namespace = 0 AND wiki_type = 'edit' GROUP BY title, wikidata_label, server_name HAVING edits_15m >= 3 ORDER BY spike_ratio DESC LIMIT 15",
+          "format": "table",
+          "rawSql": "SELECT CASE WHEN wikidata_label NOT IN ('', '-') THEN wikidata_label ELSE title END AS label,\n  server_name,\n  sum(CASE WHEN timestamp >= dateadd('m',-15,now()) THEN 1 ELSE 0 END) AS edits_15m,\n  sum(CASE WHEN timestamp >= dateadd('m',-75,now()) AND timestamp < dateadd('m',-15,now()) THEN 1 ELSE 0 END) AS edits_prev_60m,\n  round(sum(CASE WHEN timestamp >= dateadd('m',-15,now()) THEN 4.0 ELSE 0.0 END) /\n    (sum(CASE WHEN timestamp >= dateadd('m',-75,now()) AND timestamp < dateadd('m',-15,now()) THEN 1.0 ELSE 0.0 END) + 1.0), 1) AS spike_ratio\nFROM wikimedia_events\nWHERE timestamp >= dateadd('m',-75,now()) AND namespace = 0\nGROUP BY title, wikidata_label, server_name\nORDER BY edits_15m DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -2069,8 +2068,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "cffah7jzilipsd"
       },
       "fieldConfig": {
         "defaults": {
@@ -2203,11 +2202,11 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "cffah7jzilipsd"
           },
-          "format": 0,
-          "rawSql": "SELECT title, uniq(server_name) AS wiki_count, count() AS total_edits, arrayStringConcat(groupUniqArray(server_name), ', ') AS wikis FROM wikimedia.events WHERE event_time > now() - INTERVAL 15 MINUTE AND namespace = 0 GROUP BY title HAVING wiki_count >= 2 ORDER BY wiki_count DESC, total_edits DESC LIMIT 15",
+          "format": "table",
+          "rawSql": "SELECT title,\n  count(DISTINCT server_name) AS wiki_count,\n  count(*) AS total_edits\nFROM wikimedia_events\nWHERE timestamp >= dateadd('m',-15,now()) AND namespace = 0\nGROUP BY title\nORDER BY wiki_count DESC, total_edits DESC LIMIT 20",
           "refId": "A"
         }
       ],
@@ -2232,8 +2231,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "WikiStreams Analytics",
-  "uid": "wikistreams-analytics",
+  "title": "WikiStreams Analytics (QuestDB)",
+  "uid": "questdb-analytics",
   "version": 3,
   "weekStart": ""
 }

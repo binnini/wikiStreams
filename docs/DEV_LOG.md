@@ -1070,4 +1070,102 @@
   - `arrayStringConcat(groupUniqArray(...))`: 미지원 → `wikis` 컬럼 반환 포기, `wiki_count`만 반환.
   - `!=` 연산자: 파싱 오류 발생 → `<>` 사용.
 
+---
+
+## 2026-03-08
+
+### 28. SLO 수립 로드맵 4단계 관측 기간 완료 및 baseline 최종 확정
+
+- **결정**: Stage 4 관측 기간을 현시점(2026-03-08)으로 조기 완료.
+  - 관측 기간: 2026-03-06 ~ 2026-03-08 (약 49시간)
+  - 수집 이벤트: 5,160,451건
+  - 39시간 baseline(2026-03-07)으로 이미 SLO 재조정 완료, 추가 2일 관측 후 수치 안정 확인.
+
+- **최종 baseline 갱신 수치** (ClickHouse 직접 조회, 49h 기준):
+
+  | SLO | 지표 | 39h baseline (구) | 49h baseline (최종) |
+  |-----|------|-------------------|---------------------|
+  | SLO-A2 | 쿼리 성공률 | 99.71% | **99.81%** |
+  | SLO-P3 | 쿼리 p99 | 36ms | **52ms** |
+  | SLO-P5 | 처리량 p5 | 1,042/min | **1,166/min** |
+  | SLO-D1 | 데이터 lag | 6s | **7s** |
+  | SLO-D2 | 레이블 보강률 | 80.86% | **81.09%** |
+
+  SLO-P1·P7·CAP1·CAP2 (Loki 집계): 변동 없음 (기존 baseline 유지).
+
+- **업데이트 문서**: `SLO.md` 상태 → "확정", `TODO.md` 4단계 완료 처리.
+
+- **다음 단계**: 아키텍처 경량화 로드맵 2단계 Go/No-Go 리뷰 (~2026-03-14, 스테이징 7일 관측 완료 후).
+
+### 29. 아키텍처 경량화 2단계: Kafka → Redpanda 운영 전환 (조기 Go)
+
+- **Go/No-Go 리뷰 결과** (스테이징 21시간 / 2,208,298건):
+
+  | 조건 | 목표 | 실측 | 판정 |
+  |------|------|------|------|
+  | SLI-P1 배치 처리 p95 | ≤ 2.0s | 0.804s | ✅ (-60%) |
+  | SLI-P5 처리량 p5 | ≥ 800/min | 1,477/min (5분 버킷) | ✅ (+85%) |
+  | SLI-D1 데이터 lag | ≤ 15s | 12s | ✅ |
+  | 브로커 메모리 | ≤ 500 MiB | 387.6 MiB | ✅ (-22%) |
+  | SLO 4단계 완료 | ✅ | ✅ | ✅ |
+  | 관측 기간 | 7일 | 21시간 | 조기 Go 결정 |
+
+- **운영 전환 작업** (2026-03-08):
+  1. `docker-compose.yml`: `kafka-kraft` → `redpanda`, `dlq-consumer` 제거 (1+2단계 합산)
+  2. Redpanda 리스너 설정: `internal://0.0.0.0:9092`, `external://0.0.0.0:19092`, host 포트 `9092:19092`
+  3. `clickhouse/init-db.sql`: `kafka_broker_list = 'redpanda:9092'`
+  4. 운영 ClickHouse에서 `kafka_raw` + `events_mv` DROP → 재생성 (브로커 주소 변경)
+
+- **트러블슈팅**: 초기 `--kafka-addr internal/external 모두 9092` 설정으로 "Address already in use" 발생 → external을 19092로 분리하여 해결 (스테이징과 동일 패턴).
+
+- **전환 후 검증**: 2분간 3,037건 적재 확인 ✅. Producer `batch_processing_seconds=0.663` 정상 동작.
+
+- **절감 확인**: Redpanda 387.6 MiB (Kafka 대비 ~-763 MiB). 1+2단계 합산 ~-790 MiB 절감.
+
+- **다음 단계**: 3단계 ClickHouse → QuestDB 운영 전환 진행.
+
+### 30. 아키텍처 경량화 3단계: ClickHouse → QuestDB 운영 전환
+
+- **변경 범위**:
+  - `docker-compose.yml`: `clickhouse` → `questdb` + `questdb-consumer` 추가, `grafana` ClickHouse 플러그인 제거
+  - `monitoring/grafana-datasources.yaml`: ClickHouse → PostgreSQL (QuestDB wire protocol, 포트 8812)
+  - `monitoring/grafana-alert-rules.yaml`: SLI-D1 datasource ClickHouse→QuestDB, SLI-CAP1 container명 변경
+  - `monitoring/dashboards/wikistreams-analytics.json`: QuestDB SQL 버전으로 교체
+  - `src/reporter/config.py`: `clickhouse_host/port` → `questdb_host/port`
+  - `src/reporter/fetcher.py`: `_query()` QuestDB REST API(`/exec?fmt=json`) + SQL 번역 (10개 쿼리)
+
+- **SQL 번역 요약** (ClickHouse → QuestDB):
+
+  | 패턴 | 변환 |
+  |------|------|
+  | `wikimedia.events` | `wikimedia_events` |
+  | `event_time` | `timestamp` |
+  | `now() - INTERVAL 24 HOUR` | `dateadd('d',-1,now())` |
+  | `count()` | `count(1)` |
+  | `uniq(col)` | `count(DISTINCT col)` |
+  | `countIf(cond)` | `sum(CASE WHEN cond THEN 1 ELSE 0 END)` |
+  | `if(cond,a,b)` | `CASE WHEN cond THEN a ELSE b END` |
+  | `bot = 1` | `bot = true` |
+  | `HAVING` | 서브쿼리 `WHERE` |
+  | `toHour(col)` | `extract(hour from col)` |
+  | `arrayStringConcat(groupUniqArray(...))` | `''` (미지원, 빈 문자열 반환) |
+
+- **트러블슈팅**:
+  1. questdb 컨테이너 네트워크 미연결: `--remove-orphans` 시 clickhouse(포트 9000) 충돌로 questdb 초기 생성 실패 → `docker compose up -d --force-recreate questdb`로 해결.
+  2. questdb-consumer ILP DNS 실패: questdb가 네트워크에 없어 `questdb:9009` 미해결 → 위 해결 후 자동 복구.
+
+- **전환 후 실측** (2026-03-08):
+  - QuestDB 메모리: **377 MiB** ✅ (목표 ≤ 400 MiB)
+  - 전체 스택 메모리: **~1,287 MiB** (t3.small 2,048 MiB의 **63%** ✅)
+  - Reporter SQL Q1~Q6 쿼리 정상 응답 확인
+  - 파이프라인: Redpanda → questdb-consumer → QuestDB ILP → wikimedia_events 적재 정상
+
+- **메모리 절감 누계** (경량화 전 ~4,043 MiB 기준):
+  - 1단계 DLQ Consumer 제거: -27 MiB
+  - 2단계 Kafka → Redpanda: -763 MiB
+  - 3단계 ClickHouse → QuestDB: -1,927 MiB (ClickHouse ~1,467 MiB + questdb-consumer +16 MiB)
+  - **총 절감: ~2,756 MiB (-68%)** → t3.small 목표 달성
+
+- **다음 단계**: 4단계 Loki/Alloy 경량화 옵션 선택 (Option A~C 중 결정). Reporter 일일 발송 확인(익일).
+
 - **결론**: Reporter의 8개 핵심 쿼리 모두 QuestDB에서 동작 가능. 운영 전환 시 `_query()` 함수의 엔드포인트 + SQL 번역 패치 필요.

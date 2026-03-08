@@ -15,7 +15,7 @@ from reporter.config import settings
 
 logger = logging.getLogger(__name__)
 
-CLICKHOUSE_URL = f"http://{settings.clickhouse_host}:{settings.clickhouse_port}"
+QUESTDB_URL = f"http://{settings.questdb_host}:{settings.questdb_port}/exec"
 KST = timezone(timedelta(hours=9))
 _WIKI_API_HEADERS = {"User-Agent": "WikiStreams/1.0 (https://github.com/wikistreams)"}
 
@@ -123,15 +123,12 @@ class ReportData:
 
 
 def _query(sql: str) -> list[dict]:
-    params = {"query": sql, "default_format": "JSONEachRow"}
     with httpx.Client(timeout=30) as client:
-        resp = client.get(CLICKHOUSE_URL, params=params)
+        resp = client.get(QUESTDB_URL, params={"query": sql, "fmt": "json"})
         resp.raise_for_status()
-    rows = []
-    for line in resp.text.strip().splitlines():
-        if line:
-            rows.append(json.loads(line))
-    return rows
+    data = resp.json()
+    columns = [c["name"] for c in data.get("columns", [])]
+    return [dict(zip(columns, row)) for row in data.get("dataset", [])]
 
 
 _RSS_EDITIONS = [
@@ -361,26 +358,26 @@ def fetch_report_data() -> ReportData:
     now_kst = datetime.now(KST)
 
     # 1. Overall stats (24h)
-    time_filter = "event_time >= now() - INTERVAL 24 HOUR"
+    time_filter = "timestamp >= dateadd('d',-1,now())"
     try:
         rows = _query(
-            f"SELECT count() AS value FROM wikimedia.events WHERE {time_filter}"
+            f"SELECT count(1) AS value FROM wikimedia_events WHERE {time_filter}"
         )
         data.stats.total_edits = int(rows[0]["value"]) if rows else 0
 
         rows = _query(
-            f"SELECT uniq(user) AS value FROM wikimedia.events WHERE {time_filter}"
+            f"SELECT count(DISTINCT \"user\") AS value FROM wikimedia_events WHERE {time_filter}"
         )
         data.stats.active_users = int(rows[0]["value"]) if rows else 0
 
         rows = _query(
-            f"SELECT round(100.0 * countIf(bot = 1) / count(), 1) AS value "
-            f"FROM wikimedia.events WHERE {time_filter}"
+            f"SELECT round(100.0 * sum(CASE WHEN bot = true THEN 1 ELSE 0 END) / count(1), 1) AS value "
+            f"FROM wikimedia_events WHERE {time_filter}"
         )
         data.stats.bot_ratio_pct = float(rows[0]["value"]) if rows else 0.0
 
         rows = _query(
-            f"SELECT count() AS value FROM wikimedia.events "
+            f"SELECT count(1) AS value FROM wikimedia_events "
             f"WHERE wiki_type = 'new' AND {time_filter}"
         )
         data.stats.new_articles = int(rows[0]["value"]) if rows else 0
@@ -390,10 +387,10 @@ def fetch_report_data() -> ReportData:
     # 2. Top edited pages (bot excluded, actual edits only, 24h, top 20)
     try:
         rows = _query(
-            f"SELECT if(wikidata_label != '', wikidata_label, title) AS label, "
-            f"title, wikidata_description AS description, server_name, count() AS edits "
-            f"FROM wikimedia.events "
-            f"WHERE {time_filter} AND namespace = 0 AND bot = 0 AND wiki_type = 'edit' "
+            f"SELECT CASE WHEN wikidata_label <> '' THEN wikidata_label ELSE title END AS label, "
+            f"title, wikidata_description AS description, server_name, count(1) AS edits "
+            f"FROM wikimedia_events "
+            f"WHERE {time_filter} AND namespace = 0 AND bot = false AND wiki_type = 'edit' "
             f"GROUP BY title, wikidata_label, wikidata_description, server_name "
             f"ORDER BY edits DESC LIMIT 20"
         )
@@ -439,15 +436,16 @@ def fetch_report_data() -> ReportData:
     # 3. Spike pages (recent 15m vs previous 60m)
     try:
         rows = _query(
-            "SELECT if(wikidata_label NOT IN ('', '-'), wikidata_label, title) AS label, "
+            "SELECT * FROM ("
+            "SELECT CASE WHEN wikidata_label NOT IN ('', '-') THEN wikidata_label ELSE title END AS label, "
             "title, server_name, "
-            "countIf(event_time > now() - INTERVAL 15 MINUTE) AS edits_15m, "
-            "round(countIf(event_time > now() - INTERVAL 15 MINUTE) * 4.0 / "
-            "(countIf(event_time BETWEEN now() - INTERVAL 75 MINUTE AND now() - INTERVAL 15 MINUTE) + 1), 1) AS spike_ratio "
-            "FROM wikimedia.events "
-            "WHERE event_time > now() - INTERVAL 75 MINUTE AND namespace = 0 "
-            "GROUP BY title, wikidata_label, server_name "
-            "HAVING edits_15m >= 3 "
+            "sum(CASE WHEN timestamp > dateadd('m',-15,now()) THEN 1 ELSE 0 END) AS edits_15m, "
+            "round(cast(sum(CASE WHEN timestamp > dateadd('m',-15,now()) THEN 1 ELSE 0 END) as double) * 4.0 / "
+            "(sum(CASE WHEN timestamp BETWEEN dateadd('m',-75,now()) AND dateadd('m',-15,now()) THEN 1 ELSE 0 END) + 1), 1) AS spike_ratio "
+            "FROM wikimedia_events "
+            "WHERE timestamp > dateadd('m',-75,now()) AND namespace = 0 "
+            "GROUP BY title, wikidata_label, server_name"
+            ") WHERE edits_15m >= 3 "
             "ORDER BY spike_ratio DESC LIMIT 10"
         )
         data.spike_pages = [
@@ -466,11 +464,12 @@ def fetch_report_data() -> ReportData:
     # 4. Cross-wiki trending (2+ wikis, recent 15m)
     try:
         rows = _query(
-            "SELECT title, uniq(server_name) AS wiki_count, count() AS total_edits, "
-            "arrayStringConcat(groupUniqArray(server_name), ', ') AS wikis "
-            "FROM wikimedia.events "
-            "WHERE event_time > now() - INTERVAL 15 MINUTE AND namespace = 0 "
-            "GROUP BY title HAVING wiki_count >= 2 "
+            "SELECT * FROM ("
+            "SELECT title, count(DISTINCT server_name) AS wiki_count, count(1) AS total_edits, '' AS wikis "
+            "FROM wikimedia_events "
+            "WHERE timestamp > dateadd('m',-15,now()) AND namespace = 0 "
+            "GROUP BY title"
+            ") WHERE wiki_count >= 2 "
             "ORDER BY wiki_count DESC, total_edits DESC LIMIT 10"
         )
         data.crosswiki_pages = [
@@ -488,14 +487,15 @@ def fetch_report_data() -> ReportData:
     # 5. Top reverted pages (24h, top 5)
     try:
         rows = _query(
-            f"SELECT if(wikidata_label != '', wikidata_label, title) AS label, "
-            f"server_name, count() AS total_edits, "
-            f"countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) AS reverts, "
-            f"round(100.0 * countIf(comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR startsWith(comment, 'Reverted')) / count(), 1) AS revert_rate_pct "
-            f"FROM wikimedia.events "
+            f"SELECT * FROM ("
+            f"SELECT CASE WHEN wikidata_label <> '' THEN wikidata_label ELSE title END AS label, "
+            f"server_name, count(1) AS total_edits, "
+            f"sum(CASE WHEN comment ilike '%revert%' OR comment ilike '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS reverts, "
+            f"round(100.0 * sum(CASE WHEN comment ilike '%revert%' OR comment ilike '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) / count(1), 1) AS revert_rate_pct "
+            f"FROM wikimedia_events "
             f"WHERE {time_filter} AND namespace = 0 "
-            f"GROUP BY title, wikidata_label, server_name "
-            f"HAVING reverts > 0 "
+            f"GROUP BY title, wikidata_label, server_name"
+            f") WHERE reverts > 0 "
             f"ORDER BY reverts DESC LIMIT 5"
         )
         data.revert_pages = [
@@ -514,8 +514,8 @@ def fetch_report_data() -> ReportData:
     # 6. Peak edit hour (24h)
     try:
         rows = _query(
-            "SELECT toHour(event_time) AS hour, count() AS edits "
-            "FROM wikimedia.events "
+            "SELECT extract(hour from timestamp) AS hour, count(1) AS edits "
+            "FROM wikimedia_events "
             f"WHERE {time_filter} "
             "GROUP BY hour ORDER BY edits DESC LIMIT 1"
         )
@@ -531,12 +531,12 @@ def fetch_report_data() -> ReportData:
         try:
             rows = _query(
                 "SELECT title, server_name "
-                "FROM wikimedia.events "
-                "WHERE event_time >= now() - INTERVAL 48 HOUR "
-                "AND event_time < now() - INTERVAL 24 HOUR "
-                "AND namespace = 0 AND bot = 0 "
+                "FROM wikimedia_events "
+                "WHERE timestamp >= dateadd('h',-48,now()) "
+                "AND timestamp < dateadd('d',-1,now()) "
+                "AND namespace = 0 AND bot = false "
                 "GROUP BY title, wikidata_label, server_name "
-                "ORDER BY count() DESC LIMIT 10"
+                "ORDER BY count(1) DESC LIMIT 10"
             )
             yesterday_rank = {r["title"]: i + 1 for i, r in enumerate(rows)}
             for today_rank, page in enumerate(data.top_pages, 1):

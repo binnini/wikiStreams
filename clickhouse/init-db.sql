@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS wikimedia.kafka_raw
 )
 ENGINE = Kafka
 SETTINGS
-    kafka_broker_list          = 'kafka-kraft:29092',
+    kafka_broker_list          = 'redpanda:9092',
     kafka_topic_list           = 'wikimedia.recentchange',
     kafka_group_name           = 'clickhouse-consumer',
     kafka_format               = 'JSONEachRow',

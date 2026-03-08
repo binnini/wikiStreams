@@ -10,12 +10,15 @@ datasources:
     jsonData:
       derivedFields: []
 
-  - name: ClickHouse
-    type: grafana-clickhouse-datasource
-    uid: ClickHouse
+  - name: QuestDB
+    type: postgres
+    uid: QuestDB
+    url: questdb:8812
+    user: admin
+    secureJsonData:
+      password: quest
     jsonData:
-      host: clickhouse
-      port: 9000
-      username: default
-      defaultDatabase: wikimedia
-      protocol: native
+      database: qdb
+      sslmode: disable
+      postgresVersion: 1200
+      timescaledb: false

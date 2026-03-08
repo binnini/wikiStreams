@@ -2,9 +2,9 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # ClickHouse Settings
-    clickhouse_host: str = "clickhouse"
-    clickhouse_port: int = 8123
+    # QuestDB Settings
+    questdb_host: str = "questdb"
+    questdb_port: int = 9000
 
     # API Keys
     anthropic_api_key: str = ""

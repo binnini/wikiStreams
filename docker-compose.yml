@@ -1,7 +1,7 @@
 volumes:
   producer_cache: {}
   grafana_data: {}
-  clickhouse_data: {}
+  questdb_data: {}
   resource_monitor_data: {}
   loki_data: {}
 
@@ -42,51 +42,55 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - GF_INSTALL_PLUGINS=grafana-clickhouse-datasource
       - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
     depends_on:
       - loki
     restart: always
 
-  clickhouse:
-    image: clickhouse/clickhouse-server:25.8
-    container_name: clickhouse
+  questdb:
+    image: questdb/questdb:8.2.1
+    container_name: questdb
     ports:
-      - "8123:8123"  # HTTP interface
-      - "9000:9000"  # Native TCP
+      - "9000:9000"   # REST API + Web Console
+      - "8812:8812"   # PostgreSQL wire protocol (Grafana 연결)
     volumes:
-      - clickhouse_data:/var/lib/clickhouse
-      - ./clickhouse/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-      - ./clickhouse/override-users.xml:/etc/clickhouse-server/users.d/override-users.xml
-    depends_on:
-      - kafka-kraft
-    restart: always
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-
-  kafka-kraft:
-    image: confluentinc/cp-kafka:8.1.1
-    container_name: kafka-kraft
-    hostname: kafka-kraft
-    ports:
-      - "9092:9092"
-      - "9101:9101" # JMX 모니터링 포트
+      - questdb_data:/var/lib/questdb
     environment:
-      # 노드 식별자
-      KAFKA_NODE_ID: 1
-      KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
-      KAFKA_LISTENERS: 'PLAINTEXT://kafka-kraft:29092,CONTROLLER://kafka-kraft:29093,PLAINTEXT_HOST://0.0.0.0:9092'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-kraft:29092,PLAINTEXT_HOST://localhost:9092'
-      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-kraft:29093'
-      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
-      CLUSTER_ID: 'mhOYs7esSROR35QrnFq1eA'
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_JMX_PORT: 9101
-      KAFKA_JMX_HOSTNAME: localhost
+      QDB_CAIRO_MAX_UNCOMMITTED_ROWS: "1000"
+      QDB_LINE_TCP_MAINTENANCE_JOB_INTERVAL: "5000"
+    restart: always
+
+  questdb-consumer:
+    build: ./src/questdb_consumer
+    container_name: questdb-consumer
+    depends_on:
+      - questdb
+      - redpanda
+    restart: on-failure
+    environment:
+      KAFKA_BROKER: "redpanda:9092"
+      KAFKA_TOPIC: "wikimedia.recentchange"
+      KAFKA_GROUP_ID: "questdb-consumer"
+      QUESTDB_HOST: "questdb"
+      QUESTDB_ILP_PORT: "9009"
+      BATCH_SIZE: "500"
+      BATCH_TIMEOUT_MS: "5000"
+      LOG_LEVEL: "INFO"
+
+  redpanda:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:9092
+      - --mode dev-container
+      - --smp 1
+      - --memory 512M
+    ports:
+      - "9092:19092"  # host:9092 → container external listener :19092
+    restart: always
 
   producer:
     build: ./src/producer
@@ -94,24 +98,15 @@ services:
     volumes:
       - producer_cache:/cache
     depends_on:
-      - kafka-kraft
+      - redpanda
     restart: on-failure
     environment:
-      KAFKA_BROKER: 'kafka-kraft:29092'
+      KAFKA_BROKER: 'redpanda:9092'
       KAFKA_TOPIC: 'wikimedia.recentchange'
       KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
 
-  dlq-consumer:
-    build: ./src/dlq_consumer
-    container_name: dlq-consumer
-    depends_on:
-      - kafka-kraft
-    restart: on-failure
-    environment:
-      KAFKA_BROKER: 'kafka-kraft:29092'
-      KAFKA_TOPIC: 'wikimedia.recentchange'
-      KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
-      DLQ_MAX_RETRIES: '3'
+  # dlq-consumer: 1단계 경량화 — 제거 (2026-03-07 스테이징 검증, 2026-03-08 운영 반영)
+  # 제거 근거: _should_skip() 사전 필터로 log/canary 이벤트 드롭 → DLQ near-zero 확인
 
   resource-monitor:
     build: ./src/resource_monitor
@@ -120,7 +115,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - resource_monitor_data:/data
     environment:
-      MONITOR_TARGETS: 'producer,clickhouse'
+      MONITOR_TARGETS: 'producer,questdb'
       RESOURCE_MONITOR_DISCORD_WEBHOOK_URL: '${RESOURCE_MONITOR_DISCORD_WEBHOOK_URL}'
       BASELINE_DB_PATH: '/data/resource_monitor_baseline.db'
     restart: always
@@ -129,11 +124,11 @@ services:
     build: ./src/reporter
     container_name: reporter
     depends_on:
-      - clickhouse
+      - questdb
     restart: always
     environment:
-      CLICKHOUSE_HOST: 'clickhouse'
-      CLICKHOUSE_PORT: '8123'
+      QUESTDB_HOST: 'questdb'
+      QUESTDB_PORT: '9000'
       ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
       DISCORD_WEBHOOK_URL: '${DISCORD_WEBHOOK_URL}'
       REPORT_HOUR_KST: '9'
