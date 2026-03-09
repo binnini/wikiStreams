@@ -118,8 +118,25 @@
     - [ ] `benchmark/runner.py` 작성 (캐시 초기화 → 측정 → p50/p95/p99 CSV 출력)
     - [ ] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가
 
-  - [ ] **[벤치마크] Kafka(t4g.medium) vs Redpanda(t3.small) 트레이드오프 Deep Dive** *(설계 예정)*
-    - 다음 분석 대상. 설계 논의 후 TODO 상세 항목 추가 예정.
+  - [ ] **[벤치마크] Kafka vs Redpanda 트레이드오프 Deep Dive** *(설계 완료, 구현 대기)*
+    - **목적**: 메모리 절감 외에 latency/안정성 관점의 트레이드오프 수치화.
+    - **핵심 인사이트**: 18 msg/sec에서 전환의 실질적 이유는 latency가 아닌 메모리. GC pause 영향은 p99/p999에서 드러남. 환경(로컬 vs AWS) 차이가 결과에 거의 영향 없음 (CPU/RAM bound, disk 무관).
+    - **비교 환경** (t3.small 시뮬레이션):
+      - Kafka:    `mem_limit: 800m`, `KAFKA_HEAP_OPTS="-Xms256m -Xmx512m"` (힙 압박으로 GC 빈도 재현)
+      - Redpanda: `mem_limit: 500m` (현재 실측 ~387 MiB 기준)
+    - **측정 1 — Send Latency**: 18 / 50 / 200 msg/sec × 각 30분, p50/p95/p99/p999 수집
+      - 18/sec: 운영 실부하. 50/sec: GC 빈도 증가 시작. 200/sec: GC pause p99 명확히 드러나는 구간.
+    - **측정 2 — RSS 시계열**: 5초 간격 docker stats → Kafka saw-tooth vs Redpanda 안정선 비교
+    - **측정 3 — 재시작 복구 시간**: `docker restart` 후 Consumer 첫 메시지 수신까지 gap, 5회 반복
+      - SLI-D1 연결: Kafka 20~40s 복구 시 30s SLO 위반 가능 / Redpanda 2~5s → SLO 여유
+    - **측정 4 — CPU 패턴**: RSS와 교차 수집 → GC 시 CPU 스파이크 + RSS 급감 동시 검증
+    - **결과 형태**: p50/p95/p99/p999 per (db × rate), RSS 시계열 그래프, 복구 시간 평균/최대
+    - [ ] `benchmark/docker-compose.kafka-bench.yml` 작성 (Kafka KRaft 단일 노드)
+    - [ ] `benchmark/kafka/kraft.properties` 작성
+    - [ ] `benchmark/load_generator.py` 작성 (send latency 측정, 처리량 3구간)
+    - [ ] `benchmark/memory_monitor.py` 작성 (RSS + CPU 시계열 수집)
+    - [ ] `benchmark/recovery_test.py` 작성 (재시작 복구 gap 측정)
+    - [ ] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가
 
   - [ ] **4단계: Loki/Alloy 경량화** *(3단계 운영 전환 완료 후 옵션 선택)*
     - **배경**: Loki(253 MiB) + Alloy(104 MiB) = 357 MiB. 대시보드 41개 Loki 쿼리 중 25개가
