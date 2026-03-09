@@ -100,6 +100,27 @@
       - QuestDB: 컬럼 파일을 mmap으로 읽어 RSS에 반영. mmap 할당량 설정 없음 — OS page cache에 완전 위임. RAM이 넉넉한 환경에서는 page eviction 없이 RSS가 working set에 비례해 선형 증가(24h 관측: +34 MiB/h).
       - 대응 전략: `mem_limit: 1100m`으로 cgroup 압력 부여(강제 eviction) + TTL 5d로 working set 상한 제한(최대 ~575 MiB × 5일 = ~2.9 GiB 컬럼 파일, cgroup 1.1 GiB 내에서 OS가 LRU evict).
 
+  - [ ] **[벤치마크] ClickHouse(t4g.medium) vs QuestDB(t3.small) Cold Read 비교** *(설계 완료, 구현 대기)*
+    - **목적**: 마이그레이션 트레이드오프 수치화 — 인스턴스 다운그레이드로 얻는 비용 절감이 어느 정도의 cold read 성능 저하를 감수하는 것인지 정량화.
+    - **비교 환경** (각자 자연스러운 동작 조건):
+      - ClickHouse: `mem_limit: 4000m` (t4g.medium 4 GiB 시뮬레이션), `uncompressed_cache: 1 GiB`, `mark_cache: 256 MiB`
+      - QuestDB: `mem_limit: 1100m` (t3.small 시뮬레이션, 현재 설정)
+    - **데이터**: 합성 5일치 ~780만 건 (18 events/sec 기준) — 양쪽 DB에 동일 주입
+    - **측정 쿼리**: Reporter 실제 쿼리 기반 3개 (Q1: 집계, Q3: GROUP BY, Q5: DISTINCT+정렬)
+    - **측정 조건**: recent(최근 1일) vs old(4~5일 전 하루) × cold vs warm × N=10
+    - **캐시 초기화**: QuestDB → `sudo purge` (macOS) / ClickHouse → `SYSTEM DROP MARK CACHE` + `SYSTEM DROP UNCOMPRESSED CACHE`
+    - **결과 형태**: p50/p95/p99 per (db × range × query × mode), SLO 2s 통과 여부
+    - **로컬→AWS 보정**: 절대 수치는 EBS/NVMe 속도비(~23x) 곱해 worst-case 예측치로 활용
+    - [ ] `benchmark/docker-compose.bench.yml` 작성 (ClickHouse 임시 기동)
+    - [ ] `benchmark/clickhouse/config.xml` 작성 (t4g.medium 캐시 설정)
+    - [ ] `benchmark/data_generator.py` 작성 (합성 5일치 데이터 → QuestDB ILP + ClickHouse HTTP)
+    - [ ] `benchmark/queries.py` 작성 (Q1/Q3/Q5 양쪽 SQL)
+    - [ ] `benchmark/runner.py` 작성 (캐시 초기화 → 측정 → p50/p95/p99 CSV 출력)
+    - [ ] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가
+
+  - [ ] **[벤치마크] Kafka(t4g.medium) vs Redpanda(t3.small) 트레이드오프 Deep Dive** *(설계 예정)*
+    - 다음 분석 대상. 설계 논의 후 TODO 상세 항목 추가 예정.
+
   - [ ] **4단계: Loki/Alloy 경량화** *(3단계 운영 전환 완료 후 옵션 선택)*
     - **배경**: Loki(253 MiB) + Alloy(104 MiB) = 357 MiB. 대시보드 41개 Loki 쿼리 중 25개가
       `unwrap`(로그→숫자 추출) 사용 → SLI-P1·P2·P7·R1·CAP1·CAP2·CAP3 핵심 지표.
