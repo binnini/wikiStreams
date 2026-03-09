@@ -80,17 +80,25 @@
     - [x] 파이프라인 정상 확인: 전환 직후 2분간 3,037건 적재 ✅
     - [ ] SLI-P1·P5·D1 재측정 — 운영 Redpanda 기준 baseline 갱신 (1주 후)
 
-  - [x] **3단계: ClickHouse → QuestDB 전환** *(2026-03-08 운영 전환 완료)*
-    - 실측 절감: ~1,756 MiB → 전환 후 총 메모리 **~1,287 MiB (t3.small 63% ✅)**
+  - [x] **3단계: ClickHouse → QuestDB 전환** *(2026-03-08 운영 전환 완료 / 2026-03-09 운영 안정화)*
+    - 실측 절감: ~1,756 MiB → 전환 후 24h 실측 총 메모리 **~1,446 MiB (t3.small 71% ✅)**
     - [x] `docker-compose.yml`: `clickhouse` → `questdb` + `questdb-consumer` 추가
-    - [x] `monitoring/grafana-datasources.yaml`: ClickHouse 플러그인 → PostgreSQL (포트 8812)
-    - [x] `monitoring/grafana-alert-rules.yaml`: ClickHouse 참조 → QuestDB 업데이트
-    - [x] `monitoring/dashboards/wikistreams-analytics.json`: QuestDB 버전으로 교체
+    - [x] `monitoring/grafana-datasources.yaml`: ClickHouse 플러그인 → PostgreSQL (포트 8812), `deleteDatasources`로 ClickHouse 레거시 제거
+    - [x] `monitoring/grafana-alert-rules.yaml`: SLI-D1 SQL 수정 (QuestDB datediff 제약: CHAR 단위, 집계함수 서브쿼리 분리)
+    - [x] `monitoring/dashboards/wikistreams-slo.json`: 전 패널 ClickHouse SQL → QuestDB SQL 재작성 (A2/P3/P5/D1/D2/CAP1/CAP2)
+    - [x] `monitoring/dashboards/wikistreams-analytics.json`: QuestDB-staging UID 제거, 대시보드 UID 복원
+    - [x] `monitoring/dashboards/wikistreams-resources.json`: 전 패널 QuestDB 데이터소스로 전환
     - [x] `src/reporter/config.py`: `clickhouse_host/port` → `questdb_host/port`
-    - [x] `src/reporter/fetcher.py`: `_query()` QuestDB REST API + SQL 10개 번역
-    - [x] 전환 후 검증: Q1~Q6 쿼리 정상, 5분간 수천 건 적재 ✅
-    - [x] QuestDB 메모리: 377 MiB ✅ (목표 ≤ 400 MiB)
+    - [x] `src/reporter/fetcher.py`: `_query()` QuestDB REST API + SQL 10개 번역, 재시도 로직(3회/2s) 추가
+    - [x] `src/questdb_consumer/main.py`: `_ensure_table()` 추가 — 시작 시 명시적 스키마로 테이블 생성 (ILP auto-create 방지)
+    - [x] QuestDB 8.2.1 → **9.3.3 업그레이드** (TTL 지원 버전)
+    - [x] `docker-compose.yml` questdb: `mem_limit: 1100m` 추가 (page cache 예산 제한)
+    - [x] `wikimedia_events` 테이블: `PARTITION BY DAY TTL 5d` 적용 (디스크 무한 증가 방지)
     - 트러블슈팅: orphan container(clickhouse) 포트 9000 충돌로 questdb 네트워크 미연결 → force-recreate로 해결
+    - **ClickHouse vs QuestDB 메모리 트레이드오프**:
+      - ClickHouse: `uncompressed_cache_size` / `mark_cache_size` / `max_server_memory_usage_ratio` — 명시적 LRU 예산. OS page cache와 독립적으로 동작하여 메모리 사용량 예측 가능.
+      - QuestDB: 컬럼 파일을 mmap으로 읽어 RSS에 반영. mmap 할당량 설정 없음 — OS page cache에 완전 위임. RAM이 넉넉한 환경에서는 page eviction 없이 RSS가 working set에 비례해 선형 증가(24h 관측: +34 MiB/h).
+      - 대응 전략: `mem_limit: 1100m`으로 cgroup 압력 부여(강제 eviction) + TTL 5d로 working set 상한 제한(최대 ~575 MiB × 5일 = ~2.9 GiB 컬럼 파일, cgroup 1.1 GiB 내에서 OS가 LRU evict).
 
   - [ ] **4단계: Loki/Alloy 경량화** *(3단계 운영 전환 완료 후 옵션 선택)*
     - **배경**: Loki(253 MiB) + Alloy(104 MiB) = 357 MiB. 대시보드 41개 Loki 쿼리 중 25개가
@@ -124,13 +132,10 @@
 
 
 
-- [ ] **ClickHouse 메모리 Drift 장기 관찰** *(2026-03-01 관찰 시작)*
-  - **배경**: 20분간 메모리가 3,284 MB → 3,413 MB (+6 MB/분)으로 완만하게 증가. MergeTree 백그라운드 merge 중 캐시 미반환 가능성.
-  - **관찰 기준**: 수일간 `mem_mb` 추이가 선형 증가를 유지하면 조치 필요.
-  - **조치 후보**:
-    - `OPTIMIZE TABLE wikimedia.events FINAL` — 파트 강제 병합으로 메모리 반환 유도
-    - ClickHouse `max_memory_usage` / `max_bytes_before_external_group_by` 설정 검토
-    - resource-monitor 베이스라인 학습 완료(시간대별 30+ 샘플) 후 메모리 drift anomaly 자동 감지 여부 확인
+- [ ] **QuestDB 메모리 Drift 장기 관찰** *(2026-03-09 관찰 시작)*
+  - **배경**: 24h 관측에서 RSS가 ~387 → ~498 MiB (+34 MiB/h)로 선형 증가. OS page cache 채움 현상(leak 아님).
+  - **대응 완료**: `mem_limit: 1100m` + TTL 5d 적용. cgroup 압력으로 page eviction 강제, working set ~5일치로 제한.
+  - **관찰 기준**: `mem_limit` 적용 후 RSS가 1,100 MiB 이하에서 안정되는지 수일간 확인.
 
 - [ ] **AsyncIO 리팩토링**
   - 현재 동기식(Blocking) I/O 구조: Wikidata API 호출이 배치 처리를 블로킹

@@ -1169,3 +1169,91 @@
 - **다음 단계**: 4단계 Loki/Alloy 경량화 옵션 선택 (Option A~C 중 결정). Reporter 일일 발송 확인(익일).
 
 - **결론**: Reporter의 8개 핵심 쿼리 모두 QuestDB에서 동작 가능. 운영 전환 시 `_query()` 함수의 엔드포인트 + SQL 번역 패치 필요.
+
+## 2026-03-09
+
+### 31. 3단계 후속: Grafana 대시보드 datasource 정상화 (SLI-A2 해소)
+
+- **증상**: WikiStreams Analytics 대시보드 전체 패널 `data source not found`. SLO 대시보드 일부 패널 오류.
+
+- **근본 원인 3가지**:
+  1. ClickHouse datasource가 Grafana SQLite DB에 잔존 (provisioning YAML에서 제거해도 기존 볼륨에 남음)
+  2. `wikistreams-analytics.json` UID가 `questdb-analytics`로 변경되어 기존 `wikistreams-analytics` URL의 대시보드(ClickHouse 참조)가 덮어쓰기 안 됨
+  3. `grafana-alert-rules.yaml` SLI-D1 rule: `format: 1`(숫자) → Go struct 파싱 오류, SQL에서 `datediff('second', max(timestamp), now())` QuestDB 미지원 패턴
+
+- **해결**:
+  - `grafana-datasources.yaml`에 `deleteDatasources` 블록 추가 → Grafana 재시작 시 ClickHouse datasource 완전 제거
+  - `wikistreams-analytics.json` uid `questdb-analytics` → `wikistreams-analytics` 복원 → 기존 ClickHouse 대시보드 provisioning으로 덮어쓰기
+  - `wikistreams-analytics-questdb.json` 삭제 (중복 파일)
+  - SLO 대시보드 패널 6개 QuestDB SQL로 재작성 (A2, P3, P5, D1, D2, CAP1/CAP2)
+  - Alert rule `format: "table"`, `rawQuery: true`, `editorMode: "code"` 추가
+
+- **QuestDB SQL 제약 (운영 중 발견)**:
+
+  | 제약 | 증상 | 해결 |
+  |------|------|------|
+  | `datediff` 단위는 CHAR(`'s'`, `'m'`) | `'second'` 사용 시 `argument type mismatch` | 단위 단축형으로 교체 |
+  | `datediff` 인자에 집계함수 불가 | `datediff('s', max(ts), now())` → 오류 | 집계를 서브쿼리로 분리 |
+  | `CASE WHEN count(1) > 0` 불가 | 집계함수를 WHERE 조건에 사용 불가 | 서브쿼리 + 외부 CASE 분리 |
+  | `datediff` 서브쿼리 timestamp 반환 시 내부 오류 | P5 패널 `null` 에러 | timestamp 연산 제거, 고정 윈도우 count로 단순화 |
+
+- **결과**: Analytics / SLO / Resources / Error Monitor 전 대시보드 정상화. SLI-A2 측정 재개.
+
+---
+
+### 32. QuestDB 운영 이슈 심층 분석: 디스크 증가 + 메모리 Drift + ClickHouse 트레이드오프
+
+#### 디스크 증가 근본 원인
+
+- QuestDB `wikimedia_events` 테이블은 **ILP auto-create**로 생성됨 (questdb_consumer가 첫 데이터를 쓸 때 QuestDB가 자동 생성). 이때 TTL이 명시되지 않아 파티션이 영구 보존.
+- ClickHouse는 `init-db.sql`에서 명시적으로 `CREATE TABLE ... TTL event_time + INTERVAL 90 DAY`를 실행했기 때문에 처음부터 TTL이 걸려 있었음. QuestDB는 이 과정이 없었던 것.
+- 실측 증가율: ~39 MiB/h, 7일 방치 시 ~6.5 GiB 도달 예상.
+
+#### 메모리 Drift 분석
+
+- **현상**: RSS 387 MiB(전환 직후) → 498 MiB(24h 후). +34 MiB/h 선형 증가.
+- **원인**: QuestDB는 컬럼 파일을 **mmap**으로 읽음. mmap 페이지는 OS page cache에 올라가며 RSS에 포함됨. QuestDB 자체에는 mmap 할당량 설정이 없어 OS page cache LRU에 완전 위임함.
+- **macOS 환경 특이사항**: 가용 RAM 13.63 GiB → page eviction 압력 없음 → RSS가 working set에 비례해 계속 증가. **메모리 누수가 아님** — page cache가 채워지는 정상 동작.
+- **t3.small(2 GiB) 예상**: OS가 page cache eviction을 일찍 시작 → RSS 자연 안정화 가능. 단, 안정화 전 OOM 위험 존재.
+
+#### ClickHouse vs QuestDB 메모리 관리 비교
+
+| 항목 | ClickHouse | QuestDB |
+|------|-----------|---------|
+| 캐시 방식 | 명시적 LRU: `uncompressed_cache_size`, `mark_cache_size` | mmap → OS page cache (암묵적 LRU) |
+| 상한 설정 | `max_server_memory_usage_ratio` (예: 0.6) | 없음 — OS에 위임 |
+| 예산 초과 시 | 캐시 자동 eviction, 쿼리 진행 | OS가 page evict (메모리 압박 시) |
+| RAM 충분 시 동작 | 캐시 고정 예산 내에서 안정 | RSS가 working set까지 계속 증가 |
+| 운영자 제어 포인트 | XML config `<uncompressed_cache_size>` 등 | Docker `mem_limit` + TTL로 간접 제어 |
+| 예측 가능성 | **높음** (캐시 예산 명시) | **낮음** (working set 크기 의존) |
+
+- ClickHouse가 이 환경이었다면: `max_server_memory_usage_ratio=0.5`로 ~550 MiB 상한 설정 → 초과 시 LRU eviction 자동 처리. **운영자가 값 하나로 예산을 박음.**
+- QuestDB에서는 이에 상응하는 서버 설정이 없어, **Docker `mem_limit`으로 cgroup 압력 부여 + TTL로 working set 크기 제한**하는 조합으로 간접 제어.
+
+#### 결정 및 조치
+
+- **디스크**: `wikimedia_events` DROP → `CREATE TABLE ... PARTITION BY DAY TTL 5d`로 재생성. `questdb_consumer/_ensure_table()`에 명시적 스키마 생성 로직 추가 (ILP auto-create 방지).
+- **메모리**: Docker `mem_limit: 1100m` 적용. working set 5일치 ~2.9 GiB 컬럼 파일을 cgroup 1.1 GiB 예산 내에서 OS가 LRU evict.
+- **상세 분석**: `docs/ARCH_LIGHTENING_REPORT.md` "QuestDB 운영 이슈 심층 분석" 섹션 참조.
+
+---
+
+### 33. QuestDB 8.2.1 → 9.3.3 업그레이드 (TTL 지원)
+
+- **배경**: QuestDB 8.2.1에서 `CREATE TABLE ... TTL 5d` 구문 미지원 (`unexpected token [TTL]` 오류). TTL은 8.3.0에서 도입됨.
+
+- **선택지**:
+  - A. 업그레이드 (8.3.0+) — TTL 네이티브 지원
+  - B. 현 버전 유지 + consumer 내 주기적 `ALTER TABLE DROP PARTITION` 크론
+
+- **결정**: A. `9.3.3`(최신 stable)으로 업그레이드. 기존 데이터는 전환 직후이고 의미있는 이력이 없어 볼륨 초기화 병행.
+
+- **작업**:
+  1. `docker-compose.yml`: `questdb/questdb:8.2.1` → `questdb/questdb:9.3.3`
+  2. `docker compose stop questdb questdb-consumer && docker compose rm -f questdb questdb-consumer`
+  3. `docker volume rm wikistreams_questdb_data`
+  4. `docker compose up -d questdb` → 9.3.3 pull + 기동
+  5. TTL 구문 직접 검증: `CREATE TABLE ... TTL 5d` → `{"ddl":"OK"}` ✅
+  6. `docker compose up -d questdb-consumer` → `_ensure_table()` 실행 → `wikimedia_events 테이블 확인/생성 완료 (TTL 5d)` 로그 확인 ✅
+
+- **결과**: QuestDB 9.3.3 + `mem_limit: 1100m` + TTL 5d 적용. 디스크/메모리 양쪽 운영 이슈 해소.
