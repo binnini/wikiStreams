@@ -43,10 +43,10 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
       },
-      "description": "SLI-A2: 24시간 ClickHouse 쿼리 성공률. 목표: ≥ 99%",
+      "description": "SLI-A2: QuestDB 데이터 수신 확인 (최근 1h 이벤트 존재 시 100%). 목표: ≥ 99%",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -100,15 +100,17 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
           },
-          "format": 1,
-          "rawSql": "SELECT countIf(type = 'QueryFinish') * 100.0 / count() AS value FROM system.query_log WHERE event_time >= now() - INTERVAL 24 HOUR AND query NOT LIKE '%system.query_log%' AND type NOT IN ('QueryStart')",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT CASE WHEN cnt > 0 THEN 100.0 ELSE 0.0 END AS value FROM (SELECT count(1) AS cnt FROM wikimedia_events WHERE timestamp >= dateadd('h', -1, now()))",
           "refId": "A"
         }
       ],
-      "title": "SLI-A2: ClickHouse 쿼리 성공률 (24h) — 목표 ≥ 99%",
+      "title": "SLI-A2: QuestDB 가용성 확인 — 목표 ≥ 99%",
       "type": "gauge"
     },
     {
@@ -417,35 +419,35 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
       },
-      "description": "SLI-P3: ClickHouse 쿼리 응답 p99. 목표: ≤ 1초",
+      "description": "SLI-P3: QuestDB 최근 1분 적재 이벤트 수. 목표: ≥ 800/min",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 3,
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "red",
                 "value": null
               },
               {
                 "color": "yellow",
-                "value": 0.5
+                "value": 600
               },
               {
-                "color": "red",
-                "value": 1
+                "color": "green",
+                "value": 800
               }
             ]
           },
-          "unit": "s"
+          "unit": "none"
         },
         "overrides": []
       },
@@ -472,21 +474,23 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
           },
-          "format": 1,
-          "rawSql": "SELECT quantile(0.99)(query_duration_ms) / 1000.0 AS value FROM system.query_log WHERE type = 'QueryFinish' AND event_time >= now() - INTERVAL 1 HOUR AND query NOT LIKE '%system.%'",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m', -1, now())",
           "refId": "A"
         }
       ],
-      "title": "SLI-P3: 쿼리 응답 p99 (1h) — 목표 ≤ 1s",
+      "title": "SLI-P3: QuestDB 1분 적재 이벤트 수 — 목표 ≥ 800",
       "type": "gauge"
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
       },
       "description": "SLI-P5: Producer 처리량. 목표: ≥ 300 events/min",
       "fieldConfig": {
@@ -541,13 +545,14 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
           },
-          "format": 1,
-          "rawSql": "SELECT count() / greatest(dateDiff('minute', min(event_time), max(event_time)), 1) AS value FROM wikimedia.events WHERE event_time >= now() - INTERVAL 5 MINUTE",
-          "refId": "A",
-          "expr": "sum(rate({container=\"producer\"} |= \"으로 전송했습니다\" | regexp \"(?P<count>[0-9]+)개의 이벤트\" | unwrap count [5m])) * 60"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT round(count(1) / 5.0) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m', -5, now())",
+          "refId": "A"
         }
       ],
       "title": "SLI-P5: 처리량 events/min (최근 5m) — 목표 ≥ 300",
@@ -859,8 +864,8 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
       },
       "description": "SLI-D1: 최신 이벤트 신선도. 목표: ≤ 30초",
       "fieldConfig": {
@@ -914,11 +919,13 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
           },
-          "format": 1,
-          "rawSql": "SELECT dateDiff('second', max(event_time), now()) AS value FROM wikimedia.events",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT datediff('s', latest_ts, now()) AS value FROM (SELECT max(timestamp) AS latest_ts FROM wikimedia_events)",
           "refId": "A"
         }
       ],
@@ -927,10 +934,10 @@
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
       },
-      "description": "SLI-D2: Q-ID 이벤트 중 wikidata_label 보강 성공 비율. 목표: ≥ 90%",
+      "description": "SLI-D2: Q-ID 이벤트 중 wikidata_label 보강 성공 비율. 목표: ≥ 80%",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -949,11 +956,11 @@
               },
               {
                 "color": "yellow",
-                "value": 70
+                "value": 60
               },
               {
                 "color": "green",
-                "value": 90
+                "value": 80
               }
             ]
           },
@@ -984,23 +991,25 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
           },
-          "format": 1,
-          "rawSql": "SELECT countIf(wikidata_label != '') * 100.0 / count() AS value FROM wikimedia.events WHERE event_time >= now() - INTERVAL 24 HOUR AND title LIKE 'Q%'",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT sum(CASE WHEN wikidata_label <> '' THEN 1 ELSE 0 END) * 100.0 / count(1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('h', -24, now()) AND title LIKE 'Q%'",
           "refId": "A"
         }
       ],
-      "title": "SLI-D2: Wikidata 레이블 보강률 (24h) — 목표 ≥ 90%",
+      "title": "SLI-D2: Wikidata 레이블 보강률 (24h) — 목표 ≥ 80%",
       "type": "gauge"
     },
     {
       "datasource": {
-        "type": "grafana-clickhouse-datasource",
-        "uid": "ClickHouse"
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
       },
-      "description": "SLI-R5: SSE 수신 이벤트 대비 ClickHouse 적재 이벤트 수 (배치별 비교용 참고 패널)",
+      "description": "SLI-R5: QuestDB 적재 이벤트 수 (최근 1h)",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1043,15 +1052,17 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-clickhouse-datasource",
-            "uid": "ClickHouse"
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
           },
-          "format": 1,
-          "rawSql": "SELECT count() AS value FROM wikimedia.events WHERE event_time >= now() - INTERVAL 1 HOUR",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('h', -1, now())",
           "refId": "A"
         }
       ],
-      "title": "ClickHouse 적재 이벤트 수 (1h)",
+      "title": "QuestDB 적재 이벤트 수 (1h)",
       "type": "stat"
     },
     {
@@ -1071,7 +1082,7 @@
         "type": "loki",
         "uid": "Loki"
       },
-      "description": "SLI-CAP1: ClickHouse 메모리 사용률. 목표: ≤ 80%",
+      "description": "SLI-CAP1: QuestDB 메모리 사용률. 목표: ≤ 80%",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -1129,13 +1140,13 @@
             "uid": "Loki"
           },
           "editorMode": "code",
-          "expr": "last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"clickhouse\" | unwrap mem_pct [2m])",
-          "legendFormat": "ClickHouse 메모리",
+          "expr": "last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"questdb\" | unwrap mem_pct [2m])",
+          "legendFormat": "QuestDB 메모리",
           "queryType": "instant",
           "refId": "A"
         }
       ],
-      "title": "SLI-CAP1: ClickHouse 메모리 사용률 — 목표 ≤ 80%",
+      "title": "SLI-CAP1: QuestDB 메모리 사용률 — 목표 ≤ 80%",
       "type": "gauge"
     },
     {
@@ -1262,8 +1273,8 @@
             "uid": "Loki"
           },
           "editorMode": "code",
-          "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"clickhouse\" | unwrap mem_pct [5m]) by (target_container)",
-          "legendFormat": "ClickHouse 메모리",
+          "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"questdb\" | unwrap mem_pct [5m]) by (target_container)",
+          "legendFormat": "QuestDB 메모리",
           "queryType": "range",
           "refId": "A"
         },

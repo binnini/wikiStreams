@@ -16,8 +16,10 @@ groups:
             relativeTimeRange: { from: 300, to: 0 }
             datasourceUid: QuestDB
             model:
-              format: 1
-              rawSql: "SELECT datediff('second', max(timestamp), now()) AS value FROM wikimedia_events"
+              editorMode: code
+              format: "table"
+              rawQuery: true
+              rawSql: "SELECT datediff('s', latest_ts, now()) AS value FROM (SELECT max(timestamp) AS latest_ts FROM wikimedia_events)"
               refId: A
           - refId: C
             datasourceUid: __expr__

@@ -3,12 +3,20 @@
     "list": [
       {
         "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
-        "target": { "limit": 100, "matchAny": false, "tags": [], "type": "dashboard" },
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
         "type": "dashboard"
       }
     ]
@@ -22,16 +30,26 @@
   "panels": [
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
       "id": 10,
       "title": "Current Usage",
       "type": "row"
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 1,
           "mappings": [],
           "max": 100,
@@ -39,27 +57,50 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 30 },
-              { "color": "red", "value": 60 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 30
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
             ]
           },
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
       "id": 3,
       "options": {
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
         "text": {}
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "sum(last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap cpu_pct [2m]) by (target_container))",
           "legendFormat": "Total CPU",
@@ -71,10 +112,15 @@
       "type": "gauge"
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "decimals": 1,
           "mappings": [],
           "max": 100,
@@ -82,27 +128,50 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 25 },
-              { "color": "red", "value": 50 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 25
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
             ]
           },
           "unit": "percent"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 1 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
       "id": 4,
       "options": {
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showThresholdLabels": false,
         "showThresholdMarkers": true,
         "text": {}
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "sum(last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap mem_pct [2m]) by (target_container))",
           "legendFormat": "Total Memory",
@@ -115,16 +184,26 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
       "id": 20,
       "title": "CPU Trends",
       "type": "row"
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisLabel": "CPU (%)",
             "axisPlacement": "auto",
@@ -132,15 +211,26 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "opacity",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": true,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
           },
           "decimals": 1,
           "mappings": [],
@@ -148,39 +238,83 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "transparent", "value": null },
-              { "color": "red", "value": 30 }
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
             ]
           },
           "unit": "percent"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Total (sum)" },
+            "matcher": {
+              "id": "byName",
+              "options": "Total (sum)"
+            },
             "properties": [
-              { "id": "custom.lineWidth", "value": 3 },
-              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
-              { "id": "color", "value": { "fixedColor": "white", "mode": "fixed" } },
-              { "id": "custom.fillOpacity", "value": 0 }
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "white",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
             ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 10 },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
       "id": 1,
       "options": {
         "legend": {
-          "calcs": ["last", "max"],
+          "calcs": [
+            "last",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "right",
           "sortBy": "Last",
           "sortDesc": true
         },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap cpu_pct [1m]) by (target_container)",
           "legendFormat": "{{target_container}}",
@@ -188,7 +322,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "sum(avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap cpu_pct [1m]) by (target_container))",
           "legendFormat": "Total (sum)",
@@ -201,16 +338,26 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
       "id": 30,
       "title": "Memory Trends",
       "type": "row"
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisLabel": "Memory (%)",
             "axisPlacement": "auto",
@@ -218,15 +365,26 @@
             "drawStyle": "line",
             "fillOpacity": 10,
             "gradientMode": "opacity",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "lineInterpolation": "smooth",
             "lineWidth": 2,
             "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": true,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "line" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "line"
+            }
           },
           "decimals": 1,
           "mappings": [],
@@ -234,39 +392,83 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "transparent", "value": null },
-              { "color": "red", "value": 30 }
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 30
+              }
             ]
           },
           "unit": "percent"
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Total (sum)" },
+            "matcher": {
+              "id": "byName",
+              "options": "Total (sum)"
+            },
             "properties": [
-              { "id": "custom.lineWidth", "value": 3 },
-              { "id": "custom.lineStyle", "value": { "dash": [8, 4], "fill": "dash" } },
-              { "id": "color", "value": { "fixedColor": "white", "mode": "fixed" } },
-              { "id": "custom.fillOpacity", "value": 0 }
+              {
+                "id": "custom.lineWidth",
+                "value": 3
+              },
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    8,
+                    4
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "white",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 0
+              }
             ]
           }
         ]
       },
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 21 },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
       "id": 2,
       "options": {
         "legend": {
-          "calcs": ["last", "max"],
+          "calcs": [
+            "last",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "right",
           "sortBy": "Last",
           "sortDesc": true
         },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap mem_pct [1m]) by (target_container)",
           "legendFormat": "{{target_container}}",
@@ -274,7 +476,10 @@
           "refId": "A"
         },
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "sum(avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap mem_pct [1m]) by (target_container))",
           "legendFormat": "Total (sum)",
@@ -287,121 +492,211 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 31 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
       "id": 40,
       "title": "ClickHouse Data Volume",
       "type": "row"
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "blue", "value": null }]
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 32 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 0,
+        "y": 32
+      },
       "id": 5,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
-          "rawSql": "SELECT count() FROM wikimedia.events",
-          "refId": "A",
-          "format": 0
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(1) FROM wikimedia_events",
+          "refId": "A"
         }
       ],
       "title": "Total Events (rows)",
       "type": "stat"
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "purple", "value": null }]
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
           },
-          "unit": "bytes"
+          "unit": "none"
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 32 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 8,
+        "y": 32
+      },
       "id": 6,
       "options": {
         "colorMode": "background",
         "graphMode": "none",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
-          "rawSql": "SELECT sum(bytes_on_disk) FROM system.parts WHERE database = 'wikimedia' AND table = 'events' AND active = 1",
-          "refId": "A",
-          "format": 0
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(1) FROM wikimedia_events WHERE timestamp >= dateadd('d', -1, now())",
+          "refId": "A"
         }
       ],
-      "title": "Disk Usage (wikimedia.events)",
-      "type": "stat"
+      "title": "24h 적재 이벤트 수 (wikimedia_events)",
+      "type": "stat",
+      "description": "QuestDB wikimedia_events 테이블 24시간 이벤트 수"
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 32 },
+      "gridPos": {
+        "h": 5,
+        "w": 8,
+        "x": 16,
+        "y": 32
+      },
       "id": 7,
       "options": {
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "center",
         "orientation": "auto",
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "textMode": "auto"
       },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
-          "rawSql": "SELECT count() FROM wikimedia.events WHERE $__timeFilter(event_time)",
-          "refId": "A",
-          "format": 0
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(1) FROM wikimedia_events WHERE $__timeFilter(timestamp)",
+          "refId": "A"
         }
       ],
       "title": "Events in Selected Range",
       "type": "stat"
     },
     {
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "QuestDB"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "fixedColor": "blue", "mode": "fixed" },
+          "color": {
+            "fixedColor": "blue",
+            "mode": "fixed"
+          },
           "custom": {
             "axisLabel": "Events",
             "axisPlacement": "auto",
@@ -409,38 +704,73 @@
             "drawStyle": "bars",
             "fillOpacity": 60,
             "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "green", "value": null }]
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 37 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
       "id": 8,
       "options": {
-        "legend": { "calcs": ["sum"], "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "single", "sort": "none" }
+        "legend": {
+          "calcs": [
+            "sum"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "grafana-clickhouse-datasource", "uid": "ClickHouse" },
-          "rawSql": "SELECT toStartOfInterval(event_time, INTERVAL greatest($__interval_s, 60) second) AS time, count() AS events FROM wikimedia.events WHERE $__timeFilter(event_time) GROUP BY time ORDER BY time ASC",
-          "refId": "A",
-          "format": 1
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "QuestDB"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp AS time, count(*) AS events FROM wikimedia_events WHERE $__timeFilter(timestamp) SAMPLE BY $__interval",
+          "refId": "A"
         }
       ],
       "title": "Events Ingested Over Time",
@@ -448,16 +778,26 @@
     },
     {
       "collapsed": false,
-      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 45 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 45
+      },
       "id": 50,
       "title": "Anomaly Detection",
       "type": "row"
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "axisLabel": "이상 감지 건수",
             "axisPlacement": "auto",
@@ -465,41 +805,70 @@
             "drawStyle": "bars",
             "fillOpacity": 60,
             "gradientMode": "none",
-            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "lineInterpolation": "linear",
             "lineWidth": 1,
             "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
+            "scaleDistribution": {
+              "type": "linear"
+            },
             "showPoints": "never",
             "spanNulls": false,
-            "stacking": { "group": "A", "mode": "normal" },
-            "thresholdsStyle": { "mode": "off" }
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [],
           "min": 0,
           "thresholds": {
             "mode": "absolute",
-            "steps": [{ "color": "orange", "value": null }]
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
           },
           "unit": "short"
         },
         "overrides": []
       },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 46 },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
       "id": 51,
       "options": {
         "legend": {
-          "calcs": ["sum"],
+          "calcs": [
+            "sum"
+          ],
           "displayMode": "table",
           "placement": "right",
           "sortBy": "Sum",
           "sortDesc": true
         },
-        "tooltip": { "mode": "multi", "sort": "desc" }
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "sum by (container, metric) (count_over_time({container=\"resource-monitor\"} |= \"AnomalyDetected\" | logfmt | msg=\"AnomalyDetected\" [$__interval]))",
           "legendFormat": "{{container}} / {{metric}}",
@@ -511,8 +880,16 @@
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "loki", "uid": "Loki" },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 54 },
+      "datasource": {
+        "type": "loki",
+        "uid": "Loki"
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
       "id": 52,
       "options": {
         "dedupStrategy": "none",
@@ -526,7 +903,10 @@
       },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "Loki" },
+          "datasource": {
+            "type": "loki",
+            "uid": "Loki"
+          },
           "editorMode": "code",
           "expr": "{container=\"resource-monitor\"} |= \"AnomalyDetected\" | logfmt | msg=\"AnomalyDetected\"",
           "queryType": "range",
@@ -540,9 +920,17 @@
   "refresh": "10s",
   "schemaVersion": 38,
   "style": "dark",
-  "tags": ["wikistreams", "resources"],
-  "templating": { "list": [] },
-  "time": { "from": "now-1h", "to": "now" },
+  "tags": [
+    "wikistreams",
+    "resources"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
   "timepicker": {},
   "timezone": "",
   "title": "WikiStreams Resources Monitor",

@@ -42,7 +42,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -87,7 +87,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT count(*) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -100,7 +100,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -145,7 +145,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT count(DISTINCT user) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -158,7 +158,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -203,7 +203,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT count(*) AS value FROM wikimedia_events WHERE wiki_type = 'new' AND $__timeFilter(timestamp)",
@@ -216,7 +216,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -270,7 +270,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(avg(CASE WHEN bot THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -283,7 +283,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -337,7 +337,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(avg(CASE WHEN user ~ '^[0-9]' THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -350,7 +350,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -404,7 +404,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(avg(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -429,7 +429,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -498,7 +498,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT timestamp AS time,\n  sum(CASE WHEN NOT bot THEN 1 ELSE 0 END) AS \"Human Edits\",\n  sum(CASE WHEN bot THEN 1 ELSE 0 END) AS \"Bot Edits\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
@@ -523,7 +523,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -584,7 +584,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT server_name, count(*) AS edits FROM wikimedia_events WHERE $__timeFilter(timestamp) GROUP BY server_name ORDER BY edits DESC LIMIT 10",
@@ -597,7 +597,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -643,7 +643,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT wiki_type, count(*) AS count FROM wikimedia_events WHERE $__timeFilter(timestamp) GROUP BY wiki_type ORDER BY count DESC",
@@ -668,7 +668,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -762,7 +762,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT CASE WHEN wikidata_label != '' THEN wikidata_label ELSE title END AS label,\n  title, wikidata_description AS description, server_name, count(*) AS edits\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp) AND namespace = 0 AND NOT bot AND wiki_type = 'edit'\nGROUP BY title, wikidata_label, wikidata_description, server_name\nORDER BY edits DESC LIMIT 20",
@@ -787,7 +787,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -836,7 +836,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT sum(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -849,7 +849,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -903,7 +903,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(avg(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 100.0 ELSE 0.0 END), 1) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -916,7 +916,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -961,7 +961,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT sum(CASE WHEN bot AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%') THEN 1 ELSE 0 END) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -974,7 +974,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1019,7 +1019,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT sum(CASE WHEN NOT bot AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%') THEN 1 ELSE 0 END) AS value FROM wikimedia_events WHERE $__timeFilter(timestamp)",
@@ -1032,7 +1032,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1152,7 +1152,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT timestamp AS time,\n  sum(CASE WHEN bot THEN 1 ELSE 0 END) AS \"Bot\",\n  sum(CASE WHEN NOT bot AND user ~ '^[0-9]' THEN 1 ELSE 0 END) AS \"Anonymous\",\n  sum(CASE WHEN NOT bot AND user !~ '^[0-9]' THEN 1 ELSE 0 END) AS \"Registered\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
@@ -1165,7 +1165,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1295,7 +1295,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT timestamp AS time,\n  sum(CASE WHEN NOT bot AND user ~ '^[0-9]' THEN 1 ELSE 0 END) AS \"Anon Edits\",\n  sum(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS \"All Reverts\",\n  sum(CASE WHEN bot AND (comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%') THEN 1 ELSE 0 END) AS \"Bot Reverts\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
@@ -1308,7 +1308,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1455,7 +1455,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT CASE WHEN wikidata_label != '' THEN wikidata_label ELSE title END AS label,\n  server_name, count(*) AS total_edits,\n  sum(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 1 ELSE 0 END) AS reverts,\n  round(avg(CASE WHEN comment ILIKE '%revert%' OR comment ILIKE '%undo%' OR comment LIKE 'Reverted%' THEN 100.0 ELSE 0.0 END), 1) AS revert_rate\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp) AND namespace = 0\nGROUP BY title, wikidata_label, server_name\nORDER BY reverts DESC LIMIT 20",
@@ -1480,7 +1480,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1528,7 +1528,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(sum(1) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
@@ -1541,7 +1541,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1589,7 +1589,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(sum(CASE WHEN NOT bot AND user !~ '^[0-9]' THEN 1.0 ELSE 0.0 END) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
@@ -1602,7 +1602,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1650,7 +1650,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(sum(CASE WHEN bot THEN 1.0 ELSE 0.0 END) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
@@ -1663,7 +1663,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1711,7 +1711,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT round(sum(CASE WHEN user ~ '^[0-9]' AND NOT bot THEN 1.0 ELSE 0.0 END) / 5.0, 1) AS value FROM wikimedia_events WHERE timestamp >= dateadd('m',-5,now())",
@@ -1724,7 +1724,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -1880,7 +1880,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT timestamp AS time,\n  sum(60000.0) / $__interval_ms AS \"Total\",\n  sum(CASE WHEN NOT bot AND user !~ '^[0-9]' THEN 60000.0 ELSE 0.0 END) / $__interval_ms AS \"Human\",\n  sum(CASE WHEN bot THEN 60000.0 ELSE 0.0 END) / $__interval_ms AS \"Bot\",\n  sum(CASE WHEN NOT bot AND user ~ '^[0-9]' THEN 60000.0 ELSE 0.0 END) / $__interval_ms AS \"Anon\"\nFROM wikimedia_events\nWHERE $__timeFilter(timestamp)\nSAMPLE BY $__interval",
@@ -1893,7 +1893,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -2056,7 +2056,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT CASE WHEN wikidata_label NOT IN ('', '-') THEN wikidata_label ELSE title END AS label,\n  server_name,\n  sum(CASE WHEN timestamp >= dateadd('m',-15,now()) THEN 1 ELSE 0 END) AS edits_15m,\n  sum(CASE WHEN timestamp >= dateadd('m',-75,now()) AND timestamp < dateadd('m',-15,now()) THEN 1 ELSE 0 END) AS edits_prev_60m,\n  round(sum(CASE WHEN timestamp >= dateadd('m',-15,now()) THEN 4.0 ELSE 0.0 END) /\n    (sum(CASE WHEN timestamp >= dateadd('m',-75,now()) AND timestamp < dateadd('m',-15,now()) THEN 1.0 ELSE 0.0 END) + 1.0), 1) AS spike_ratio\nFROM wikimedia_events\nWHERE timestamp >= dateadd('m',-75,now()) AND namespace = 0\nGROUP BY title, wikidata_label, server_name\nORDER BY edits_15m DESC LIMIT 20",
@@ -2069,7 +2069,7 @@
     {
       "datasource": {
         "type": "grafana-postgresql-datasource",
-        "uid": "cffah7jzilipsd"
+        "uid": "QuestDB"
       },
       "fieldConfig": {
         "defaults": {
@@ -2203,7 +2203,7 @@
         {
           "datasource": {
             "type": "grafana-postgresql-datasource",
-            "uid": "cffah7jzilipsd"
+            "uid": "QuestDB"
           },
           "format": "table",
           "rawSql": "SELECT title,\n  count(DISTINCT server_name) AS wiki_count,\n  count(*) AS total_edits\nFROM wikimedia_events\nWHERE timestamp >= dateadd('m',-15,now()) AND namespace = 0\nGROUP BY title\nORDER BY wiki_count DESC, total_edits DESC LIMIT 20",
@@ -2232,7 +2232,7 @@
   "timepicker": {},
   "timezone": "",
   "title": "WikiStreams Analytics (QuestDB)",
-  "uid": "questdb-analytics",
+  "uid": "wikistreams-analytics",
   "version": 3,
   "weekStart": ""
 }

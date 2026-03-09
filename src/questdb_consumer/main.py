@@ -3,6 +3,8 @@ import logging
 import os
 import socket
 import time
+import urllib.request
+import urllib.parse
 
 from kafka import KafkaConsumer
 
@@ -16,11 +18,48 @@ KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "wikimedia.recentchange")
 KAFKA_GROUP_ID = os.getenv("KAFKA_GROUP_ID", "questdb-consumer")
 QUESTDB_HOST = os.getenv("QUESTDB_HOST", "questdb-staging")
 QUESTDB_ILP_PORT = int(os.getenv("QUESTDB_ILP_PORT", "9009"))
+QUESTDB_REST_PORT = int(os.getenv("QUESTDB_REST_PORT", "9000"))
 BATCH_SIZE = int(os.getenv("BATCH_SIZE", "500"))
 BATCH_TIMEOUT_MS = int(os.getenv("BATCH_TIMEOUT_MS", "5000"))
 
 _SKIP_TYPES = {"log"}
 _SKIP_DOMAINS = {"canary"}
+
+_CREATE_TABLE_SQL = """\
+CREATE TABLE IF NOT EXISTS wikimedia_events (
+    server_name SYMBOL,
+    wiki_type   SYMBOL,
+    title       STRING,
+    user        STRING,
+    bot         BOOLEAN,
+    namespace   INT,
+    minor       BOOLEAN,
+    comment     STRING,
+    wikidata_label       STRING,
+    wikidata_description STRING,
+    timestamp   TIMESTAMP
+) timestamp(timestamp) PARTITION BY DAY TTL 5d;\
+"""
+
+
+def _ensure_table():
+    """QuestDB REST API로 wikimedia_events 테이블을 TTL 5d로 생성 (없을 때만)."""
+    base_url = f"http://{QUESTDB_HOST}:{QUESTDB_REST_PORT}/exec"
+    params = urllib.parse.urlencode({"query": _CREATE_TABLE_SQL})
+    url = f"{base_url}?{params}"
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                body = json.loads(resp.read())
+                if "error" in body:
+                    logging.warning("테이블 생성 응답 오류: %s", body["error"])
+                else:
+                    logging.info("wikimedia_events 테이블 확인/생성 완료 (TTL 5d)")
+                return
+        except Exception as e:
+            logging.warning("테이블 초기화 실패 (시도 %d/5): %s", attempt + 1, e)
+            time.sleep(3)
+    logging.error("wikimedia_events 테이블 초기화 실패 — ILP auto-create로 폴백")
 
 
 def _should_skip(event: dict) -> bool:
@@ -70,6 +109,8 @@ def event_to_ilp(event: dict) -> str | None:
 
 
 def run():
+    _ensure_table()
+
     consumer = KafkaConsumer(
         KAFKA_TOPIC,
         bootstrap_servers=KAFKA_BROKER,

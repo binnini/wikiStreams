@@ -58,6 +58,7 @@ services:
     environment:
       QDB_CAIRO_MAX_UNCOMMITTED_ROWS: "1000"
       QDB_LINE_TCP_MAINTENANCE_JOB_INTERVAL: "5000"
+    mem_limit: 1100m
     restart: always
 
   questdb-consumer:

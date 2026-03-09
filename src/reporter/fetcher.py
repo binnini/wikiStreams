@@ -1,6 +1,7 @@
 import json
 import logging
 import re
+import time
 import xml.etree.ElementTree as ET
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -122,13 +123,22 @@ class ReportData:
     peak_hour: PeakHour = field(default_factory=PeakHour)
 
 
-def _query(sql: str) -> list[dict]:
-    with httpx.Client(timeout=30) as client:
-        resp = client.get(QUESTDB_URL, params={"query": sql, "fmt": "json"})
-        resp.raise_for_status()
-    data = resp.json()
-    columns = [c["name"] for c in data.get("columns", [])]
-    return [dict(zip(columns, row)) for row in data.get("dataset", [])]
+def _query(sql: str, retries: int = 3, retry_delay: float = 2.0) -> list[dict]:
+    last_exc: Exception | None = None
+    for attempt in range(retries):
+        try:
+            with httpx.Client(timeout=30) as client:
+                resp = client.get(QUESTDB_URL, params={"query": sql, "fmt": "json"})
+                resp.raise_for_status()
+            data = resp.json()
+            columns = [c["name"] for c in data.get("columns", [])]
+            return [dict(zip(columns, row)) for row in data.get("dataset", [])]
+        except Exception as e:
+            last_exc = e
+            if attempt < retries - 1:
+                logger.warning("QuestDB query failed (attempt %d/%d): %s", attempt + 1, retries, e)
+                time.sleep(retry_delay)
+    raise last_exc
 
 
 _RSS_EDITIONS = [
