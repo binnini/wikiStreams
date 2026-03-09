@@ -48,7 +48,7 @@ services:
     restart: always
 
   questdb:
-    image: questdb/questdb:8.2.1
+    image: questdb/questdb:9.3.3
     container_name: questdb
     ports:
       - "9000:9000"   # REST API + Web Console
