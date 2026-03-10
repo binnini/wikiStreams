@@ -989,9 +989,9 @@ class TestFetchReportData:
         mock_ko.assert_not_called()
 
     def test_query_failure_returns_empty_data(self, mocker):
-        """ClickHouse errors are caught; empty ReportData is returned."""
+        """QuestDB errors are caught; empty ReportData is returned."""
         mocker.patch(
-            "reporter.fetcher._query", side_effect=Exception("ClickHouse down")
+            "reporter.fetcher._query", side_effect=Exception("QuestDB down")
         )
         mocker.patch("reporter.fetcher._fetch_qid", return_value=None)
         mocker.patch("reporter.fetcher._fetch_ko_description", return_value="")

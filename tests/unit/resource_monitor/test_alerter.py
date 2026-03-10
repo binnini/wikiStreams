@@ -63,7 +63,7 @@ def test_different_metric_not_suppressed(mock_httpx):
 def test_different_container_not_suppressed(mock_httpx):
     alerter = Alerter("https://discord.example/webhook", cooldown_seconds=3600)
     alerter.send(_anomaly(container="producer"))
-    alerter.send(_anomaly(container="clickhouse"))
+    alerter.send(_anomaly(container="questdb"))
     assert mock_httpx.post.call_count == 2
 
 

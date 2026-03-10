@@ -138,8 +138,8 @@ def test_block_io_delta(collector):
     mock_container.stats.side_effect = [raw1, raw2]
     collector._client.containers.get.return_value = mock_container
 
-    m1 = collector.collect("clickhouse")
-    m2 = collector.collect("clickhouse")
+    m1 = collector.collect("questdb")
+    m2 = collector.collect("questdb")
 
     assert m1.block_io_mb == pytest.approx(0.0)  # 첫 번째: prev 없음 → 0
     assert m2.block_io_mb == pytest.approx(2.0)  # delta = 4 - 2 = 2 MB
@@ -151,6 +151,6 @@ def test_collect_all(collector, mocker):
     mock_container.stats.return_value = raw
     collector._client.containers.get.return_value = mock_container
 
-    results = collector.collect_all(["producer", "clickhouse"])
+    results = collector.collect_all(["producer", "questdb"])
     assert len(results) == 2
-    assert {r.container for r in results} == {"producer", "clickhouse"}
+    assert {r.container for r in results} == {"producer", "questdb"}

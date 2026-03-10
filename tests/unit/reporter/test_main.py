@@ -116,7 +116,7 @@ class TestRunReport:
     def test_exception_in_fetch_is_caught(self, mocker):
         """Exceptions must not propagate; run_report() should always return."""
         mocker.patch(
-            "reporter.main.fetch_report_data", side_effect=Exception("ClickHouse down")
+            "reporter.main.fetch_report_data", side_effect=Exception("QuestDB down")
         )
 
         run_report()  # must not raise

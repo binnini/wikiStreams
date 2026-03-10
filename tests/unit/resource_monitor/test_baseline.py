@@ -30,7 +30,7 @@ def test_get_returns_record_after_update(store):
 def test_ema_converges(store):
     # 동일 값 반복 입력 → EMA가 해당 값으로 수렴
     for _ in range(100):
-        rec = store.update("clickhouse", "mem_pct", 0, 80.0)
+        rec = store.update("questdb", "mem_pct", 0, 80.0)
     assert abs(rec.ema - 80.0) < 1.0
 
 
@@ -44,9 +44,9 @@ def test_variance_grows_with_spread(store):
 
 def test_different_containers_independent(store):
     store.update("producer", "cpu_pct", 0, 10.0)
-    store.update("clickhouse", "cpu_pct", 0, 90.0)
+    store.update("questdb", "cpu_pct", 0, 90.0)
     r1 = store.get("producer", "cpu_pct", 0)
-    r2 = store.get("clickhouse", "cpu_pct", 0)
+    r2 = store.get("questdb", "cpu_pct", 0)
     assert r1.ema != r2.ema
 
 
