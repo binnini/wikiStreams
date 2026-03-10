@@ -51,6 +51,7 @@ QUESTDB_REST_PORT = int(os.getenv("QUESTDB_REST_PORT", "9000"))
 S3_BUCKET = os.getenv("S3_BUCKET", "")
 S3_PREFIX = os.getenv("S3_PREFIX", "events")
 AWS_REGION = os.getenv("AWS_REGION", "ap-northeast-2")
+S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", "")  # 로컬 MinIO: http://minio:9000
 
 EXPORT_DATE = os.getenv("EXPORT_DATE", "")  # YYYY-MM-DD, 미설정 시 전일
 
@@ -79,6 +80,14 @@ def _s3_key(target: date) -> str:
         f"day={target.day:02d}/"
         f"events.parquet"
     )
+
+
+def _make_s3_client():
+    """boto3 S3 클라이언트 생성. S3_ENDPOINT_URL 설정 시 MinIO 등 로컬 호환 스토리지 사용."""
+    kwargs = {"region_name": AWS_REGION}
+    if S3_ENDPOINT_URL:
+        kwargs["endpoint_url"] = S3_ENDPOINT_URL
+    return boto3.client("s3", **kwargs)
 
 
 def _s3_exists(s3_client, key: str) -> bool:
@@ -140,7 +149,7 @@ def export(target: date, force: bool = False) -> None:
         logging.error("S3_BUCKET 환경변수 미설정 — 종료")
         sys.exit(1)
 
-    s3 = boto3.client("s3", region_name=AWS_REGION)
+    s3 = _make_s3_client()
     key = _s3_key(target)
 
     if not force and _s3_exists(s3, key):

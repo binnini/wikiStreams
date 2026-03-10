@@ -4,6 +4,7 @@ volumes:
   questdb_data: {}
   resource_monitor_data: {}
   loki_data: {}
+  minio_data: {}
 
 services:
   loki:
@@ -138,8 +139,9 @@ services:
       - ./reports:/app/reports
 
   # S3 Datalake Exporter — 기본 스택과 분리 (profiles: s3)
-  # 활성화: docker compose --profile s3 up -d s3-exporter
-  # 백필:   docker exec -e EXPORT_DATE=2026-03-01 s3-exporter python main.py --once
+  # EC2(prod): docker compose --profile s3 up -d s3-exporter  → 실제 AWS S3
+  # 로컬(dev):  docker compose --profile s3 up -d             → MinIO + s3-exporter
+  # 백필:       docker exec -e EXPORT_DATE=2026-03-01 s3-exporter python main.py --once
   s3-exporter:
     build: ./src/s3_exporter
     container_name: s3-exporter
@@ -149,11 +151,31 @@ services:
     environment:
       QUESTDB_HOST: questdb
       QUESTDB_REST_PORT: "9000"
-      S3_BUCKET: "${S3_BUCKET:-}"
+      S3_BUCKET: "${S3_BUCKET:-wikistreams-datalake}"
       S3_PREFIX: "${S3_PREFIX:-events}"
       AWS_REGION: "${AWS_REGION:-ap-northeast-2}"
       AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
       AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      S3_ENDPOINT_URL: "${S3_ENDPOINT_URL:-}"
       LOG_LEVEL: "INFO"
+    profiles:
+      - s3
+
+  # 로컬 S3 호환 스토리지 (개발/테스트용)
+  # 콘솔: http://localhost:9001  (admin / minioadmin)
+  # API:  http://localhost:9100
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9100:9000"   # S3 API
+      - "9101:9001"   # Web Console
+    volumes:
+      - minio_data:/data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    restart: always
     profiles:
       - s3
