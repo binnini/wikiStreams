@@ -34,6 +34,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import boto3
 import pyarrow as pa
+import pyarrow.compute as pc
 import pyarrow.csv as pcsv
 import pyarrow.parquet as pq
 from botocore.exceptions import ClientError
@@ -115,13 +116,19 @@ def _csv_to_parquet(csv_bytes: bytes) -> bytes:
             "bot": pa.bool_(),
             "minor": pa.bool_(),
             "namespace": pa.int32(),
-            "timestamp": pa.timestamp("us", tz="UTC"),
         },
         null_values=["", "null", "NULL"],
         strings_can_be_null=True,
-        timestamp_parsers=["ISO8601"],
+        timestamp_parsers=[],  # auto-detect 비활성화 → timestamp 컬럼을 string으로 읽음
     )
     table = pcsv.read_csv(io.BytesIO(csv_bytes), convert_options=convert_options)
+
+    # "2026-03-10T14:10:05.000000Z" → timestamp[us, UTC]
+    idx = table.schema.get_field_index("timestamp")
+    ts_col = pc.strptime(table.column("timestamp"), format="%Y-%m-%dT%H:%M:%S.%fZ", unit="us")
+    ts_col = pc.assume_timezone(ts_col, timezone="UTC")
+    table = table.set_column(idx, "timestamp", ts_col)
+
     buf = io.BytesIO()
     pq.write_table(table, buf, compression="snappy", schema=_SCHEMA)
     return buf.getvalue()
