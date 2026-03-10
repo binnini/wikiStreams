@@ -1287,3 +1287,47 @@
   - 2.5시간치 실측 메모리 스파이크: **~100MB → ~50MB** (50% 감소)
   - 하루치 추정 스파이크: **~960MB → ~480MB** → 서버 여유 메모리 ~750MB 내에서 OOM 없이 통과 가능
   - S3 업로드 횟수: 기존과 동일하게 1회 유지
+
+## 2026-03-11 (계속)
+
+### 35. Discord → Slack 알림 전환 + 알림 채널 분리
+
+- **배경**: 알림 시스템이 Discord 단일 채널에 Reporter 리포트·인프라 이상·SLO 위반이 혼재. 알림이 너무 잦고 기준이 모호하다는 피드백.
+
+- **문제점**:
+  1. resource-monitor(인프라 이상)와 Grafana Alert(SLO 위반)이 같은 근본 원인에서 중복 발송
+  2. `monitor_targets`에 `clickhouse`가 하드코딩 — QuestDB 전환 후 미반영
+  3. z-score 2.5 임계값이 너무 민감 (정규분포 기준 약 1.2% 확률)
+  4. QuestDB `mem_mb` 선형 증가가 알려진 정상 동작임에도 반복 알림
+
+- **결정**: Discord → Slack 전환, 알림 채널 2개 분리
+  - `SLACK_WEBHOOK_URL` → `#wikistreams-reports` (Reporter 일일 리포트 전용)
+  - `SLACK_ALERT_WEBHOOK_URL` → `#wikistreams-alerts` (resource-monitor + Grafana Alert 통합)
+  - resource-monitor와 Grafana Alert는 측정 레이어가 달라 진짜 중복 아님 — 같은 채널에서 인프라 이상 → SLO 영향 흐름으로 읽히도록 의도
+
+- **작업**:
+  1. `src/reporter/publisher.py`: Discord Embed → Slack Block Kit (5섹션 구조 유지, `_build_top5_blocks` / `_build_featured_blocks`)
+  2. `src/resource_monitor/alerter.py`: Discord Embed → Slack Block Kit (header + fields + context)
+  3. `src/reporter/config.py`: `discord_webhook_url` → `slack_webhook_url`
+  4. `src/resource_monitor/config.py`: `resource_monitor_discord_webhook_url` → `slack_alert_webhook_url`
+     - `monitor_targets`: `producer,clickhouse` → `producer,questdb,redpanda,questdb-consumer,reporter`
+  5. `monitoring/grafana-contact-points.yaml`: `type: discord` → `type: slack`, `recipient: ${SLACK_ALERT_CHANNEL}` 추가
+  6. `monitoring/grafana-notification-policy.yaml`: receiver `Discord` → `Slack`
+  7. `docker-compose.yml`: 전체 환경변수 Discord → Slack으로 통일, `SLACK_ALERT_CHANNEL` 추가
+  8. 테스트 전면 재작성 (47 passed)
+  - 트러블슈팅: Grafana Slack integration에서 Incoming Webhook 방식도 `recipient` 필드 필수 → 추가로 해결
+
+### 36. resource-monitor 알림 임계값 조정
+
+- **배경**: 새 AWS 배포 후 알림이 너무 잦음. 베이스라인 학습 전 오발령, QuestDB 메모리 정상 증가에 의한 반복 알림.
+
+- **변경**:
+
+  | 파라미터 | 전 | 후 | 근거 |
+  |---|---|---|---|
+  | `anomaly_threshold` | 2.5 | 3.0 | 오발령 확률 1.2% → 0.3% |
+  | `min_samples` | 360 (1시간) | 720 (2시간) | 베이스라인 안정화 후 감지 시작 |
+  | `alert_cooldown_seconds` | 900 (15분) | 3600 (1시간) | 동일 컨테이너 재발송 억제 |
+  | 감지 메트릭 | cpu, mem_pct, mem_mb, io | cpu, mem_pct, io | `mem_mb` 제외: QuestDB page cache 증가는 알려진 정상 동작 |
+
+- **후속**: Grafana SLO Alert 임계값은 AWS 하루치 데이터 수집 후 별도 조정 예정.
