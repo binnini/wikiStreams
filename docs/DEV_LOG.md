@@ -1257,3 +1257,33 @@
   6. `docker compose up -d questdb-consumer` → `_ensure_table()` 실행 → `wikimedia_events 테이블 확인/생성 완료 (TTL 5d)` 로그 확인 ✅
 
 - **결과**: QuestDB 9.3.3 + `mem_limit: 1100m` + TTL 5d 적용. 디스크/메모리 양쪽 운영 이슈 해소.
+
+## 2026-03-11
+
+### 34. S3 Exporter 메모리 스파이크 개선 (시간별 청크 처리)
+
+- **배경**: `s3-exporter`가 하루치 데이터를 한 번에 QuestDB에서 내려받아 Parquet으로 변환 후 S3에 업로드하는 구조였음. t3.small(1.85GB) 운영 중 실측 시 메모리 스파이크가 과도하게 발생.
+
+- **원인 분석**:
+  - `_fetch_csv()`: 하루치 CSV 전체를 `resp.read()`로 한 번에 메모리에 로드 (~800MB/day)
+  - `_csv_to_parquet()`: CSV bytes + PyArrow Table + Parquet bytes 3가지가 동시 메모리 점유
+  - 2.5시간치 실측: CSV ~83.5MB → 메모리 스파이크 ~100MB → 하루치 추정 ~960MB
+  - 기존 프로세스(QuestDB 376MB + Redpanda 341MB 등) ~1.1GB 점유 상태에서 960MB 추가 → OOM
+
+- **검토한 대안**:
+  - Producer에서 직접 S3 write → Parquet은 컬럼형 포맷으로 스트리밍 write 부적합, 소파일 문제
+  - Redpanda S3 Consumer 신규 추가 → 아키텍처 복잡도 증가, 현 단계 오버엔지니어링
+  - 스왑 1GB 추가 → page fault로 메인 프로세스 성능 저하, 근본 해결 아님
+
+- **결정**: `s3_exporter/main.py` 내에서 1시간 단위 청크로 QuestDB 조회 후 `ParquetWriter`로 순차 write → S3 업로드 1회.
+
+- **작업** (`src/s3_exporter/main.py`):
+  - `_fetch_csv()` + `_csv_to_parquet()` 제거, `_fetch_hour_as_arrow(target, hour)` 신규 추가
+  - `_CONVERT_OPTIONS` 모듈 상수로 분리 (매 호출마다 생성 방지)
+  - `export()`: 24시간 루프 → `ParquetWriter`에 순차 `write_table()` → `del table`로 즉시 해제 → `writer.close()` 후 S3 `put_object()` 1회
+  - 사용하지 않는 `_SCHEMA` 상수 제거
+
+- **결과**:
+  - 2.5시간치 실측 메모리 스파이크: **~100MB → ~50MB** (50% 감소)
+  - 하루치 추정 스파이크: **~960MB → ~480MB** → 서버 여유 메모리 ~750MB 내에서 OOM 없이 통과 가능
+  - S3 업로드 횟수: 기존과 동일하게 1회 유지
