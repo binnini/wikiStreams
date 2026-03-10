@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # API Keys
     anthropic_api_key: str = ""
-    discord_webhook_url: str = ""
+    slack_webhook_url: str = ""
 
     # Prompt style ('default' or 'doro')
     prompt_style: str = "default"

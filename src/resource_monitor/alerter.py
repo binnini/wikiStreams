@@ -1,4 +1,4 @@
-"""Discord Embed 이상 알림 + 1시간 cooldown."""
+"""Slack Block Kit 이상 알림 + cooldown."""
 
 import logging
 import time
@@ -10,7 +10,6 @@ from resource_monitor.detector import AnomalyResult
 
 logger = logging.getLogger(__name__)
 
-ORANGE = 0xFF6B35
 _METRIC_LABELS = {
     "cpu_pct": "CPU 사용률",
     "mem_pct": "메모리 사용률",
@@ -44,7 +43,7 @@ class Alerter:
 
     def send(self, anomaly: AnomalyResult) -> None:
         if not self._webhook_url:
-            logger.warning("DISCORD_WEBHOOK_URL 미설정 — 알림 전송 생략")
+            logger.warning("SLACK_ALERT_WEBHOOK_URL 미설정 — 알림 전송 생략")
             return
 
         if not self._is_cooled_down(anomaly.container, anomaly.metric):
@@ -55,13 +54,10 @@ class Alerter:
             )
             return
 
-        embed = self._build_embed(anomaly)
+        payload = self._build_payload(anomaly)
         try:
             with httpx.Client(timeout=10) as client:
-                resp = client.post(
-                    self._webhook_url,
-                    json={"embeds": [embed]},
-                )
+                resp = client.post(self._webhook_url, json=payload)
                 resp.raise_for_status()
             self._mark_alerted(anomaly.container, anomaly.metric)
             logger.info(
@@ -71,33 +67,42 @@ class Alerter:
                 anomaly.z_score,
             )
         except Exception as exc:
-            logger.error("Discord alert failed: %s", exc)
+            logger.error("Slack alert failed: %s", exc)
 
-    def _build_embed(self, a: AnomalyResult) -> dict:
+    def _build_payload(self, a: AnomalyResult) -> dict:
         label = _METRIC_LABELS.get(a.metric, a.metric)
         unit = _METRIC_UNITS.get(a.metric, "")
         direction = "급증" if a.z_score > 0 else "급감"
 
         return {
-            "title": f"⚠️ 리소스 이상 감지 — {a.container}",
-            "color": ORANGE,
-            "fields": [
-                {"name": "컨테이너", "value": a.container, "inline": True},
-                {"name": "메트릭", "value": label, "inline": True},
-                {"name": "방향", "value": direction, "inline": True},
+            "text": f"⚠️ 리소스 이상 감지 — {a.container}",
+            "blocks": [
                 {
-                    "name": "현재값",
-                    "value": f"{a.current_value:.2f}{unit}",
-                    "inline": True,
+                    "type": "header",
+                    "text": {
+                        "type": "plain_text",
+                        "text": f"⚠️ 리소스 이상 감지 — {a.container}",
+                        "emoji": True,
+                    },
                 },
                 {
-                    "name": f"시간대 평균 ({a.hour:02d}시)",
-                    "value": f"{a.ema:.2f}{unit}",
-                    "inline": True,
+                    "type": "section",
+                    "fields": [
+                        {"type": "mrkdwn", "text": f"*컨테이너*\n{a.container}"},
+                        {"type": "mrkdwn", "text": f"*메트릭*\n{label}"},
+                        {"type": "mrkdwn", "text": f"*방향*\n{direction}"},
+                        {"type": "mrkdwn", "text": f"*현재값*\n{a.current_value:.2f}{unit}"},
+                        {"type": "mrkdwn", "text": f"*시간대 평균 ({a.hour:02d}시)*\n{a.ema:.2f}{unit}"},
+                        {"type": "mrkdwn", "text": f"*z-score*\n{a.z_score:.2f}"},
+                    ],
                 },
-                {"name": "z-score", "value": f"{a.z_score:.2f}", "inline": True},
+                {
+                    "type": "context",
+                    "elements": [
+                        {"type": "mrkdwn", "text": "WikiStreams Resource Monitor"}
+                    ],
+                },
             ],
-            "footer": {"text": "WikiStreams Resource Monitor"},
         }
 
 

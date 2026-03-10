@@ -2,18 +2,18 @@ apiVersion: 1
 
 contactPoints:
   - orgId: 1
-    name: Discord
+    name: Slack
     receivers:
-      - uid: discord-wikistreams
-        type: discord
+      - uid: slack-wikistreams
+        type: slack
         settings:
-          url: ${DISCORD_WEBHOOK_URL}
+          url: ${SLACK_ALERT_WEBHOOK_URL}
           title: |
             [WikiStreams Alert] {{ .GroupLabels.alertname }}
-          message: |
-            **상태**: {{ .Status | toUpper }}
-            **SLI**: {{ .GroupLabels.sli }}
-            **심각도**: {{ .GroupLabels.severity }}
+          text: |
+            *상태*: {{ .Status | toUpper }}
+            *SLI*: {{ .GroupLabels.sli }}
+            *심각도*: {{ .GroupLabels.severity }}
             {{ range .Alerts }}
             {{ .Annotations.description }}
             {{ end }}

@@ -14,8 +14,8 @@ from reporter.fetcher import (
     TopPage,
 )
 from reporter.publisher import (
-    _build_featured_embed,
-    _build_top5_embed,
+    _build_featured_blocks,
+    _build_top5_blocks,
     _rank_badge,
     _truncate,
     _wiki_flag,
@@ -78,8 +78,8 @@ def sample_sections():
     }
 
 
-def _mock_discord(mocker):
-    """Patch httpx.Client so Discord POST doesn't actually fire."""
+def _mock_slack(mocker):
+    """Patch httpx.Client so Slack POST doesn't actually fire."""
     mock_resp = MagicMock()
     mock_resp.raise_for_status.return_value = None
 
@@ -90,6 +90,22 @@ def _mock_discord(mocker):
 
     mocker.patch("httpx.Client", return_value=mock_cm)
     return mock_cm
+
+
+def _all_texts(blocks: list[dict]) -> list[str]:
+    """블록 목록에서 모든 텍스트 문자열 추출 (section.text + section.fields)."""
+    texts = []
+    for b in blocks:
+        if b.get("type") == "section":
+            if "text" in b:
+                texts.append(b["text"]["text"])
+            for f in b.get("fields", []):
+                texts.append(f["text"])
+    return texts
+
+
+def _header_texts(blocks: list[dict]) -> list[str]:
+    return [b["text"]["text"] for b in blocks if b.get("type") == "header"]
 
 
 # ─────────────────────────────────────────────
@@ -153,87 +169,63 @@ class TestTruncate:
 
 
 # ─────────────────────────────────────────────
-# _build_top5_embed
+# _build_top5_blocks
 # ─────────────────────────────────────────────
 
 
-class TestBuildTop5Embed:
-    def test_returns_dict_with_required_keys(self, sample_data):
-        embed = _build_top5_embed(sample_data, "분석")
+class TestBuildTop5Blocks:
+    def test_returns_list_of_blocks(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "분석")
+        assert isinstance(blocks, list)
+        assert all(isinstance(b, dict) for b in blocks)
 
-        assert "title" in embed
-        assert "color" in embed
-        assert "fields" in embed
+    def test_first_block_is_header(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        assert blocks[0]["type"] == "header"
+        assert "Top 5" in blocks[0]["text"]["text"]
 
-    def test_spike_badge_in_field_value(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-        value = embed["fields"][0]["value"]
+    def test_spike_badge_in_text(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("⚡" in t and "4.5x" in t for t in texts)
 
-        assert "⚡" in value
-        assert "4.5x" in value
+    def test_crosswiki_badge_in_text(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("🌍" in t and "3개 언어판" in t for t in texts)
 
-    def test_crosswiki_badge_in_field_value(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-        value = embed["fields"][0]["value"]
+    def test_rank_badge_in_text(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("▲2" in t for t in texts)
 
-        assert "🌍" in value
-        assert "3개 언어판" in value
+    def test_url_in_text(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("https://en.wikipedia.org/wiki/Alan_Turing" in t for t in texts)
 
-    def test_rank_badge_in_field_name(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-        name = embed["fields"][0]["name"]
+    def test_language_flag_in_text(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("🇺🇸" in t for t in texts)
 
-        assert "▲2" in name
+    def test_analysis_text_in_section(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "분석 내용입니다.")
+        texts = _all_texts(blocks)
+        assert any("분석 내용입니다." in t for t in texts)
 
-    def test_url_in_field_value(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-        value = embed["fields"][0]["value"]
+    def test_news_section_appended_when_news_present(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("📰" in t for t in texts)
 
-        assert "https://en.wikipedia.org/wiki/Alan_Turing" in value
-
-    def test_language_flag_in_field_value(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-        value = embed["fields"][0]["value"]
-
-        assert "🇺🇸" in value
-
-    def test_thumbnail_set_from_first_page(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-
-        assert embed.get("thumbnail", {}).get("url") == "https://example.com/thumb.jpg"
-
-    def test_no_thumbnail_key_when_url_empty(self, sample_data):
-        sample_data.top_pages[0].thumbnail_url = ""
-        embed = _build_top5_embed(sample_data, "")
-
-        assert "thumbnail" not in embed
-
-    def test_analysis_text_as_description(self, sample_data):
-        embed = _build_top5_embed(sample_data, "분석 내용입니다.")
-
-        assert embed.get("description") == "분석 내용입니다."
-
-    def test_news_field_appended_when_news_present(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-        field_names = [f["name"] for f in embed["fields"]]
-
-        assert "📰 관련 최신 뉴스" in field_names
-
-    def test_no_news_field_when_news_empty(self, sample_data):
+    def test_no_news_when_news_empty(self, sample_data):
         sample_data.news_items = []
-        embed = _build_top5_embed(sample_data, "")
-        field_names = [f["name"] for f in embed["fields"]]
-
-        assert "📰 관련 최신 뉴스" not in field_names
-
-    def test_empty_analysis_omits_description_key(self, sample_data):
-        embed = _build_top5_embed(sample_data, "")
-
-        # empty string is falsy — description should not be set
-        assert embed.get("description") is None or embed.get("description") == ""
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert not any("📰" in t for t in texts)
 
     def test_lang_editions_shows_each_edition_and_total(self):
-        """Grouped page: each language edition's edit count + total are displayed."""
         page = TopPage(
             label="Iran Strikes",
             url="https://en.wikipedia.org/wiki/Iran_Strikes",
@@ -246,64 +238,60 @@ class TestBuildTop5Embed:
             ],
         )
         data = ReportData(top_pages=[page])
-        embed = _build_top5_embed(data, "")
-        value = embed["fields"][0]["value"]
-
-        assert "450" in value  # EN edits
-        assert "320" in value  # RU edits
-        assert "280" in value  # ES edits
-        assert "1,050" in value  # total (450+320+280)
-        assert "합계" in value
+        blocks = _build_top5_blocks(data, "")
+        texts = _all_texts(blocks)
+        combined = " ".join(texts)
+        assert "450" in combined
+        assert "320" in combined
+        assert "280" in combined
+        assert "1,050" in combined
+        assert "합계" in combined
 
     def test_single_edition_shows_standard_format(self, sample_data):
-        """Non-grouped page (lang_editions empty) shows the original single-line format."""
-        # sample_data has lang_editions=[] (default)
-        embed = _build_top5_embed(sample_data, "")
-        value = embed["fields"][0]["value"]
+        blocks = _build_top5_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("편집" in t for t in texts)
+        assert not any("합계" in t for t in texts)
 
-        assert "편집" in value  # "100회 편집"
-        assert "합계" not in value  # no total line
+    def test_ends_with_divider(self, sample_data):
+        blocks = _build_top5_blocks(sample_data, "")
+        assert blocks[-1]["type"] == "divider"
 
 
 # ─────────────────────────────────────────────
-# _build_featured_embed
+# _build_featured_blocks
 # ─────────────────────────────────────────────
 
 
-class TestBuildFeaturedEmbed:
-    def test_title_contains_교양코너(self, sample_data):
-        embed = _build_featured_embed(sample_data, "특집 소개")
+class TestBuildFeaturedBlocks:
+    def test_first_block_is_header_with_교양코너(self, sample_data):
+        blocks = _build_featured_blocks(sample_data, "특집 소개")
+        assert blocks[0]["type"] == "header"
+        assert "교양 코너" in blocks[0]["text"]["text"]
 
-        assert embed is not None
-        assert "교양 코너" in embed["title"]
-
-    def test_returns_none_when_no_title(self, sample_data):
+    def test_returns_empty_when_no_title(self, sample_data):
         sample_data.featured_article.title = ""
-        embed = _build_featured_embed(sample_data, "")
+        blocks = _build_featured_blocks(sample_data, "")
+        assert blocks == []
 
-        assert embed is None
+    def test_url_in_text(self, sample_data):
+        blocks = _build_featured_blocks(sample_data, "소개")
+        texts = _all_texts(blocks)
+        assert any("https://en.wikipedia.org/wiki/Marie_Curie" in t for t in texts)
 
-    def test_url_set(self, sample_data):
-        embed = _build_featured_embed(sample_data, "소개")
+    def test_thumbnail_image_block(self, sample_data):
+        blocks = _build_featured_blocks(sample_data, "소개")
+        assert any(b.get("type") == "image" for b in blocks)
 
-        assert embed["url"] == "https://en.wikipedia.org/wiki/Marie_Curie"
-
-    def test_thumbnail_set(self, sample_data):
-        embed = _build_featured_embed(sample_data, "소개")
-
-        assert embed["thumbnail"]["url"] == "https://example.com/marie.jpg"
-
-    def test_featured_text_used_in_field_value(self, sample_data):
-        embed = _build_featured_embed(sample_data, "특집 소개 텍스트")
-        value = embed["fields"][0]["value"]
-
-        assert "특집 소개 텍스트" in value
+    def test_featured_text_in_section(self, sample_data):
+        blocks = _build_featured_blocks(sample_data, "특집 소개 텍스트")
+        texts = _all_texts(blocks)
+        assert any("특집 소개 텍스트" in t for t in texts)
 
     def test_fallback_to_extract_when_no_text(self, sample_data):
-        embed = _build_featured_embed(sample_data, "")
-        value = embed["fields"][0]["value"]
-
-        assert "Marie Curie was a physicist" in value
+        blocks = _build_featured_blocks(sample_data, "")
+        texts = _all_texts(blocks)
+        assert any("Marie Curie was a physicist" in t for t in texts)
 
 
 # ─────────────────────────────────────────────
@@ -312,68 +300,63 @@ class TestBuildFeaturedEmbed:
 
 
 class TestPublishReport:
-    def test_posts_json_to_discord(self, mocker, sample_data, sample_sections):
-        mock_cm = _mock_discord(mocker)
+    def test_posts_json_to_slack(self, mocker, sample_data, sample_sections):
+        mock_cm = _mock_slack(mocker)
 
         publish_report(sample_sections, sample_data)
 
         mock_cm.post.assert_called_once()
         payload = mock_cm.post.call_args.kwargs["json"]
-        assert "embeds" in payload
+        assert "blocks" in payload
 
-    def test_five_embeds_when_featured_present(
-        self, mocker, sample_data, sample_sections
-    ):
-        """Headline + Numbers + Top5 + Controversy + Featured = 5."""
-        mock_cm = _mock_discord(mocker)
+    def test_fallback_text_set(self, mocker, sample_data, sample_sections):
+        mock_cm = _mock_slack(mocker)
 
         publish_report(sample_sections, sample_data)
 
-        embeds = mock_cm.post.call_args.kwargs["json"]["embeds"]
-        assert len(embeds) == 5
+        payload = mock_cm.post.call_args.kwargs["json"]
+        assert "Wikipedia 일일 트렌드" in payload["text"]
 
-    def test_four_embeds_when_no_featured(self, mocker, sample_data, sample_sections):
+    def test_all_section_headers_present(self, mocker, sample_data, sample_sections):
+        """Headline + 숫자 + Top5 + 논쟁 + 교양 = 5 headers."""
+        mock_cm = _mock_slack(mocker)
+
+        publish_report(sample_sections, sample_data)
+
+        headers = _header_texts(mock_cm.post.call_args.kwargs["json"]["blocks"])
+        assert any("Wikipedia 일일 트렌드" in h for h in headers)
+        assert any("숫자로" in h for h in headers)
+        assert any("Top 5" in h for h in headers)
+        assert any("논쟁" in h for h in headers)
+        assert any("교양 코너" in h for h in headers)
+
+    def test_four_section_headers_when_no_featured(
+        self, mocker, sample_data, sample_sections
+    ):
         sample_data.featured_article.title = ""
-        mock_cm = _mock_discord(mocker)
+        mock_cm = _mock_slack(mocker)
 
         publish_report(sample_sections, sample_data)
 
-        embeds = mock_cm.post.call_args.kwargs["json"]["embeds"]
-        assert len(embeds) == 4
+        headers = _header_texts(mock_cm.post.call_args.kwargs["json"]["blocks"])
+        assert not any("교양 코너" in h for h in headers)
+        assert len(headers) == 4
 
-    def test_embed_order(self, mocker, sample_data, sample_sections):
-        """Order: headline → numbers → top5 → controversy → featured."""
-        mock_cm = _mock_discord(mocker)
+    def test_peak_hour_in_stats_fields(self, mocker, sample_data, sample_sections):
+        mock_cm = _mock_slack(mocker)
 
         publish_report(sample_sections, sample_data)
 
-        embeds = mock_cm.post.call_args.kwargs["json"]["embeds"]
-        assert "Wikipedia 일일 트렌드" in embeds[0]["title"]
-        assert "숫자로" in embeds[1]["title"]
-        assert "Top 5" in embeds[2]["title"]
-        assert "논쟁" in embeds[3]["title"]
-        assert "교양 코너" in embeds[4]["title"]
+        texts = _all_texts(mock_cm.post.call_args.kwargs["json"]["blocks"])
+        assert any("편집 피크 시간대" in t for t in texts)
 
-    def test_peak_hour_field_in_numbers_embed(
+    def test_no_peak_hour_when_hour_negative(
         self, mocker, sample_data, sample_sections
     ):
-        mock_cm = _mock_discord(mocker)
-
-        publish_report(sample_sections, sample_data)
-
-        numbers_embed = mock_cm.post.call_args.kwargs["json"]["embeds"][1]
-        field_names = [f["name"] for f in numbers_embed["fields"]]
-        assert "⏰ 편집 피크 시간대" in field_names
-
-    def test_no_peak_hour_field_when_hour_negative(
-        self, mocker, sample_data, sample_sections
-    ):
-        """PeakHour.hour == -1 (default) means no peak hour field."""
         sample_data.peak_hour = PeakHour(hour=-1, edits=0)
-        mock_cm = _mock_discord(mocker)
+        mock_cm = _mock_slack(mocker)
 
         publish_report(sample_sections, sample_data)
 
-        numbers_embed = mock_cm.post.call_args.kwargs["json"]["embeds"][1]
-        field_names = [f["name"] for f in numbers_embed["fields"]]
-        assert "⏰ 편집 피크 시간대" not in field_names
+        texts = _all_texts(mock_cm.post.call_args.kwargs["json"]["blocks"])
+        assert not any("편집 피크 시간대" in t for t in texts)

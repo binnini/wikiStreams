@@ -38,7 +38,7 @@ def run() -> None:
 
     store = BaselineStore(settings.baseline_db_path, alpha=settings.ema_alpha)
     alerter = Alerter(
-        settings.resource_monitor_discord_webhook_url, settings.alert_cooldown_seconds
+        settings.slack_alert_webhook_url, settings.alert_cooldown_seconds
     )
     collector = DockerStatsCollector()
 
