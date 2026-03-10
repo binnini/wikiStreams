@@ -10,24 +10,31 @@ logger = logging.getLogger(__name__)
 
 KAFKA_BROKER = "localhost:9092"
 KAFKA_TOPIC = "wikimedia.recentchange"
-CLICKHOUSE_URL = "http://localhost:8123"
+QUESTDB_URL = "http://localhost:9000"
 
 
-def wait_for_clickhouse_ingestion(unique_id, timeout=60, interval=3):
+def wait_for_questdb_ingestion(unique_id, timeout=60, interval=3):
     """
-    ClickHouse HTTP API를 폴링하여 테스트 이벤트가 적재될 때까지 대기합니다.
+    QuestDB REST API를 폴링하여 테스트 이벤트가 적재될 때까지 대기합니다.
     comment 필드에 unique_id를 심어 식별합니다.
     """
-    query = f"SELECT count() FROM wikimedia.events WHERE comment = '{unique_id}'"
+    query = f"SELECT count(1) FROM wikimedia_events WHERE comment = '{unique_id}'"
     start = time.time()
     while time.time() - start < timeout:
         try:
-            resp = requests.get(CLICKHOUSE_URL, params={"query": query}, timeout=5)
-            if resp.status_code == 200 and int(resp.text.strip()) > 0:
-                return True
-            logger.info(f"Waiting for ClickHouse ingestion... ({resp.text.strip()})")
+            resp = requests.get(
+                f"{QUESTDB_URL}/exec",
+                params={"query": query, "fmt": "json"},
+                timeout=5,
+            )
+            if resp.status_code == 200:
+                body = resp.json()
+                count = body.get("dataset", [[0]])[0][0]
+                if count > 0:
+                    return True
+                logger.info(f"Waiting for QuestDB ingestion... (count={count})")
         except requests.exceptions.RequestException as e:
-            logger.warning(f"ClickHouse connection error: {e}")
+            logger.warning(f"QuestDB connection error: {e}")
         time.sleep(interval)
     return False
 
@@ -35,8 +42,8 @@ def wait_for_clickhouse_ingestion(unique_id, timeout=60, interval=3):
 @pytest.mark.integration
 def test_e2e_data_pipeline():
     """
-    Producer → Kafka → ClickHouse 전체 파이프라인이 정상 작동하는지 검증합니다.
-    unique_id를 comment 필드에 심어 ClickHouse에서 해당 이벤트를 식별합니다.
+    Producer → Kafka → QuestDB 전체 파이프라인이 정상 작동하는지 검증합니다.
+    unique_id를 comment 필드에 심어 QuestDB에서 해당 이벤트를 식별합니다.
     """
     unique_id = str(uuid.uuid4())
     sender = KafkaSender(KAFKA_BROKER, KAFKA_TOPIC, dlq_topic=f"{KAFKA_TOPIC}.dlq")
@@ -58,11 +65,11 @@ def test_e2e_data_pipeline():
     logger.info(f"[E2E] Sending event to Kafka with ID: {unique_id}")
     sender.send_events([test_event])
 
-    logger.info("[E2E] Waiting for event to appear in ClickHouse...")
-    ingested = wait_for_clickhouse_ingestion(unique_id)
+    logger.info("[E2E] Waiting for event to appear in QuestDB...")
+    ingested = wait_for_questdb_ingestion(unique_id)
 
     assert ingested, (
-        f"E2E pipeline failed: event '{unique_id}' not found in ClickHouse "
-        f"within timeout. Check ClickHouse Kafka engine and Materialized View."
+        f"E2E pipeline failed: event '{unique_id}' not found in QuestDB "
+        f"within timeout. Check questdb-consumer and Kafka topic."
     )
-    logger.info(f"[E2E] Pipeline verified. Event '{unique_id}' found in ClickHouse.")
+    logger.info(f"[E2E] Pipeline verified. Event '{unique_id}' found in QuestDB.")
