@@ -2,58 +2,6 @@
 
 ## 우선순위 높음
 
-- [ ] **SLO 수립 로드맵** *(진행 중)*
-  - 목표: 실측 데이터 기반 SLO.md 작성 → SLA.md 작성
-  - 선행 산출물: NFR.md ✅, SLI.md ✅
-
-  - [x] **1단계: 계측 보강 (Instrumentation Gap 해소)** *(2026-03-06 완료)*
-    - [x] `process_batch()` 시작·종료 시 `time.perf_counter()` 로그 추가 → SLI-P1 (배치 처리 소요 시간) 측정 가능화
-    - [x] `_process_buffer()` 호출 시 배치 크기 로그 추가 → SLI-P2 (배치 크기) 측정 가능화
-    - [x] Kafka JMX Exporter 또는 `kafka-consumer-groups.sh` polling → Grafana 연동 → SLI-P6 (Kafka 컨슈머 레그) 측정 가능화
-    - [x] **SLI-P6 제거**: 처리량(18 msg/sec) 대비 ClickHouse가 즉시 offset 커밋하여 lag가 항상 0 → 정보량 없음. SLI-D1(데이터 신선도)이 실질적으로 대체. `kafka-lag-monitor` 서비스 및 SLO 대시보드 SLI-P6 패널 제거.
-    - [x] `collector.py`에 SSE 수신 이벤트 누적 카운터 로그 추가 → SLI-R5 (파이프라인 완전성) 측정 가능화
-    - [ ] ~~S3 백업 구현 후 백업 완료 타임스탬프 로그 기록 → SLI-RC4 (RPO) 측정 가능화~~ *(2026-03-06 생략)*
-
-
-  - [x] **2단계: SLO 대시보드 구현 (Grafana)** *(2026-03-06 완료)*
-    - [x] `monitoring/dashboards/wikistreams-slo.json` 신규 작성
-    - [x] 각 SLI 현재값 패널 (가용성·성능·신뢰성·데이터 품질·용량 5개 섹션)
-      - 가용성: SLI-A2 (ClickHouse 가용성), SLI-A3 (Reporter 발송 성공)
-      - 성능: SLI-P1 (배치 처리), SLI-P2 (배치 크기), SLI-P3 (쿼리 응답), SLI-P5 (처리량), SLI-P7 (캐시 히트율)
-      - 신뢰성: SLI-R1 (DLQ 비율)
-      - 데이터 품질: SLI-D1 (신선도), SLI-D2 (레이블 보강률)
-      - 용량: SLI-CAP1 (ClickHouse 메모리), SLI-CAP2 (Producer CPU)
-    - [x] **추이 패널 가독성 개선** *(2026-03-06)*: `[$__interval]` → `[5m]` 고정 윈도우, `avg(avg_over_time())` 단일 시리즈화, max 시리즈 제거, y축 고정(`min=0`)
-    - [x] **SLI-A2 버그 수정** *(2026-03-06)*: `system.query_log` QueryStart 행이 분모에 포함되어 성공률이 항상 ~50%로 고정되던 문제 → `type NOT IN ('QueryStart')` 추가로 수정 (실제 값: 99.92%)
-
-  - [x] **3단계: 알림 구현 (Grafana Alert Rule)** *(2026-03-06 완료)*
-    - [x] `monitoring/grafana-contact-points.yaml` 작성 (Discord Webhook 연동)
-    - [x] `monitoring/grafana-notification-policy.yaml` 작성 (라우팅 정책)
-    - [x] `monitoring/grafana-alert-rules.yaml` 작성 (6개 알림 규칙)
-      - SLI-D1: 데이터 신선도 lag > 30초 2분 지속 → Discord 알림
-      - SLI-A3: 1시간 내 Reporter 발송 없음 → Discord 알림
-      - SLI-R1: DLQ 비율 > 1% 3분 지속 → Discord 알림
-      - SLI-P7: 캐시 히트율 < 80% 10분 지속 → Discord 알림
-      - SLI-CAP1: ClickHouse 메모리 > 80% 5분 지속 → Discord critical 알림
-      - SLI-CAP2: Producer CPU > 70% 10분 지속 → Discord 알림
-    - [x] `docker-compose.yml`에 alerting 프로비저닝 볼륨 마운트 추가
-    - [ ] 에러 버짓 소진률 75% 초과 시 Discord 경고 *(Grafana 계산 패널로 구현 필요)*
-
-  - [x] **4단계: 관측 기간** *(2026-03-08 조기 완료)*
-    - [x] SLI 1차 실측 baseline 확보 (39시간, 2026-03-07 리뷰) — SLO 목표 재조정 완료
-    - [x] baseline 최종 확정 (49시간 / 5,160,451건, 2026-03-08) — 전 SLO 수치 갱신
-    - 관측 기간 조기 종료 근거: 49시간 / 5.16M건으로 SLO 목표 재조정 및 수치 안정 확인. 아키텍처 경량화 로드맵 진입 조건 해제.
-
-  - [x] **5단계: SLO.md 작성** *(2026-03-06 초기 목표값으로 완료)*
-    - [x] NFR 기반 초기 목표 수치 정의 (관측 완료 후 확정 예정)
-    - [x] 에러 버짓 계산 (SLO 수치 → 허용 위반 시간/횟수)
-    - [x] 외부 의존성 제외 조건 명시 (NFR.md 섹션 2 기준)
-
-  - [x] **6단계: SLA.md 작성** *(2026-03-06 초기 협약으로 완료)*
-    - [x] SLO 기반 책임 범위 및 위반 처리 정의
-    - [x] 월간 리포팅 주기 및 SLO 재조정 주기 명시
-
-
 - [ ] **아키텍처 경량화** *(진행 중)*
   - **배경**: 현재 컨테이너 합산 메모리 ~3,909 MiB + OS ~400 MiB = ~4,309 MiB로 t4g.medium(4 GiB) 초과.
   - **목표**: AWS t3.small(2 GiB) 마이그레이션. Kafka→Redpanda(-802 MiB) + ClickHouse→QuestDB(-1,750 MiB) 로 달성.
@@ -189,7 +137,6 @@
   - [x] `docker-compose.yml` `s3-exporter` 서비스 추가 (`profiles: [s3]`)
   - [ ] `.env`에 `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 설정
   - [ ] S3 버킷 생성 + IAM 정책 (`s3:PutObject`, `s3:HeadObject`, `s3:GetObject`)
-  - [ ] 첫 실행 후 DuckDB로 쿼리 검증
 
 
 
