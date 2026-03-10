@@ -8,6 +8,7 @@ contactPoints:
         type: slack
         settings:
           url: ${SLACK_ALERT_WEBHOOK_URL}
+          recipient: ${SLACK_ALERT_CHANNEL}
           title: |
             [WikiStreams Alert] {{ .GroupLabels.alertname }}
           text: |

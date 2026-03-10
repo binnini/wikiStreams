@@ -43,7 +43,8 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
-      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL}
+      - SLACK_ALERT_WEBHOOK_URL=${SLACK_ALERT_WEBHOOK_URL}
+      - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL}
     depends_on:
       - loki
     restart: always
@@ -117,8 +118,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - resource_monitor_data:/data
     environment:
-      MONITOR_TARGETS: 'producer,questdb'
-      RESOURCE_MONITOR_DISCORD_WEBHOOK_URL: '${RESOURCE_MONITOR_DISCORD_WEBHOOK_URL}'
+      MONITOR_TARGETS: 'producer,questdb,redpanda,questdb-consumer,reporter'
+      SLACK_ALERT_WEBHOOK_URL: '${SLACK_ALERT_WEBHOOK_URL}'
       BASELINE_DB_PATH: '/data/resource_monitor_baseline.db'
     restart: always
 
@@ -132,7 +133,7 @@ services:
       QUESTDB_HOST: 'questdb'
       QUESTDB_PORT: '9000'
       ANTHROPIC_API_KEY: '${ANTHROPIC_API_KEY}'
-      DISCORD_WEBHOOK_URL: '${DISCORD_WEBHOOK_URL}'
+      SLACK_WEBHOOK_URL: '${SLACK_WEBHOOK_URL}'
       REPORT_HOUR_KST: '9'
       REPORT_STORAGE_DIR: '/app/reports'
     volumes:
