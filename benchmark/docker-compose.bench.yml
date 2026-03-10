@@ -1,0 +1,45 @@
+# ClickHouse vs QuestDB Cold Read Benchmark — ClickHouse 임시 환경
+#
+# 설정:
+#   - ClickHouse: localhost:28123 (HTTP), localhost:29000 (native)
+#   - mem_limit: 4000m → t4g.medium 4 GiB 시뮬레이션
+#   - uncompressed_cache: 1 GiB, mark_cache: 256 MiB (clickhouse/bench-config.xml)
+#
+# 사용법:
+#   # 1. ClickHouse 기동 (QuestDB는 기존 docker-compose.yml 사용)
+#   docker compose -f benchmark/docker-compose.bench.yml up -d
+#
+#   # 2. 양쪽 DB에 데이터 주입
+#   python benchmark/data_generator.py
+#
+#   # 3. 벤치마크 실행
+#   python benchmark/runner.py
+#
+#   # 4. 종료 및 데이터 삭제
+#   docker compose -f benchmark/docker-compose.bench.yml down -v
+
+services:
+  clickhouse-bench:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: clickhouse-bench
+    ports:
+      - "28123:8123"   # HTTP API (운영 8123과 분리)
+      - "29000:9000"   # Native protocol (운영 9000과 분리)
+    volumes:
+      - ./clickhouse/bench-config.xml:/etc/clickhouse-server/config.d/bench.xml:ro
+      - ./clickhouse/bench-users.xml:/etc/clickhouse-server/users.d/bench-users.xml:ro
+      - ./clickhouse/bench-init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - clickhouse-bench-data:/var/lib/clickhouse
+    mem_limit: 4000m   # t4g.medium 4 GiB 시뮬레이션
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  clickhouse-bench-data:

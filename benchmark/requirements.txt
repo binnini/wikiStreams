@@ -1,4 +1,7 @@
-# Kafka vs Redpanda 벤치마크 의존성
+# 벤치마크 의존성 (Kafka vs Redpanda + ClickHouse vs QuestDB)
 # pip install -r benchmark/requirements.txt
 
+# Kafka vs Redpanda
 kafka-python>=2.0.2
+
+# ClickHouse vs QuestDB (표준 라이브러리만 사용, 추가 패키지 없음)

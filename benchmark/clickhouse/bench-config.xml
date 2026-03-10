@@ -1,0 +1,9 @@
+<clickhouse>
+    <!-- t4g.medium 시뮬레이션: 명시적 LRU 캐시 예산 설정 -->
+    <!-- uncompressed_cache: 압축 해제된 블록 캐시 (1 GiB) -->
+    <uncompressed_cache_size>1073741824</uncompressed_cache_size>
+    <!-- mark_cache: 인덱스 마크 캐시 (256 MiB) -->
+    <mark_cache_size>268435456</mark_cache_size>
+    <!-- 서버 전체 메모리 한도 비율 (4 GiB × 0.9 = 3.6 GiB) -->
+    <max_server_memory_usage_ratio>0.9</max_server_memory_usage_ratio>
+</clickhouse>

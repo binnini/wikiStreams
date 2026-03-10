@@ -53,20 +53,24 @@ def _ensure_topic(broker: str) -> None:
 
 
 def _producer_loop(broker: str, stop_event: threading.Event) -> None:
-    """브로커가 올라올 때까지 재연결을 반복하며 메시지를 계속 전송한다."""
+    """브로커가 올라올 때까지 재연결을 반복하며 메시지를 계속 전송한다.
+    future.get() 대신 flush() + 콜백 방식으로 블로킹 타임아웃 이슈를 회피.
+    """
     seq = 0
     while not stop_event.is_set():
         try:
             producer = KafkaProducer(
                 bootstrap_servers=[broker],
-                acks="1",
-                request_timeout_ms=5_000,
-                max_block_ms=5_000,
+                acks="all",
+                linger_ms=0,
+                batch_size=1,
+                request_timeout_ms=30_000,
+                max_block_ms=10_000,
             )
             while not stop_event.is_set():
                 payload = json.dumps({"seq": seq, "ts": time.time()}).encode()
                 producer.send(TOPIC, value=payload)
-                producer.flush(timeout=2)
+                producer.flush(timeout=10)  # 콜백 방식 — 내부적으로 전송 완료까지 대기
                 seq += 1
                 time.sleep(0.2)
             producer.close()
@@ -86,16 +90,13 @@ def measure_one_run(broker: str, container: str) -> float:
         group_id=f"bench-recovery-{time.time_ns()}",
         auto_offset_reset="latest",
         enable_auto_commit=True,
-        consumer_timeout_ms=1_000,
+        # consumer_timeout_ms 미설정: next() 사용 안 함, poll() 방식 사용
     )
 
     # 워밍업: 기존 메시지 drain
     deadline = time.monotonic() + WARMUP_SEC
     while time.monotonic() < deadline:
-        try:
-            next(consumer)
-        except StopIteration:
-            break
+        consumer.poll(timeout_ms=500)
 
     # 컨테이너 재시작
     restart_time = time.monotonic()
@@ -119,18 +120,15 @@ def measure_one_run(broker: str, container: str) -> float:
     )
     producer_thread.start()
 
-    # 첫 메시지 수신 대기
+    # 첫 메시지 수신 대기 (poll() 방식 — 재연결 후에도 계속 동작)
     first_msg_time = None
     deadline = time.monotonic() + MAX_WAIT_SEC
 
     while time.monotonic() < deadline:
-        try:
-            msg = next(consumer)
-            if msg:
-                first_msg_time = time.monotonic()
-                break
-        except StopIteration:
-            pass
+        records = consumer.poll(timeout_ms=1_000)
+        if records:
+            first_msg_time = time.monotonic()
+            break
 
     stop_event.set()
     consumer.close()

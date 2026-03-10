@@ -100,7 +100,7 @@
       - QuestDB: 컬럼 파일을 mmap으로 읽어 RSS에 반영. mmap 할당량 설정 없음 — OS page cache에 완전 위임. RAM이 넉넉한 환경에서는 page eviction 없이 RSS가 working set에 비례해 선형 증가(24h 관측: +34 MiB/h).
       - 대응 전략: `mem_limit: 1100m`으로 cgroup 압력 부여(강제 eviction) + TTL 5d로 working set 상한 제한(최대 ~575 MiB × 5일 = ~2.9 GiB 컬럼 파일, cgroup 1.1 GiB 내에서 OS가 LRU evict).
 
-  - [ ] **[벤치마크] ClickHouse(t4g.medium) vs QuestDB(t3.small) Cold Read 비교** *(설계 완료, 구현 대기)*
+  - [x] **[벤치마크] ClickHouse(t4g.medium) vs QuestDB(t3.small) Cold Read 비교** *(설계 완료, 구현 대기)*
     - **목적**: 마이그레이션 트레이드오프 수치화 — 인스턴스 다운그레이드로 얻는 비용 절감이 어느 정도의 cold read 성능 저하를 감수하는 것인지 정량화.
     - **비교 환경** (각자 자연스러운 동작 조건):
       - ClickHouse: `mem_limit: 4000m` (t4g.medium 4 GiB 시뮬레이션), `uncompressed_cache: 1 GiB`, `mark_cache: 256 MiB`
@@ -111,14 +111,15 @@
     - **캐시 초기화**: QuestDB → `sudo purge` (macOS) / ClickHouse → `SYSTEM DROP MARK CACHE` + `SYSTEM DROP UNCOMPRESSED CACHE`
     - **결과 형태**: p50/p95/p99 per (db × range × query × mode), SLO 2s 통과 여부
     - **로컬→AWS 보정**: 절대 수치는 EBS/NVMe 속도비(~23x) 곱해 worst-case 예측치로 활용
-    - [ ] `benchmark/docker-compose.bench.yml` 작성 (ClickHouse 임시 기동)
-    - [ ] `benchmark/clickhouse/config.xml` 작성 (t4g.medium 캐시 설정)
-    - [ ] `benchmark/data_generator.py` 작성 (합성 5일치 데이터 → QuestDB ILP + ClickHouse HTTP)
-    - [ ] `benchmark/queries.py` 작성 (Q1/Q3/Q5 양쪽 SQL)
-    - [ ] `benchmark/runner.py` 작성 (캐시 초기화 → 측정 → p50/p95/p99 CSV 출력)
-    - [ ] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가
+    - [x] `benchmark/docker-compose.bench.yml` 작성 (ClickHouse 임시 기동)
+    - [x] `benchmark/clickhouse/bench-config.xml` 작성 (t4g.medium 캐시 설정)
+    - [x] `benchmark/clickhouse/bench-init.sql` 작성 (bench.events 테이블)
+    - [x] `benchmark/data_generator.py` 작성 (합성 5일치 데이터 → QuestDB ILP + ClickHouse HTTP)
+    - [x] `benchmark/queries.py` 작성 (Q1/Q3/Q5 양쪽 SQL)
+    - [x] `benchmark/runner.py` 작성 (캐시 초기화 → 측정 → p50/p95/p99 CSV 출력)
+    - [x] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가 *(2026-03-10 완료, Section 6)*
 
-  - [ ] **[벤치마크] Kafka vs Redpanda 트레이드오프 Deep Dive** *(설계 완료, 구현 대기)*
+  - [x] **[벤치마크] Kafka vs Redpanda 트레이드오프 Deep Dive** *(2026-03-10 완료)*
     - **목적**: 메모리 절감 외에 latency/안정성 관점의 트레이드오프 수치화.
     - **핵심 인사이트**: 18 msg/sec에서 전환의 실질적 이유는 latency가 아닌 메모리. GC pause 영향은 p99/p999에서 드러남. 환경(로컬 vs AWS) 차이가 결과에 거의 영향 없음 (CPU/RAM bound, disk 무관).
     - **비교 환경** (t3.small 시뮬레이션):
@@ -131,12 +132,18 @@
       - SLI-D1 연결: Kafka 20~40s 복구 시 30s SLO 위반 가능 / Redpanda 2~5s → SLO 여유
     - **측정 4 — CPU 패턴**: RSS와 교차 수집 → GC 시 CPU 스파이크 + RSS 급감 동시 검증
     - **결과 형태**: p50/p95/p99/p999 per (db × rate), RSS 시계열 그래프, 복구 시간 평균/최대
-    - [ ] `benchmark/docker-compose.kafka-bench.yml` 작성 (Kafka KRaft 단일 노드)
-    - [ ] `benchmark/kafka/kraft.properties` 작성
-    - [ ] `benchmark/load_generator.py` 작성 (send latency 측정, 처리량 3구간)
-    - [ ] `benchmark/memory_monitor.py` 작성 (RSS + CPU 시계열 수집)
-    - [ ] `benchmark/recovery_test.py` 작성 (재시작 복구 gap 측정)
-    - [ ] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가
+    - **실측 결과 요약** (→ `docs/ARCH_LIGHTENING_REPORT.md` 섹션 7):
+      - p999 (18 msg/sec): Kafka 6.3ms → Redpanda 3.9ms (-38%)
+      - p999 (50 msg/sec): Kafka 13.0ms ⚠️ → Redpanda 3.8ms (-71%, GC pause 효과)
+      - RSS mean: Kafka 510 MiB (선형 증가) → Redpanda 316 MiB (수평 고정) (-38%)
+      - 복구 avg: Kafka 4.13s → Redpanda 1.86s (-55%), 양쪽 모두 SLO(30s) 통과
+      - 예측(Kafka 20~40s 복구)과 달리 KRaft 덕분에 Kafka도 4초대로 빠름
+    - [x] `benchmark/docker-compose.kafka-bench.yml` 작성 (Kafka KRaft 단일 노드)
+    - [x] `benchmark/kafka/kraft.properties` 작성
+    - [x] `benchmark/load_generator.py` 작성 (send latency 측정, 처리량 3구간)
+    - [x] `benchmark/memory_monitor.py` 작성 (RSS + CPU 시계열 수집)
+    - [x] `benchmark/recovery_test.py` 작성 (재시작 복구 gap 측정)
+    - [x] 결과를 `docs/ARCH_LIGHTENING_REPORT.md` 트레이드오프 섹션에 추가
 
   - [ ] **4단계: Loki/Alloy 경량화** *(3단계 운영 전환 완료 후 옵션 선택)*
     - **배경**: Loki(253 MiB) + Alloy(104 MiB) = 357 MiB. 대시보드 41개 Loki 쿼리 중 25개가
