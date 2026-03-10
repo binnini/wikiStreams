@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-_METRICS = ["cpu_pct", "mem_pct", "mem_mb", "block_io_mb"]
+_METRICS = ["cpu_pct", "mem_pct", "block_io_mb"]
 
 
 def _log_metrics(m: ContainerMetrics, hour: int) -> None:
