@@ -48,7 +48,9 @@ def get_stats(container: str) -> dict | None:
     try:
         result = subprocess.run(
             ["docker", "stats", "--no-stream", "--format", "{{json .}}", container],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0 or not result.stdout.strip():
             return None
@@ -71,10 +73,18 @@ def get_stats(container: str) -> dict | None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="컨테이너 RSS/CPU 시계열 모니터")
     parser.add_argument("--container", required=True, help="모니터링할 컨테이너 이름")
-    parser.add_argument("--label",     required=True, help="출력 파일 레이블 (kafka | redpanda)")
-    parser.add_argument("--interval",  type=int, default=5,  help="폴링 간격(초) (기본: 5)")
-    parser.add_argument("--duration",  type=int, default=0,
-                        help="측정 종료 시간(초). 0이면 Ctrl+C까지 (기본: 0)")
+    parser.add_argument(
+        "--label", required=True, help="출력 파일 레이블 (kafka | redpanda)"
+    )
+    parser.add_argument(
+        "--interval", type=int, default=5, help="폴링 간격(초) (기본: 5)"
+    )
+    parser.add_argument(
+        "--duration",
+        type=int,
+        default=0,
+        help="측정 종료 시간(초). 0이면 Ctrl+C까지 (기본: 0)",
+    )
     parser.add_argument("--output-dir", default="benchmark/results")
     args = parser.parse_args()
 
@@ -88,7 +98,9 @@ def main() -> None:
 
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["timestamp", "elapsed_sec", "label", "container", "rss_mib", "cpu_pct"])
+        writer.writerow(
+            ["timestamp", "elapsed_sec", "label", "container", "rss_mib", "cpu_pct"]
+        )
 
         try:
             while True:
@@ -97,14 +109,26 @@ def main() -> None:
 
                 if stats:
                     ts = datetime.now().isoformat(timespec="seconds")
-                    writer.writerow([ts, elapsed, args.label, args.container,
-                                     stats["rss_mib"], stats["cpu_pct"]])
+                    writer.writerow(
+                        [
+                            ts,
+                            elapsed,
+                            args.label,
+                            args.container,
+                            stats["rss_mib"],
+                            stats["cpu_pct"],
+                        ]
+                    )
                     f.flush()
-                    print(f"  {ts}  elapsed={elapsed:>5}s  "
-                          f"RSS={stats['rss_mib']:>7.1f} MiB  CPU={stats['cpu_pct']:>6.2f}%")
+                    print(
+                        f"  {ts}  elapsed={elapsed:>5}s  "
+                        f"RSS={stats['rss_mib']:>7.1f} MiB  CPU={stats['cpu_pct']:>6.2f}%"
+                    )
                 else:
-                    print(f"  [{datetime.now().isoformat(timespec='seconds')}]"
-                          f" 컨테이너 미응답 (아직 시작 중이거나 종료됨)")
+                    print(
+                        f"  [{datetime.now().isoformat(timespec='seconds')}]"
+                        f" 컨테이너 미응답 (아직 시작 중이거나 종료됨)"
+                    )
 
                 if args.duration > 0 and elapsed >= args.duration:
                     break

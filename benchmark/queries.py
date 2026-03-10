@@ -16,17 +16,23 @@ from datetime import datetime, timezone
 
 # ── 시간 포맷 변환 ──────────────────────────────────────────────────────────
 
+
 def _ch_dt(unix_sec: int) -> str:
     """Unix seconds → ClickHouse DateTime 문자열 (UTC)."""
-    return datetime.fromtimestamp(unix_sec, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.fromtimestamp(unix_sec, tz=timezone.utc).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
 
 
 def _qdb_ts(unix_sec: int) -> str:
     """Unix seconds → QuestDB timestamp 문자열 (ISO 8601 UTC)."""
-    return datetime.fromtimestamp(unix_sec, tz=timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000000Z")
+    return datetime.fromtimestamp(unix_sec, tz=timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%S.000000Z"
+    )
 
 
 # ── Q1: 단순 집계 ───────────────────────────────────────────────────────────
+
 
 def q1_clickhouse(t_start: int, t_end: int) -> str:
     """24h 구간 기본 통계: 총 편집 수, 활성 편집자, 봇 비율, 신규 문서 수."""
@@ -54,6 +60,7 @@ WHERE timestamp >= '{s}' AND timestamp < '{e}'"""
 
 
 # ── Q3: GROUP BY TOP PAGES ─────────────────────────────────────────────────
+
 
 def q3_clickhouse(t_start: int, t_end: int) -> str:
     """상위 편집 문서 20개: bot 제외, 실제 편집(edit)만, namespace=0."""
@@ -93,6 +100,7 @@ LIMIT 20"""
 
 
 # ── Q5: 서브쿼리 + ilike (REVERT 감지) ─────────────────────────────────────
+
 
 def q5_clickhouse(t_start: int, t_end: int) -> str:
     """되돌리기 비율 상위 5개 문서: comment ilike 필터 + 서브쿼리."""
@@ -146,7 +154,19 @@ LIMIT 5"""
 # ── 쿼리 레지스트리 ─────────────────────────────────────────────────────────
 
 QUERIES = {
-    "Q1": {"clickhouse": q1_clickhouse, "questdb": q1_questdb, "label": "집계(count/sum)"},
-    "Q3": {"clickhouse": q3_clickhouse, "questdb": q3_questdb, "label": "GROUP BY TOP 20"},
-    "Q5": {"clickhouse": q5_clickhouse, "questdb": q5_questdb, "label": "서브쿼리+ilike"},
+    "Q1": {
+        "clickhouse": q1_clickhouse,
+        "questdb": q1_questdb,
+        "label": "집계(count/sum)",
+    },
+    "Q3": {
+        "clickhouse": q3_clickhouse,
+        "questdb": q3_questdb,
+        "label": "GROUP BY TOP 20",
+    },
+    "Q5": {
+        "clickhouse": q5_clickhouse,
+        "questdb": q5_questdb,
+        "label": "서브쿼리+ilike",
+    },
 }

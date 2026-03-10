@@ -46,15 +46,21 @@ QDB_REST_URL = "http://localhost:9000"
 # ── 데이터 규모 ────────────────────────────────────────────────────────────
 EVENTS_PER_SEC = 18
 DAYS = 5
-TOTAL_EVENTS = EVENTS_PER_SEC * 86400 * DAYS   # ~7,776,000
-BATCH_SIZE = 10_000       # ClickHouse
-QDB_BATCH_SIZE = 1_000    # QuestDB — mmap 메모리 압박 완화
+TOTAL_EVENTS = EVENTS_PER_SEC * 86400 * DAYS  # ~7,776,000
+BATCH_SIZE = 10_000  # ClickHouse
+QDB_BATCH_SIZE = 1_000  # QuestDB — mmap 메모리 압박 완화
 
 # ── 합성 데이터 풀 ─────────────────────────────────────────────────────────
 _SERVERS = [
-    "en.wikipedia.org", "de.wikipedia.org", "fr.wikipedia.org",
-    "es.wikipedia.org", "ja.wikipedia.org", "ru.wikipedia.org",
-    "it.wikipedia.org", "zh.wikipedia.org", "pt.wikipedia.org",
+    "en.wikipedia.org",
+    "de.wikipedia.org",
+    "fr.wikipedia.org",
+    "es.wikipedia.org",
+    "ja.wikipedia.org",
+    "ru.wikipedia.org",
+    "it.wikipedia.org",
+    "zh.wikipedia.org",
+    "pt.wikipedia.org",
     "www.wikidata.org",
 ]
 _SERVER_WEIGHTS = [50, 10, 8, 7, 6, 5, 4, 3, 3, 4]
@@ -84,13 +90,9 @@ _COMMENTS = (
 )
 
 # Wikidata 레이블: 30% 페이지에만 존재
-_WD_LABELS = {
-    f"Popular_Page_{i:03d}": f"Wikidata Label {i}"
-    for i in range(30)
-}
+_WD_LABELS = {f"Popular_Page_{i:03d}": f"Wikidata Label {i}" for i in range(30)}
 _WD_DESCS = {
-    f"Popular_Page_{i:03d}": f"Short description for entity {i}"
-    for i in range(20)
+    f"Popular_Page_{i:03d}": f"Short description for entity {i}" for i in range(20)
 }
 
 
@@ -120,7 +122,9 @@ def _qdb_create_table():
             with urllib.request.urlopen(url, timeout=10) as resp:
                 body = json.loads(resp.read())
                 if "error" in body:
-                    print(f"  QuestDB 테이블 생성 오류: {body['error']}", file=sys.stderr)
+                    print(
+                        f"  QuestDB 테이블 생성 오류: {body['error']}", file=sys.stderr
+                    )
                 else:
                     print("  QuestDB bench_events 테이블 준비 완료")
                 return
@@ -194,20 +198,25 @@ def _to_ilp(evt: dict) -> str:
 
 # ── JSON 포맷 (ClickHouse) ─────────────────────────────────────────────────
 def _to_ch_json(evt: dict) -> str:
-    dt = datetime.fromtimestamp(evt["ts"], tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    return json.dumps({
-        "event_time": dt,
-        "title": evt["title"],
-        "server_name": evt["server_name"],
-        "wiki_type": evt["wiki_type"],
-        "namespace": evt["namespace"],
-        "user": evt["user"],
-        "bot": 1 if evt["bot"] else 0,
-        "minor": 1 if evt["minor"] else 0,
-        "comment": evt["comment"],
-        "wikidata_label": evt["wikidata_label"],
-        "wikidata_description": evt["wikidata_description"],
-    }, ensure_ascii=False)
+    dt = datetime.fromtimestamp(evt["ts"], tz=timezone.utc).strftime(
+        "%Y-%m-%d %H:%M:%S"
+    )
+    return json.dumps(
+        {
+            "event_time": dt,
+            "title": evt["title"],
+            "server_name": evt["server_name"],
+            "wiki_type": evt["wiki_type"],
+            "namespace": evt["namespace"],
+            "user": evt["user"],
+            "bot": 1 if evt["bot"] else 0,
+            "minor": 1 if evt["minor"] else 0,
+            "comment": evt["comment"],
+            "wikidata_label": evt["wikidata_label"],
+            "wikidata_description": evt["wikidata_description"],
+        },
+        ensure_ascii=False,
+    )
 
 
 # ── ClickHouse 배치 INSERT ─────────────────────────────────────────────────
@@ -245,11 +254,16 @@ def _qdb_ilp_http(lines: list[str], retries: int = 5):
                 resp.read()
             return
         except urllib.error.HTTPError as e:
-            raise RuntimeError(f"QuestDB ILP HTTP 실패: {e.read().decode()[:200]}") from e
+            raise RuntimeError(
+                f"QuestDB ILP HTTP 실패: {e.read().decode()[:200]}"
+            ) from e
         except Exception as e:
             if attempt < retries - 1:
-                wait = 2 ** attempt
-                print(f"\n  [QuestDB] ILP 재시도 ({attempt+1}/{retries}): {e} — {wait}s 대기", file=sys.stderr)
+                wait = 2**attempt
+                print(
+                    f"\n  [QuestDB] ILP 재시도 ({attempt+1}/{retries}): {e} — {wait}s 대기",
+                    file=sys.stderr,
+                )
                 time.sleep(wait)
             else:
                 raise RuntimeError(f"QuestDB ILP 최종 실패: {e}") from e
@@ -263,8 +277,10 @@ def generate(target: str, days: int):
     t_end = int(time.time())
     t_start = t_end - days * 86400
 
-    print(f"\n데이터 범위: {datetime.fromtimestamp(t_start, tz=timezone.utc).isoformat()} "
-          f"~ {datetime.fromtimestamp(t_end, tz=timezone.utc).isoformat()}")
+    print(
+        f"\n데이터 범위: {datetime.fromtimestamp(t_start, tz=timezone.utc).isoformat()} "
+        f"~ {datetime.fromtimestamp(t_end, tz=timezone.utc).isoformat()}"
+    )
     print(f"총 이벤트: {total:,}건 ({days}일 × 18 events/sec)")
 
     do_ch = target in ("both", "clickhouse")
@@ -329,7 +345,9 @@ def generate(target: str, days: int):
         time.sleep(2)  # ILP 버퍼 플러시 대기
 
     elapsed = time.time() - t0
-    print(f"\n\n완료: {inserted:,}건 주입, {elapsed:.1f}초 ({inserted/elapsed:,.0f} rows/s)")
+    print(
+        f"\n\n완료: {inserted:,}건 주입, {elapsed:.1f}초 ({inserted/elapsed:,.0f} rows/s)"
+    )
 
     # 메타 저장
     results_dir = Path(__file__).parent / "results"
@@ -348,7 +366,9 @@ def generate(target: str, days: int):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ClickHouse vs QuestDB 벤치마크 데이터 생성기")
+    parser = argparse.ArgumentParser(
+        description="ClickHouse vs QuestDB 벤치마크 데이터 생성기"
+    )
     parser.add_argument(
         "--target",
         choices=["both", "clickhouse", "questdb"],

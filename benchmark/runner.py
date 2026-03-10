@@ -47,10 +47,11 @@ QDB_REST_URL = "http://localhost:9000"
 
 # ── 기본값 ─────────────────────────────────────────────────────────────────
 N_RUNS = 10
-SLO_THRESHOLD_S = 2.0   # SLO: 쿼리 응답 2초 이내
+SLO_THRESHOLD_S = 2.0  # SLO: 쿼리 응답 2초 이내
 
 
 # ── DB 쿼리 실행 ───────────────────────────────────────────────────────────
+
 
 def _run_clickhouse(sql: str) -> float:
     """ClickHouse HTTP API로 쿼리 실행 후 wall time(초) 반환."""
@@ -80,6 +81,7 @@ def _run_questdb(sql: str) -> float:
 
 
 # ── 캐시 초기화 ────────────────────────────────────────────────────────────
+
 
 def _flush_clickhouse_cache():
     """ClickHouse LRU 캐시 초기화 (mark cache + uncompressed cache). POST 필요."""
@@ -113,8 +115,10 @@ def _flush_os_page_cache() -> bool:
             return False
         return True
     except FileNotFoundError:
-        print("  [경고] purge 명령어 없음 (macOS 전용). cold QuestDB 결과가 warm일 수 있음.",
-              file=sys.stderr)
+        print(
+            "  [경고] purge 명령어 없음 (macOS 전용). cold QuestDB 결과가 warm일 수 있음.",
+            file=sys.stderr,
+        )
         return False
     except subprocess.TimeoutExpired:
         print("  [경고] sudo purge 타임아웃.", file=sys.stderr)
@@ -123,20 +127,22 @@ def _flush_os_page_cache() -> bool:
 
 # ── 퍼센타일 계산 ──────────────────────────────────────────────────────────
 
+
 def _percentiles(times: list[float]) -> dict:
     sorted_t = sorted(times)
     n = len(sorted_t)
     return {
-        "p50":  sorted_t[int(n * 0.50)],
-        "p95":  sorted_t[int(n * 0.95)],
-        "p99":  sorted_t[min(int(n * 0.99), n - 1)],
+        "p50": sorted_t[int(n * 0.50)],
+        "p95": sorted_t[int(n * 0.95)],
+        "p99": sorted_t[min(int(n * 0.99), n - 1)],
         "mean": statistics.mean(times),
-        "min":  min(times),
-        "max":  max(times),
+        "min": min(times),
+        "max": max(times),
     }
 
 
 # ── 단일 조건 측정 ─────────────────────────────────────────────────────────
+
 
 def _measure(
     db: str,
@@ -180,11 +186,15 @@ def _measure(
 
 # ── 메인 ───────────────────────────────────────────────────────────────────
 
+
 def run(dbs: list[str], n: int):
     # 메타 로드
     meta_path = Path(__file__).parent / "results" / "bench_meta.json"
     if not meta_path.exists():
-        print(f"[오류] {meta_path} 없음. data_generator.py를 먼저 실행하세요.", file=sys.stderr)
+        print(
+            f"[오류] {meta_path} 없음. data_generator.py를 먼저 실행하세요.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     meta = json.loads(meta_path.read_text())
@@ -193,13 +203,15 @@ def run(dbs: list[str], n: int):
 
     # 시간 범위 정의
     ranges = {
-        "recent": (t_end - 86400, t_end),          # 마지막 1일
-        "old":    (t_start, t_start + 86400),       # 첫 번째 1일 (4~5일 전)
+        "recent": (t_end - 86400, t_end),  # 마지막 1일
+        "old": (t_start, t_start + 86400),  # 첫 번째 1일 (4~5일 전)
     }
 
-    print(f"\n=== ClickHouse vs QuestDB Cold Read Benchmark ===")
-    print(f"데이터 범위: {datetime.fromtimestamp(t_start, tz=timezone.utc).strftime('%Y-%m-%d')} "
-          f"~ {datetime.fromtimestamp(t_end, tz=timezone.utc).strftime('%Y-%m-%d')}")
+    print("\n=== ClickHouse vs QuestDB Cold Read Benchmark ===")
+    print(
+        f"데이터 범위: {datetime.fromtimestamp(t_start, tz=timezone.utc).strftime('%Y-%m-%d')} "
+        f"~ {datetime.fromtimestamp(t_end, tz=timezone.utc).strftime('%Y-%m-%d')}"
+    )
     print(f"DB: {', '.join(dbs)} | 쿼리: Q1/Q3/Q5 | 반복: N={n}\n")
 
     # sudo purge 사용 가능 여부 사전 확인
@@ -223,7 +235,9 @@ def run(dbs: list[str], n: int):
                 label = query_def["label"]
 
                 for mode in ("cold", "warm"):
-                    print(f"\n[{db.upper()}] {query_name}({label}) | {range_name} | {mode}")
+                    print(
+                        f"\n[{db.upper()}] {query_name}({label}) | {range_name} | {mode}"
+                    )
                     result = _measure(db, query_name, sql, mode, n, purge_ok)
                     st = result["stats"]
                     slo = "✅" if result["slo_pass"] else "❌"
@@ -233,22 +247,24 @@ def run(dbs: list[str], n: int):
                         f"SLO(p95≤{SLO_THRESHOLD_S}s) {slo}"
                     )
 
-                    results.append({
-                        "db": db,
-                        "range": range_name,
-                        "query": query_name,
-                        "query_label": label,
-                        "mode": mode,
-                        "n": n,
-                        "p50":  round(st["p50"], 4),
-                        "p95":  round(st["p95"], 4),
-                        "p99":  round(st["p99"], 4),
-                        "mean": round(st["mean"], 4),
-                        "min":  round(st["min"], 4),
-                        "max":  round(st["max"], 4),
-                        "slo_pass": result["slo_pass"],
-                        "raw_times": ",".join(f"{t:.4f}" for t in result["times"]),
-                    })
+                    results.append(
+                        {
+                            "db": db,
+                            "range": range_name,
+                            "query": query_name,
+                            "query_label": label,
+                            "mode": mode,
+                            "n": n,
+                            "p50": round(st["p50"], 4),
+                            "p95": round(st["p95"], 4),
+                            "p99": round(st["p99"], 4),
+                            "mean": round(st["mean"], 4),
+                            "min": round(st["min"], 4),
+                            "max": round(st["max"], 4),
+                            "slo_pass": result["slo_pass"],
+                            "raw_times": ",".join(f"{t:.4f}" for t in result["times"]),
+                        }
+                    )
 
     # CSV 저장
     results_dir = Path(__file__).parent / "results"
@@ -257,16 +273,30 @@ def run(dbs: list[str], n: int):
     csv_path = results_dir / f"cold_read_{ts_str}.csv"
 
     fieldnames = [
-        "db", "range", "query", "query_label", "mode", "n",
-        "p50", "p95", "p99", "mean", "min", "max", "slo_pass", "raw_times",
+        "db",
+        "range",
+        "query",
+        "query_label",
+        "mode",
+        "n",
+        "p50",
+        "p95",
+        "p99",
+        "mean",
+        "min",
+        "max",
+        "slo_pass",
+        "raw_times",
     ]
     with csv_path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
 
-    print(f"\n\n=== 결과 요약 (p95, SLO 2s) ===")
-    print(f"{'DB':<12} {'Range':<8} {'Query':<4} {'Mode':<6} {'p50':>7} {'p95':>7} {'p99':>7} {'SLO'}")
+    print("\n\n=== 결과 요약 (p95, SLO 2s) ===")
+    print(
+        f"{'DB':<12} {'Range':<8} {'Query':<4} {'Mode':<6} {'p50':>7} {'p95':>7} {'p99':>7} {'SLO'}"
+    )
     print("-" * 65)
     for r in results:
         slo = "✅" if r["slo_pass"] else "❌"
@@ -279,7 +309,9 @@ def run(dbs: list[str], n: int):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="ClickHouse vs QuestDB Cold Read 벤치마크")
+    parser = argparse.ArgumentParser(
+        description="ClickHouse vs QuestDB Cold Read 벤치마크"
+    )
     parser.add_argument(
         "--db",
         choices=["both", "clickhouse", "questdb"],

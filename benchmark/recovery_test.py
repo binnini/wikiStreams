@@ -28,7 +28,6 @@ import json
 import subprocess
 import threading
 import time
-from datetime import datetime
 from pathlib import Path
 
 from kafka import KafkaConsumer, KafkaProducer
@@ -37,9 +36,9 @@ from kafka.errors import TopicAlreadyExistsError
 
 TOPIC = "bench.recovery"
 DEFAULT_RUNS = 5
-WARMUP_SEC = 5          # 재시작 전 기존 메시지 drain
-MAX_WAIT_SEC = 120      # 복구 대기 최대 시간
-BETWEEN_RUNS_SEC = 15   # 런 간 안정화 대기
+WARMUP_SEC = 5  # 재시작 전 기존 메시지 drain
+MAX_WAIT_SEC = 120  # 복구 대기 최대 시간
+BETWEEN_RUNS_SEC = 15  # 런 간 안정화 대기
 
 
 def _ensure_topic(broker: str) -> None:
@@ -103,7 +102,8 @@ def measure_one_run(broker: str, container: str) -> float:
     print(f"    {container} 재시작...", end="", flush=True)
     result = subprocess.run(
         ["docker", "restart", container],
-        capture_output=True, timeout=60,
+        capture_output=True,
+        timeout=60,
     )
     if result.returncode != 0:
         print(f" 실패: {result.stderr.decode().strip()}")
@@ -142,10 +142,17 @@ def measure_one_run(broker: str, container: str) -> float:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="브로커 재시작 복구 시간 벤치마크")
-    parser.add_argument("--broker",    required=True, help="Bootstrap server (host:port)")
+    parser.add_argument("--broker", required=True, help="Bootstrap server (host:port)")
     parser.add_argument("--container", required=True, help="재시작할 컨테이너 이름")
-    parser.add_argument("--label",     required=True, help="출력 파일 레이블 (kafka | redpanda)")
-    parser.add_argument("--runs",      type=int, default=DEFAULT_RUNS, help=f"반복 횟수 (기본: {DEFAULT_RUNS})")
+    parser.add_argument(
+        "--label", required=True, help="출력 파일 레이블 (kafka | redpanda)"
+    )
+    parser.add_argument(
+        "--runs",
+        type=int,
+        default=DEFAULT_RUNS,
+        help=f"반복 횟수 (기본: {DEFAULT_RUNS})",
+    )
     parser.add_argument("--output-dir", default="benchmark/results")
     args = parser.parse_args()
 
@@ -185,7 +192,9 @@ def main() -> None:
             gaps.append(gap)
 
             slo_pass = not (gap != gap) and gap <= 30.0  # NaN 처리 포함
-            writer.writerow([args.label, i, round(gap, 2) if gap == gap else "NaN", slo_pass])
+            writer.writerow(
+                [args.label, i, round(gap, 2) if gap == gap else "NaN", slo_pass]
+            )
             f.flush()
 
             status = "✅" if slo_pass else "❌"
@@ -199,8 +208,10 @@ def main() -> None:
         max_gap = max(valid)
         slo_ok = sum(g <= 30 for g in valid)
         print(f"=== 결과: {args.label} ===")
-        print(f"  avg={avg:.2f}s  max={max_gap:.2f}s  "
-              f"SLO(30s) 통과={slo_ok}/{len(valid)}")
+        print(
+            f"  avg={avg:.2f}s  max={max_gap:.2f}s  "
+            f"SLO(30s) 통과={slo_ok}/{len(valid)}"
+        )
 
     print(f"\n저장: {csv_path}")
 
