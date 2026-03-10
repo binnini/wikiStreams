@@ -1,0 +1,61 @@
+# Kafka vs Redpanda Benchmark Environment
+#
+# 포트 (운영 환경과 충돌 방지):
+#   kafka-bench:    localhost:29092  (mem_limit: 800m, heap: 256m-512m)
+#   redpanda-bench: localhost:29093  (mem_limit: 500m)
+#
+# 사용법:
+#   # Kafka만 기동
+#   docker compose -f benchmark/docker-compose.kafka-bench.yml --profile kafka up -d
+#
+#   # Redpanda만 기동
+#   docker compose -f benchmark/docker-compose.kafka-bench.yml --profile redpanda up -d
+#
+#   # 전체 중지
+#   docker compose -f benchmark/docker-compose.kafka-bench.yml down
+
+services:
+  kafka-bench:
+    image: confluentinc/cp-kafka:8.1.1
+    container_name: kafka-bench
+    environment:
+      # KRaft 모드 (ZooKeeper 불필요)
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka-bench:29093"
+      KAFKA_LISTENERS: "PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,EXTERNAL://0.0.0.0:19092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka-bench:29092,EXTERNAL://localhost:29092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      # 단일 노드 설정
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+      # t3.small 힙 압박 시뮬레이션 — GC 빈도 재현
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx512m"
+      # 고정 Cluster ID (재현성)
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+    ports:
+      - "29092:19092"
+    mem_limit: 800m
+    profiles: ["kafka"]
+
+  redpanda-bench:
+    image: redpandadata/redpanda:latest
+    container_name: redpanda-bench
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19093
+      - --advertise-kafka-addr internal://redpanda-bench:9092,external://localhost:29093
+      - --mode dev-container
+      - --smp 1
+      - --memory 400M
+    ports:
+      - "29093:19093"
+    mem_limit: 500m
+    profiles: ["redpanda"]

@@ -1,0 +1,4 @@
+# Kafka vs Redpanda 벤치마크 의존성
+# pip install -r benchmark/requirements.txt
+
+kafka-python>=2.0.2
