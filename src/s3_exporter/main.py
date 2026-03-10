@@ -132,14 +132,21 @@ def _csv_to_parquet(csv_bytes: bytes) -> bytes:
     )
     table = pcsv.read_csv(io.BytesIO(csv_bytes), convert_options=convert_options)
 
-    # "2026-03-10T14:10:05.000000Z" → timestamp[us, UTC]
+    # timestamp 컬럼을 timestamp[us, UTC]로 정규화
+    # pyarrow 버전에 따라 auto-detect 결과가 string 또는 timestamp로 다름
     idx = table.schema.get_field_index("timestamp")
-    ts_col = pc.strptime(table.column("timestamp"), format="%Y-%m-%dT%H:%M:%S.%fZ", unit="us")
-    ts_col = pc.assume_timezone(ts_col, timezone="UTC")
+    ts_raw = table.column("timestamp")
+    if pa.types.is_timestamp(ts_raw.type):
+        # 이미 timestamp로 파싱됨 → precision + tz만 맞춤
+        ts_col = ts_raw.cast(pa.timestamp("us", tz="UTC"))
+    else:
+        # string으로 읽힌 경우 → 직접 파싱
+        ts_col = pc.strptime(ts_raw, format="%Y-%m-%dT%H:%M:%S.%fZ", unit="us")
+        ts_col = pc.assume_timezone(ts_col, timezone="UTC")
     table = table.set_column(idx, "timestamp", ts_col)
 
     buf = io.BytesIO()
-    pq.write_table(table, buf, compression="snappy", schema=_SCHEMA)
+    pq.write_table(table, buf, compression="snappy")
     return buf.getvalue()
 
 
