@@ -142,9 +142,13 @@ def test_process_batch_mixed_valid_and_invalid(mock_dependencies):
 
 # --- _should_skip() 단위 테스트 ---
 
+
 def test_should_skip_log_type_event():
     """type=log 이벤트는 조용히 버려진다."""
-    assert main._should_skip({"type": "log", "meta": {"domain": "en.wikipedia.org"}}) is True
+    assert (
+        main._should_skip({"type": "log", "meta": {"domain": "en.wikipedia.org"}})
+        is True
+    )
 
 
 def test_should_skip_canary_domain_event():
@@ -154,12 +158,18 @@ def test_should_skip_canary_domain_event():
 
 def test_should_not_skip_normal_edit_event():
     """정상 edit 이벤트는 skip되지 않는다."""
-    assert main._should_skip({"type": "edit", "meta": {"domain": "en.wikipedia.org"}}) is False
+    assert (
+        main._should_skip({"type": "edit", "meta": {"domain": "en.wikipedia.org"}})
+        is False
+    )
 
 
 def test_should_not_skip_new_event():
     """type=new 이벤트는 skip되지 않는다."""
-    assert main._should_skip({"type": "new", "meta": {"domain": "ko.wikipedia.org"}}) is False
+    assert (
+        main._should_skip({"type": "new", "meta": {"domain": "ko.wikipedia.org"}})
+        is False
+    )
 
 
 def test_process_batch_log_events_silently_dropped(mock_dependencies):

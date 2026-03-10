@@ -25,7 +25,9 @@ class WikimediaCollector:
         self.last_processed_time = time.time()
         self.callback = None
         self._sse_received_total = 0  # SLI-R5: SSE 수신 이벤트 누적 카운터
-        self._last_event_id: str | None = None  # Last-Event-ID: 재연결 시 중단 지점부터 재개
+        self._last_event_id: str | None = (
+            None  # Last-Event-ID: 재연결 시 중단 지점부터 재개
+        )
 
     def set_callback(self, callback_func):
         self.callback = callback_func

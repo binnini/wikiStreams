@@ -1,4 +1,3 @@
-import json
 import logging
 import re
 import time
@@ -136,7 +135,9 @@ def _query(sql: str, retries: int = 3, retry_delay: float = 2.0) -> list[dict]:
         except Exception as e:
             last_exc = e
             if attempt < retries - 1:
-                logger.warning("QuestDB query failed (attempt %d/%d): %s", attempt + 1, retries, e)
+                logger.warning(
+                    "QuestDB query failed (attempt %d/%d): %s", attempt + 1, retries, e
+                )
                 time.sleep(retry_delay)
     raise last_exc
 
@@ -376,7 +377,7 @@ def fetch_report_data() -> ReportData:
         data.stats.total_edits = int(rows[0]["value"]) if rows else 0
 
         rows = _query(
-            f"SELECT count(DISTINCT \"user\") AS value FROM wikimedia_events WHERE {time_filter}"
+            f'SELECT count(DISTINCT "user") AS value FROM wikimedia_events WHERE {time_filter}'
         )
         data.stats.active_users = int(rows[0]["value"]) if rows else 0
 

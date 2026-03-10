@@ -61,7 +61,11 @@ def collector():
         pytest.param(
             "by_timeout",
             sse_timeout,
-            [0.0, 0.2, 0.2],  # 0.0: 첫 빈 이벤트 체크, 0.2: 두번째 체크(타임아웃), 0.2: logger.info 내부 LogRecord 생성 시 호출
+            [
+                0.0,
+                0.2,
+                0.2,
+            ],  # 0.0: 첫 빈 이벤트 체크, 0.2: 두번째 체크(타임아웃), 0.2: logger.info 내부 LogRecord 생성 시 호출
             [event_data_timeout],
             None,
             id="by_timeout",

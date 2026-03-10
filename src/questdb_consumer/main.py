@@ -77,7 +77,13 @@ def _tag(v: str) -> str:
 
 def _str(v: str) -> str:
     """ILP string field 이스케이프: 역슬래시·따옴표·개행 처리."""
-    return str(v).replace("\\", "\\\\").replace('"', '\\"').replace("\n", "").replace("\r", "")
+    return (
+        str(v)
+        .replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "")
+        .replace("\r", "")
+    )
 
 
 def event_to_ilp(event: dict) -> str | None:
@@ -119,17 +125,24 @@ def run():
     )
     logging.info(
         "QuestDB Consumer 시작: broker=%s topic=%s questdb=%s:%d",
-        KAFKA_BROKER, KAFKA_TOPIC, QUESTDB_HOST, QUESTDB_ILP_PORT,
+        KAFKA_BROKER,
+        KAFKA_TOPIC,
+        QUESTDB_HOST,
+        QUESTDB_ILP_PORT,
     )
 
     while True:
         sock = None
         try:
-            sock = socket.create_connection((QUESTDB_HOST, QUESTDB_ILP_PORT), timeout=10)
+            sock = socket.create_connection(
+                (QUESTDB_HOST, QUESTDB_ILP_PORT), timeout=10
+            )
             logging.info("QuestDB ILP 연결: %s:%d", QUESTDB_HOST, QUESTDB_ILP_PORT)
 
             while True:
-                records = consumer.poll(timeout_ms=BATCH_TIMEOUT_MS, max_records=BATCH_SIZE)
+                records = consumer.poll(
+                    timeout_ms=BATCH_TIMEOUT_MS, max_records=BATCH_SIZE
+                )
                 batch = []
 
                 for msgs in records.values():
