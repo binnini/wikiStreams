@@ -123,9 +123,9 @@
 
 ## 우선순위 중간
 
-- [ ] **S3 Datalake — 일일 Parquet 백업** *(진행 중)*
+- [x] **S3 Datalake — 일일 Parquet 백업** *(2026-03-11 운영 완료)*
   - **배경**: QuestDB TTL 5d로 5일 이상 지난 데이터 접근 불가. 장기 트렌드 분석 및 장애 복구용 오프호스트 백업 필요.
-  - **포맷 선택**: Parquet(Snappy) — flat 스키마 + 시계열 분석 패턴에 최적. CSV 대비 ~10x 압축.
+  - **포맷 선택**: Parquet(Snappy) — flat 스키마 + 시계열 분석 패턴에 최적. CSV 대비 ~5x 압축.
     - 저장 경로: `s3://{S3_BUCKET}/events/year=YYYY/month=MM/day=DD/events.parquet`
     - 볼륨 추정: CSV ~800 MB/day → Parquet ~80 MB/day → 연간 ~30 GB
     - Reporter 동작 무관 (일일 리포트는 TTL 내 QuestDB 직접 조회)
@@ -135,8 +135,10 @@
   - [x] `src/s3_exporter/main.py` — QuestDB `/exp` CSV → Parquet 변환 → S3 업로드 (데몬/일회성)
   - [x] `src/s3_exporter/Dockerfile`
   - [x] `docker-compose.yml` `s3-exporter` 서비스 추가 (`profiles: [s3]`)
-  - [ ] `.env`에 `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 설정
-  - [ ] S3 버킷 생성 + IAM 정책 (`s3:PutObject`, `s3:HeadObject`, `s3:GetObject`)
+  - [x] `.env`에 `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 설정
+  - [x] S3 버킷 생성 + IAM 정책 (`s3:PutObject`, `s3:HeadObject`, `s3:GetObject`)
+  - [x] 메모리 스파이크 개선: 하루치 일괄 로드 → 시간별 24 청크 + `ParquetWriter` 순차 write
+    - 실측: 2.5시간치 기준 ~100MB → ~50MB, 하루치 추정 ~960MB → ~480MB
 
 
 
