@@ -175,6 +175,22 @@
 
 ## 우선순위 중간
 
+- [ ] **S3 Datalake — 일일 Parquet 백업** *(진행 중)*
+  - **배경**: QuestDB TTL 5d로 5일 이상 지난 데이터 접근 불가. 장기 트렌드 분석 및 장애 복구용 오프호스트 백업 필요.
+  - **포맷 선택**: Parquet(Snappy) — flat 스키마 + 시계열 분석 패턴에 최적. CSV 대비 ~10x 압축.
+    - 저장 경로: `s3://{S3_BUCKET}/events/year=YYYY/month=MM/day=DD/events.parquet`
+    - 볼륨 추정: CSV ~800 MB/day → Parquet ~80 MB/day → 연간 ~30 GB
+    - Reporter 동작 무관 (일일 리포트는 TTL 내 QuestDB 직접 조회)
+  - **접근 방법**: `docker compose --profile s3 up -d s3-exporter` (기본 스택과 분리)
+    - 백필: `docker exec -e EXPORT_DATE=2026-03-01 s3-exporter python main.py --once`
+    - 과거 분석: `duckdb -c "SELECT * FROM read_parquet('s3://bucket/events/**/*.parquet')"`
+  - [x] `src/s3_exporter/main.py` — QuestDB `/exp` CSV → Parquet 변환 → S3 업로드 (데몬/일회성)
+  - [x] `src/s3_exporter/Dockerfile`
+  - [x] `docker-compose.yml` `s3-exporter` 서비스 추가 (`profiles: [s3]`)
+  - [ ] `.env`에 `S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` 설정
+  - [ ] S3 버킷 생성 + IAM 정책 (`s3:PutObject`, `s3:HeadObject`, `s3:GetObject`)
+  - [ ] 첫 실행 후 DuckDB로 쿼리 검증
+
 
 
 - [ ] **QuestDB 메모리 Drift 장기 관찰** *(2026-03-09 관찰 시작)*

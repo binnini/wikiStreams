@@ -136,3 +136,24 @@ services:
       REPORT_STORAGE_DIR: '/app/reports'
     volumes:
       - ./reports:/app/reports
+
+  # S3 Datalake Exporter — 기본 스택과 분리 (profiles: s3)
+  # 활성화: docker compose --profile s3 up -d s3-exporter
+  # 백필:   docker exec -e EXPORT_DATE=2026-03-01 s3-exporter python main.py --once
+  s3-exporter:
+    build: ./src/s3_exporter
+    container_name: s3-exporter
+    depends_on:
+      - questdb
+    restart: always
+    environment:
+      QUESTDB_HOST: questdb
+      QUESTDB_REST_PORT: "9000"
+      S3_BUCKET: "${S3_BUCKET:-}"
+      S3_PREFIX: "${S3_PREFIX:-events}"
+      AWS_REGION: "${AWS_REGION:-ap-northeast-2}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-}"
+      LOG_LEVEL: "INFO"
+    profiles:
+      - s3
