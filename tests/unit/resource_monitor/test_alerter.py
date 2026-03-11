@@ -7,7 +7,8 @@ from resource_monitor.detector import AnomalyResult
 
 
 def _anomaly(
-    container="producer", metric="cpu_pct", z=3.5, value=80.0, ema=50.0, hour=10
+    container="producer", metric="cpu_pct", z=3.5, value=80.0, ema=50.0, hour=10,
+    severity="warning",
 ):
     return AnomalyResult(
         container=container,
@@ -16,6 +17,7 @@ def _anomaly(
         ema=ema,
         z_score=z,
         hour=hour,
+        severity=severity,
     )
 
 
@@ -110,3 +112,56 @@ def test_send_handles_httpx_error(mock_httpx):
     alerter = Alerter("https://slack.example/webhook", cooldown_seconds=3600)
     # 예외가 전파되지 않아야 함
     alerter.send(_anomaly())
+
+
+# ── severity 포맷 ───────────────────────────────────────────────────────────────
+
+def test_critical_severity_header_contains_즉시확인(mock_httpx):
+    alerter = Alerter("https://slack.example/webhook", cooldown_seconds=3600)
+    alerter.send(_anomaly(severity="critical"))
+    payload = mock_httpx.post.call_args.kwargs["json"]
+    header_text = payload["blocks"][0]["text"]["text"]
+    assert "즉시 확인 필요" in header_text
+
+
+def test_warning_severity_header_contains_이상감지(mock_httpx):
+    alerter = Alerter("https://slack.example/webhook", cooldown_seconds=3600)
+    alerter.send(_anomaly(severity="warning"))
+    payload = mock_httpx.post.call_args.kwargs["json"]
+    header_text = payload["blocks"][0]["text"]["text"]
+    assert "이상 감지" in header_text
+
+
+# ── runbook ────────────────────────────────────────────────────────────────────
+
+def test_payload_contains_runbook_section(mock_httpx):
+    alerter = Alerter("https://slack.example/webhook", cooldown_seconds=3600)
+    alerter.send(_anomaly(container="questdb", metric="mem_pct"))
+    payload = mock_httpx.post.call_args.kwargs["json"]
+    # runbook 섹션이 blocks에 존재해야 함
+    block_texts = " ".join(
+        str(b.get("text", "")) for b in payload["blocks"]
+    )
+    assert "점검 명령어" in block_texts
+
+
+def test_questdb_mem_runbook_contains_docker_stats(mock_httpx):
+    alerter = Alerter("https://slack.example/webhook", cooldown_seconds=3600)
+    alerter.send(_anomaly(container="questdb", metric="mem_pct"))
+    payload = mock_httpx.post.call_args.kwargs["json"]
+    runbook_block = next(
+        b for b in payload["blocks"]
+        if isinstance(b.get("text"), dict) and "점검 명령어" in b["text"].get("text", "")
+    )
+    assert "docker stats" in runbook_block["text"]["text"]
+
+
+def test_unknown_container_uses_default_runbook(mock_httpx):
+    alerter = Alerter("https://slack.example/webhook", cooldown_seconds=3600)
+    alerter.send(_anomaly(container="unknown-service", metric="cpu_pct"))
+    payload = mock_httpx.post.call_args.kwargs["json"]
+    runbook_block = next(
+        b for b in payload["blocks"]
+        if isinstance(b.get("text"), dict) and "점검 명령어" in b["text"].get("text", "")
+    )
+    assert "docker stats" in runbook_block["text"]["text"]

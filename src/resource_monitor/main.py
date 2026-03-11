@@ -19,6 +19,13 @@ logger = logging.getLogger(__name__)
 
 _METRICS = ["cpu_pct", "mem_pct", "block_io_mb"]
 
+# 메트릭별 (절댓값 가드, critical 절댓값) 임계값
+_ABS_THRESHOLDS: dict[str, tuple[float, float]] = {
+    "cpu_pct": (settings.abs_threshold_cpu_pct, settings.critical_abs_cpu_pct),
+    "mem_pct": (settings.abs_threshold_mem_pct, settings.critical_abs_mem_pct),
+    "block_io_mb": (settings.abs_threshold_block_io_mb, settings.critical_abs_block_io_mb),
+}
+
 
 def _log_metrics(m: ContainerMetrics, hour: int) -> None:
     logger.info(
@@ -54,22 +61,27 @@ def run() -> None:
             for metric_name in _METRICS:
                 value = getattr(m, metric_name)
                 record = store.update(m.container, metric_name, hour, value)
+                abs_thr, crit_abs_thr = _ABS_THRESHOLDS.get(metric_name, (None, None))
                 anomaly = detect(
                     record,
                     value,
                     threshold=settings.anomaly_threshold,
                     min_samples=settings.min_samples,
+                    abs_threshold=abs_thr,
+                    critical_z_score=settings.critical_z_score,
+                    critical_abs_threshold=crit_abs_thr,
                 )
                 if anomaly:
                     logger.warning(
                         'level=warn msg="AnomalyDetected" container="%s" '
-                        'metric="%s" value=%.4f ema=%.4f z_score=%.2f hour=%d',
+                        'metric="%s" value=%.4f ema=%.4f z_score=%.2f hour=%d severity="%s"',
                         anomaly.container,
                         anomaly.metric,
                         anomaly.current_value,
                         anomaly.ema,
                         anomaly.z_score,
                         anomaly.hour,
+                        anomaly.severity,
                     )
                     alerter.send(anomaly)
 

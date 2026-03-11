@@ -38,11 +38,49 @@ groups:
         execErrState: Error
         for: 2m
         annotations:
-          summary: "WikiStreams 데이터 신선도 SLO 위반"
-          description: "QuestDB 최신 이벤트 lag이 30초를 초과했습니다. Producer 또는 Redpanda→QuestDB 연결 확인 필요."
+          summary: "WikiStreams 데이터 신선도 SLO 위반 (warning)"
+          description: "QuestDB 최신 이벤트 lag이 30초를 초과했습니다. 확인: docker logs producer --tail 50 / docker logs questdb-consumer --tail 30"
         labels:
           sli: SLI-D1
           severity: warning
+          service: wikistreams
+
+      # SLI-D1 Critical: lag > 120초 (파이프라인 실질 중단)
+      - uid: slo-d1-freshness-critical
+        title: "[SLI-D1] 데이터 신선도 lag > 120초 🚨"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: QuestDB
+            model:
+              editorMode: code
+              format: "table"
+              rawQuery: true
+              rawSql: "SELECT datediff('s', latest_ts, now()) AS value FROM (SELECT max(timestamp) AS latest_ts FROM wikimedia_events)"
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator: { params: [120], type: gt }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { params: [], type: last }
+                  type: query
+              datasource: { type: __expr__, uid: __expr__ }
+              expression: A
+              refId: C
+              type: threshold
+        noDataState: NoData
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: "WikiStreams 파이프라인 실질 중단 — 즉시 확인 필요"
+          description: "QuestDB 최신 이벤트 lag이 120초를 초과했습니다. 파이프라인이 사실상 멈춘 상태입니다. 확인: docker ps / docker logs producer --tail 100 / docker logs questdb-consumer --tail 50 / docker compose restart producer"
+        labels:
+          sli: SLI-D1
+          severity: critical
           service: wikistreams
 
       # SLI-A3: 당일 09:00~10:00 KST 내 Reporter 발송 없음
@@ -71,12 +109,12 @@ groups:
               expression: A
               refId: C
               type: threshold
-        noDataState: Alerting
+        noDataState: OK
         execErrState: Error
         for: 0s
         annotations:
           summary: "WikiStreams Reporter 발송 누락"
-          description: "지난 1시간 내 Reporter 발송 완료 로그가 없습니다. 09:00~10:00 KST 시간대에만 의미 있는 알림입니다."
+          description: "지난 1시간 내 Reporter 발송 완료 로그가 없습니다. 09:00~10:00 KST 시간대에만 의미 있는 알림입니다. 확인: docker logs reporter --tail 50"
         labels:
           sli: SLI-A3
           severity: warning
@@ -127,7 +165,7 @@ groups:
         for: 3m
         annotations:
           summary: "WikiStreams DLQ 유입 비율 SLO 위반"
-          description: "최근 5분간 DLQ 유입 비율이 1%를 초과했습니다. 이벤트 유실 또는 스키마 오류 급증 가능성."
+          description: "최근 5분간 DLQ 유입 비율이 1%를 초과했습니다. 확인: docker logs producer --tail 100 | grep DLQ / Wikimedia 스키마 변경 여부 확인"
         labels:
           sli: SLI-R1
           severity: warning
@@ -164,7 +202,7 @@ groups:
         for: 10m
         annotations:
           summary: "WikiStreams 캐시 히트율 SLO 위반"
-          description: "Wikidata 캐시 히트율이 80% 미만으로 지속되고 있습니다. Wikidata API 호출 급증으로 배치 처리 지연 가능성."
+          description: "Wikidata 캐시 히트율이 80% 미만으로 지속되고 있습니다. 확인: docker logs producer --tail 50 | grep 'API 호출' / SQLite 캐시 크기: docker exec producer ls -lh /cache/"
         labels:
           sli: SLI-P7
           severity: warning
@@ -201,7 +239,7 @@ groups:
         for: 5m
         annotations:
           summary: "WikiStreams QuestDB 메모리 용량 경고"
-          description: "QuestDB 컨테이너 메모리 사용률이 80%를 초과했습니다. OOM 위험. QuestDB 메모리 설정 검토 필요."
+          description: "QuestDB 컨테이너 메모리 사용률이 80%를 초과했습니다. OOM 위험. 확인: docker stats questdb --no-stream / docker logs questdb --tail 30 / page cache drift 지속 시 docker compose restart questdb"
         labels:
           sli: SLI-CAP1
           severity: critical
@@ -238,7 +276,7 @@ groups:
         for: 10m
         annotations:
           summary: "WikiStreams Producer CPU 과부하 경고"
-          description: "Producer 컨테이너 CPU 사용률이 70%를 초과하여 지속되고 있습니다. 배치 처리 지연 위험."
+          description: "Producer 컨테이너 CPU 사용률이 70%를 초과하여 지속되고 있습니다. 확인: docker logs producer --tail 50 / docker stats producer --no-stream / Wikidata API 병목 또는 배치 처리 루프 확인"
         labels:
           sli: SLI-CAP2
           severity: warning

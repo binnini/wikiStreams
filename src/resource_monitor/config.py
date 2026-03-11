@@ -8,9 +8,22 @@ class Settings(BaseSettings):
     # Slack Webhook URL (인프라 이상 알림 전용 — Reporter의 SLACK_WEBHOOK_URL과 별도)
     slack_alert_webhook_url: str = ""
 
-    # 이상 감지 z-score 임계값
+    # 이상 감지 z-score 임계값 (warning)
     # 2.5 → 3.0: 정규분포 기준 이상 확률 1.2% → 0.3%로 낮춰 오발령 감소
     anomaly_threshold: float = 3.0
+
+    # critical z-score 임계값 (이 이상이면 severity=critical)
+    critical_z_score: float = 4.0
+
+    # 절댓값 가드 — 이 값 미만이면 z-score가 높아도 알림 안 함 (false positive 방지)
+    abs_threshold_cpu_pct: float = 20.0      # CPU 20% 미만은 무시
+    abs_threshold_mem_pct: float = 70.0      # 메모리 70% 미만은 무시
+    abs_threshold_block_io_mb: float = 50.0  # I/O 50 MB/s 미만은 무시
+
+    # critical 절댓값 임계값 — 이 값 초과 시 z-score 무관하게 severity=critical
+    critical_abs_cpu_pct: float = 50.0
+    critical_abs_mem_pct: float = 85.0
+    critical_abs_block_io_mb: float = 100.0
 
     # 최소 학습 샘플 수 (미만이면 감지 억제)
     # 수집 간격 10초 × 720 = 2시간분 데이터 → 베이스라인 안정화 후 감지 시작
