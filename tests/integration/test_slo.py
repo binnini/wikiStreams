@@ -124,6 +124,12 @@ class TestSLO:
             "FROM wikimedia_events "
             "WHERE timestamp > dateadd('d', -1, now())"
         )
+        # 첫 쿼리 콜드 캐시 스파이크 제거용 워밍업
+        try:
+            _query(sql)
+        except Exception:
+            pass
+
         latencies_ms = []
         n = 10
         for _ in range(n):
@@ -145,7 +151,7 @@ class TestSLO:
         """
         rows = _query(
             "SELECT count(1) AS cnt FROM wikimedia_events "
-            "WHERE timestamp > dateadd('mi', -5, now())"
+            "WHERE timestamp > dateadd('m', -5, now())"
         )
         count_5min = int(rows[0]["cnt"]) if rows else 0
         events_per_min = count_5min / 5

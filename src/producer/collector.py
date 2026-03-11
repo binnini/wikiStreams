@@ -54,7 +54,10 @@ class WikimediaCollector:
                 headers = {"User-Agent": "wikiStreams-project/0.3"}
                 if self._last_event_id:
                     headers["Last-Event-ID"] = self._last_event_id
-                with httpx.Client(timeout=None, headers=headers) as client:
+                with httpx.Client(
+                    timeout=httpx.Timeout(connect=10.0, read=30.0, write=None, pool=None),
+                    headers=headers,
+                ) as client:
                     with connect_sse(client, "GET", WIKIMEDIA_URL) as event_source:
                         logger.info(
                             "✅ Wikimedia SSE 스트림에 성공적으로 연결되었습니다."
