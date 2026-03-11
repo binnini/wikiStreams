@@ -5,10 +5,8 @@ S3 Exporter 단위 테스트.
 """
 
 import io
-import sys
 from datetime import date, datetime, timezone
-from unittest.mock import MagicMock, call, patch
-
+from unittest.mock import MagicMock, patch
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
@@ -67,7 +65,9 @@ def test_s3_exists_returns_true_when_object_found():
 def test_s3_exists_returns_false_on_404():
     """head_object가 404 ClientError를 던지면 False를 반환한다."""
     mock_s3 = MagicMock()
-    error = ClientError({"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject")
+    error = ClientError(
+        {"Error": {"Code": "404", "Message": "Not Found"}}, "HeadObject"
+    )
     mock_s3.head_object.side_effect = error
     with patch.object(exporter_module, "S3_BUCKET", "my-bucket"):
         result = _s3_exists(mock_s3, "events/year=2026/month=03/day=10/events.parquet")
@@ -89,7 +89,9 @@ def test_s3_exists_returns_false_on_nosuchkey():
 def test_s3_exists_reraises_other_client_errors():
     """403 등 다른 ClientError는 그대로 전파한다."""
     mock_s3 = MagicMock()
-    error = ClientError({"Error": {"Code": "403", "Message": "Forbidden"}}, "HeadObject")
+    error = ClientError(
+        {"Error": {"Code": "403", "Message": "Forbidden"}}, "HeadObject"
+    )
     mock_s3.head_object.side_effect = error
     with patch.object(exporter_module, "S3_BUCKET", "my-bucket"):
         with pytest.raises(ClientError):
@@ -105,7 +107,9 @@ def _make_csv_bytes(rows: int = 2) -> bytes:
     row = "enwiki,wikipedia,Test,user1,false,0,false,edit,,\n"
     # timestamp 컬럼 추가
     header = "server_name,wiki_type,title,user,bot,namespace,minor,comment,wikidata_label,wikidata_description,timestamp\n"
-    row = "enwiki,wikipedia,Test,user1,false,0,false,edit,,,2026-03-10T00:30:00.000000Z\n"
+    row = (
+        "enwiki,wikipedia,Test,user1,false,0,false,edit,,,2026-03-10T00:30:00.000000Z\n"
+    )
     return (header + row * rows).encode()
 
 
@@ -229,9 +233,7 @@ def test_export_skips_when_all_hours_empty(mocker):
     mocker.patch.object(exporter_module, "S3_BUCKET", "my-bucket")
     mocker.patch.object(exporter_module, "_make_s3_client", return_value=mock_s3)
     mocker.patch.object(exporter_module, "_s3_exists", return_value=False)
-    mocker.patch.object(
-        exporter_module, "_fetch_hour_as_arrow", return_value=None
-    )
+    mocker.patch.object(exporter_module, "_fetch_hour_as_arrow", return_value=None)
 
     export(date(2026, 3, 10), force=False)
 
