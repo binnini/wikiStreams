@@ -46,7 +46,7 @@ def kafka_service(docker_ip, request):
     try:
         # docker_services 피처를 동적으로 가져옴 (이 시점에 컨테이너 기동 시도)
         docker_services = request.getfixturevalue("docker_services")
-        port = docker_services.port_for("kafka-kraft", 9092)
+        port = docker_services.port_for("redpanda", 9092)
         broker_address = f"{docker_ip}:{port}"
 
         # 서비스가 준비될 때까지 대기
