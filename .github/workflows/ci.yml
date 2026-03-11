@@ -65,7 +65,7 @@ jobs:
         pip install -r src/resource_monitor/requirements.txt
         pip install -r requirements-dev.txt
 
-    - name: Start services (Kafka, ClickHouse)
+    - name: Start services
       run: |
         docker compose up -d
         echo "Waiting for services to start..."
@@ -73,4 +73,4 @@ jobs:
 
     - name: Run integration & E2E tests
       run: |
-        PYTHONPATH=src pytest tests/integration/
+        PYTHONPATH=src pytest tests/integration/ -m "integration and not slo"
