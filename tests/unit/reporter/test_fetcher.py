@@ -990,9 +990,7 @@ class TestFetchReportData:
 
     def test_query_failure_returns_empty_data(self, mocker):
         """QuestDB errors are caught; empty ReportData is returned."""
-        mocker.patch(
-            "reporter.fetcher._query", side_effect=Exception("QuestDB down")
-        )
+        mocker.patch("reporter.fetcher._query", side_effect=Exception("QuestDB down"))
         mocker.patch("reporter.fetcher._fetch_qid", return_value=None)
         mocker.patch("reporter.fetcher._fetch_ko_description", return_value="")
         mocker.patch(

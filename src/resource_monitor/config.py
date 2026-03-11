@@ -16,8 +16,8 @@ class Settings(BaseSettings):
     critical_z_score: float = 4.0
 
     # 절댓값 가드 — 이 값 미만이면 z-score가 높아도 알림 안 함 (false positive 방지)
-    abs_threshold_cpu_pct: float = 20.0      # CPU 20% 미만은 무시
-    abs_threshold_mem_pct: float = 70.0      # 메모리 70% 미만은 무시
+    abs_threshold_cpu_pct: float = 20.0  # CPU 20% 미만은 무시
+    abs_threshold_mem_pct: float = 70.0  # 메모리 70% 미만은 무시
     abs_threshold_block_io_mb: float = 50.0  # I/O 50 MB/s 미만은 무시
 
     # critical 절댓값 임계값 — 이 값 초과 시 z-score 무관하게 severity=critical

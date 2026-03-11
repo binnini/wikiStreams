@@ -1,7 +1,7 @@
 """z-score 기반 이상 감지."""
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from resource_monitor.baseline import BaselineRecord
 
@@ -51,8 +51,7 @@ def detect(
     # severity 판정
     is_critical_z = abs(z_score) > critical_z_score
     is_critical_abs = (
-        critical_abs_threshold is not None
-        and current_value > critical_abs_threshold
+        critical_abs_threshold is not None and current_value > critical_abs_threshold
     )
     severity = "critical" if (is_critical_z or is_critical_abs) else "warning"
 

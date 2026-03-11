@@ -23,7 +23,10 @@ _METRICS = ["cpu_pct", "mem_pct", "block_io_mb"]
 _ABS_THRESHOLDS: dict[str, tuple[float, float]] = {
     "cpu_pct": (settings.abs_threshold_cpu_pct, settings.critical_abs_cpu_pct),
     "mem_pct": (settings.abs_threshold_mem_pct, settings.critical_abs_mem_pct),
-    "block_io_mb": (settings.abs_threshold_block_io_mb, settings.critical_abs_block_io_mb),
+    "block_io_mb": (
+        settings.abs_threshold_block_io_mb,
+        settings.critical_abs_block_io_mb,
+    ),
 }
 
 
@@ -44,9 +47,7 @@ def run() -> None:
     logger.info("Resource Monitor started. Targets: %s", settings.targets)
 
     store = BaselineStore(settings.baseline_db_path, alpha=settings.ema_alpha)
-    alerter = Alerter(
-        settings.slack_alert_webhook_url, settings.alert_cooldown_seconds
-    )
+    alerter = Alerter(settings.slack_alert_webhook_url, settings.alert_cooldown_seconds)
     collector = DockerStatsCollector()
 
     while True:

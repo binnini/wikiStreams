@@ -5,7 +5,11 @@ from producer.config import settings
 
 
 def _insert_with_old_timestamp(
-    db_path: str, q_id: str, seconds_ago: int, is_missing: int = 0, label: str = "Old Label"
+    db_path: str,
+    q_id: str,
+    seconds_ago: int,
+    is_missing: int = 0,
+    label: str = "Old Label",
 ):
     """테스트용: 특정 시간 전에 저장된 것처럼 직접 timestamp를 조작해 삽입"""
     conn = sqlite3.connect(db_path)

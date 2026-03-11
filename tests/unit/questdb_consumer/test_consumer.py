@@ -10,15 +10,15 @@ questdb_consumer 단위 테스트
 
 import sys
 import os
-import pytest
-
-# questdb_consumer는 src/ 하위가 아니므로 직접 경로 추가
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../../../src/questdb_consumer"))
-
 from main import _should_skip, _tag, _str, event_to_ilp
 
+# questdb_consumer는 src/ 하위가 아니므로 직접 경로 추가
+sys.path.insert(
+    0, os.path.join(os.path.dirname(__file__), "../../../src/questdb_consumer")
+)
 
 # ── _should_skip ────────────────────────────────────────────────────────────
+
 
 class TestShouldSkip:
     def test_skip_log_type(self):
@@ -28,7 +28,10 @@ class TestShouldSkip:
         assert _should_skip({"type": "edit", "meta": {"domain": "canary"}}) is True
 
     def test_pass_normal_edit(self):
-        assert _should_skip({"type": "edit", "meta": {"domain": "en.wikipedia.org"}}) is False
+        assert (
+            _should_skip({"type": "edit", "meta": {"domain": "en.wikipedia.org"}})
+            is False
+        )
 
     def test_pass_new_type(self):
         assert _should_skip({"type": "new"}) is False
@@ -41,6 +44,7 @@ class TestShouldSkip:
 
 
 # ── _tag ────────────────────────────────────────────────────────────────────
+
 
 class TestTag:
     def test_escapes_comma(self):
@@ -60,6 +64,7 @@ class TestTag:
 
 
 # ── _str ────────────────────────────────────────────────────────────────────
+
 
 class TestStr:
     def test_escapes_backslash(self):
@@ -82,6 +87,7 @@ class TestStr:
 
 
 # ── event_to_ilp ────────────────────────────────────────────────────────────
+
 
 class TestEventToIlp:
     def _make_event(self, **kwargs):

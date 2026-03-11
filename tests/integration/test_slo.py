@@ -22,7 +22,6 @@ SLO 목표 (docs/SLO.md 기준):
 """
 
 import json
-import statistics
 import subprocess
 import time
 import urllib.parse
@@ -35,6 +34,7 @@ MEM_LIMIT_MIB = 1100  # docker-compose.yml questdb mem_limit
 
 
 # ── 헬퍼 ────────────────────────────────────────────────────────────────────
+
 
 def _query(sql: str, timeout: int = 10) -> list[dict]:
     """QuestDB REST API 쿼리 실행 → rows 반환."""
@@ -59,7 +59,9 @@ def _docker_mem_mib(container: str) -> float | None:
     try:
         result = subprocess.run(
             ["docker", "stats", "--no-stream", "--format", "{{.MemUsage}}", container],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0 or not result.stdout.strip():
             return None
@@ -78,7 +80,9 @@ def _docker_cpu_pct(container: str) -> float | None:
     try:
         result = subprocess.run(
             ["docker", "stats", "--no-stream", "--format", "{{.CPUPerc}}", container],
-            capture_output=True, text=True, timeout=10,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         if result.returncode != 0 or not result.stdout.strip():
             return None
@@ -88,6 +92,7 @@ def _docker_cpu_pct(container: str) -> float | None:
 
 
 # ── SLO 테스트 ───────────────────────────────────────────────────────────────
+
 
 @pytest.mark.slo
 @pytest.mark.integration
@@ -166,15 +171,14 @@ class TestSLO:
         SLO-D1: 데이터 신선도 lag ≤ 30s
         QuestDB 최신 이벤트 타임스탬프와 현재 시각의 차이를 측정합니다.
         """
-        rows = _query(
-            "SELECT max(timestamp) AS latest FROM wikimedia_events"
-        )
+        rows = _query("SELECT max(timestamp) AS latest FROM wikimedia_events")
         if not rows or rows[0]["latest"] is None:
             pytest.skip("wikimedia_events 테이블에 데이터 없음")
 
         latest_str = rows[0]["latest"]
         # QuestDB timestamp 형식: "2026-03-10T12:34:56.000000Z"
         from datetime import datetime, timezone
+
         latest_dt = datetime.fromisoformat(
             latest_str.replace("Z", "+00:00").replace("T", " ")[:26] + "+00:00"
         )
@@ -239,6 +243,4 @@ class TestSLO:
         if cpu_pct is None:
             pytest.skip("docker stats 조회 실패 (Docker 미실행 또는 컨테이너 없음)")
 
-        assert cpu_pct <= 70.0, (
-            f"SLO-CAP2 위반: Producer CPU {cpu_pct:.1f}% > 70%"
-        )
+        assert cpu_pct <= 70.0, f"SLO-CAP2 위반: Producer CPU {cpu_pct:.1f}% > 70%"

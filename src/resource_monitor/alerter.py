@@ -124,7 +124,7 @@ class Alerter:
         direction = "급증" if a.z_score > 0 else "급감"
 
         is_critical = a.severity == "critical"
-        header_emoji = "🚨" if is_critical else "⚠️"
+        # header_emoji = "🚨" if is_critical else "⚠️"
         header_text = (
             f"🚨 리소스 위험 — {a.container} 즉시 확인 필요"
             if is_critical
@@ -151,8 +151,14 @@ class Alerter:
                         {"type": "mrkdwn", "text": f"*컨테이너*\n{a.container}"},
                         {"type": "mrkdwn", "text": f"*메트릭*\n{label}"},
                         {"type": "mrkdwn", "text": f"*방향*\n{direction}"},
-                        {"type": "mrkdwn", "text": f"*현재값*\n{a.current_value:.2f}{unit}"},
-                        {"type": "mrkdwn", "text": f"*시간대 평균 ({a.hour:02d}시)*\n{a.ema:.2f}{unit}"},
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*현재값*\n{a.current_value:.2f}{unit}",
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*시간대 평균 ({a.hour:02d}시)*\n{a.ema:.2f}{unit}",
+                        },
                         {"type": "mrkdwn", "text": f"*z-score*\n{a.z_score:.2f}"},
                     ],
                 },
