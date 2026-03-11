@@ -10,12 +10,13 @@ questdb_consumer 단위 테스트
 
 import sys
 import os
-from main import _should_skip, _tag, _str, event_to_ilp
 
 # questdb_consumer는 src/ 하위가 아니므로 직접 경로 추가
 sys.path.insert(
     0, os.path.join(os.path.dirname(__file__), "../../../src/questdb_consumer")
 )
+
+from main import _should_skip, _tag, _str, event_to_ilp
 
 # ── _should_skip ────────────────────────────────────────────────────────────
 
