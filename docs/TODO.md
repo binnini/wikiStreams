@@ -140,18 +140,15 @@
   - [x] 메모리 스파이크 개선: 하루치 일괄 로드 → 시간별 24 청크 + `ParquetWriter` 순차 write
     - 실측: 2.5시간치 기준 ~100MB → ~50MB, 하루치 추정 ~960MB → ~480MB
 
-
-
-- [ ] **QuestDB 메모리 Drift 장기 관찰** *(2026-03-09 관찰 시작)*
-  - **배경**: 24h 관측에서 RSS가 ~387 → ~498 MiB (+34 MiB/h)로 선형 증가. OS page cache 채움 현상(leak 아님).
-  - **대응 완료**: `mem_limit: 1100m` + TTL 5d 적용. cgroup 압력으로 page eviction 강제, working set ~5일치로 제한.
-  - **관찰 기준**: `mem_limit` 적용 후 RSS가 1,100 MiB 이하에서 안정되는지 수일간 확인.
-
 - [ ] **AsyncIO 리팩토링**
   - 현재 동기식(Blocking) I/O 구조: Wikidata API 호출이 배치 처리를 블로킹
-  - `asyncio` + `httpx` (이미 사용 중) + `aiokafka`로 전환
-  - 처리량(Throughput) 및 10초 타임아웃 의존도 개선 기대
-
+  - **검토 기준** (일주일 운영 관찰 후 결정): batch_processing_seconds p95 ≥ 1.5s / 캐시 히트율 ≤ 70% / SLO-D2 보강률 80% 미달 지속
+  - **단계별 설계**:
+    - Phase 1 — enricher만 async: Wikidata API 청크를 `asyncio.gather`로 동시 호출. 나머지 구조 유지. 가장 효과적이고 리스크 낮음.
+    - Phase 2 — collector + enricher async: `asyncio.Queue` 기반 배치 전달, SQLite는 `run_in_executor`로 thread pool 유지 (aiosqlite 불필요).
+    - Phase 3 — 전체 async: `aiokafka` + `aiosqlite` 도입, 완전한 single event loop.
+  - **현재 규모(18 events/sec, 캐시 히트 93%)에서는 Phase 1만으로도 충분**. Phase 2 이상은 100 events/sec 이상이거나 캐시 히트율 70% 이하일 때 검토.
+  - **비용**: 단위 테스트 44개 동기 mock → `pytest-asyncio` 전환 필요. Kafka는 confluent-kafka `run_in_executor` 래핑으로 aiokafka 교체 없이 가능.
 
 
 ## 우선순위 낮음
