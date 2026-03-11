@@ -27,6 +27,7 @@ jobs:
         pip install -r src/producer/requirements.txt
         pip install -r src/reporter/requirements.txt
         pip install -r src/resource_monitor/requirements.txt
+        pip install -r src/s3_exporter/requirements.txt
         pip install -r requirements-dev.txt
 
     - name: Lint with flake8
