@@ -1353,3 +1353,36 @@
   3. `tests/integration/test_slo.py`: P3 측정 전 워밍업 쿼리 1회 추가로 콜드 캐시 스파이크 제거.
 
 - **결과**: D2(보강률)는 업스트림 한계로 미해결. SLO 목표 하향 조정(80% → 70%) 검토 예정.
+
+### 38. SLO-D2 레이블 보강률 개선 — 빈 레이블 캐시 TTL 분리
+
+- **배경**: EC2 운영 환경에서 SLO-D2(Wikidata 레이블 보강률) 69.1% < 80% 위반 지속. 원인 조사 진행.
+
+- **원인 분석**:
+  - QuestDB 직접 쿼리로 빈 레이블 분포 확인:
+    - `wikidata_label IS NULL`: **0건** — enricher는 모든 Q-ID를 처리 중
+    - `wikidata_label = ''`: **38,251건 (30.9%)** — 핵심 문제
+  - 빈 레이블 상위 Q-ID(Q138641187, Q59121867 등)를 Wikidata API로 직접 확인하니 `en` 레이블이 실제로 존재함 (예: "Omai", "HD 186302")
+  - **근본 원인: stale cache 문제**
+    - 해당 엔티티들이 처음 수집될 당시 Wikidata에 레이블이 없었음 → `label = ''`, `is_missing = 0`으로 캐시 저장
+    - `is_missing = 0` 엔티티에는 30일 TTL 적용 → 이후 레이블이 추가되어도 30일간 재조회하지 않음
+    - 결과: QuestDB에 계속 `''` 저장
+
+- **캐시 TTL 구조 (변경 전/후)**:
+
+  | TTL 종류 | 대상 | 변경 전 | 변경 후 |
+  |---|---|---|---|
+  | QuestDB 데이터 TTL | `wikimedia_events` 테이블 행 | 5일 | 5일 (유지) |
+  | Wikidata 정상 캐시 TTL | `is_missing=0`, `label != ''` | 30일 | 30일 (유지) |
+  | Wikidata missing 캐시 TTL | `is_missing=1` (삭제된 Q-ID) | 3시간 (주석만 "24시간"으로 오기) | 3시간 (주석 수정) |
+  | **(신규) 빈 레이블 캐시 TTL** | `is_missing=0`, `label = ''` | 30일 (정상 TTL에 포함) | **3시간** |
+
+- **변경 내용**:
+  - `src/producer/config.py`: `cache_empty_label_ttl_seconds: int = 10800` 추가, missing TTL 주석 오류("24시간" → "3시간") 수정
+  - `src/producer/cache.py`: TTL 조건을 2-way → 3-way로 분리
+    - `is_missing=0 AND label != ''` → 30일
+    - `is_missing=0 AND label = ''` → 3시간 (재조회 트리거)
+    - `is_missing=1` → 3시간
+  - `tests/unit/producer/test_cache.py`: 빈 레이블 TTL 케이스 테스트 2개 추가 (`test_empty_label_entry_expires_with_short_ttl`, `test_empty_label_entry_returned_within_short_ttl`)
+
+- **결과**: 단위 테스트 13개 전부 통과. EC2 배포 후 기존 빈 레이블 캐시가 3시간 내 만료되어 Wikidata 재조회 → SLO-D2 개선 기대.

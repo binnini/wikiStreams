@@ -5,14 +5,14 @@ from producer.config import settings
 
 
 def _insert_with_old_timestamp(
-    db_path: str, q_id: str, seconds_ago: int, is_missing: int = 0
+    db_path: str, q_id: str, seconds_ago: int, is_missing: int = 0, label: str = "Old Label"
 ):
     """테스트용: 특정 시간 전에 저장된 것처럼 직접 timestamp를 조작해 삽입"""
     conn = sqlite3.connect(db_path)
     conn.execute(
         "INSERT OR REPLACE INTO wikidata_cache (q_id, label, description, timestamp, is_missing) "
         "VALUES (?, ?, ?, datetime('now', ? || ' seconds'), ?)",
-        (q_id, "Old Label", "Old Desc", f"-{seconds_ago}", is_missing),
+        (q_id, label, "Old Desc", f"-{seconds_ago}", is_missing),
     )
     conn.commit()
     conn.close()
@@ -175,6 +175,35 @@ def test_expired_count_logged(temp_db, monkeypatch, caplog):
 
     # Assert: 로그에 TTL 만료 카운트 포함
     assert any("TTL 만료: 1개" in r.message for r in caplog.records)
+
+
+def test_empty_label_entry_expires_with_short_ttl(temp_db, monkeypatch):
+    # Arrange: 정상 TTL=3600초, 빈 레이블 TTL=30초, 31초 전에 빈 레이블(is_missing=0)로 저장
+    monkeypatch.setattr(settings, "cache_ttl_seconds", 3600)
+    monkeypatch.setattr(settings, "cache_empty_label_ttl_seconds", 30)
+    _insert_with_old_timestamp(
+        settings.database_path, "Q_empty", seconds_ago=31, is_missing=0, label=""
+    )
+
+    # Act
+    result = cache.get_qids_from_cache(["Q_empty"])
+
+    # Assert: 빈 레이블 TTL 만료 → 캐시 미스 (재조회 트리거)
+    assert result == {}
+
+
+def test_empty_label_entry_returned_within_short_ttl(temp_db, monkeypatch):
+    # Arrange: 빈 레이블 TTL=3600초, 방금 저장
+    monkeypatch.setattr(settings, "cache_empty_label_ttl_seconds", 3600)
+    cache.save_qids_to_cache(
+        {"Q_empty": {"label": "", "description": "", "is_missing": False}}
+    )
+
+    # Act
+    result = cache.get_qids_from_cache(["Q_empty"])
+
+    # Assert: TTL 내 → 캐시 히트
+    assert "Q_empty" in result
 
 
 def test_normal_entry_survives_past_missing_ttl(temp_db, monkeypatch):

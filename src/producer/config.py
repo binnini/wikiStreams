@@ -10,8 +10,9 @@ class Settings(BaseSettings):
     # Cache Settings
     # 기본값은 기존과 동일하게 설정하되, 테스트나 로컬 개발 시 변경 가능하도록 함
     database_path: str = "/cache/wikidata_cache.db"
-    cache_ttl_seconds: int = 2592000  # 정상 엔티티: 30일
-    cache_missing_ttl_seconds: int = 10800  # "missing" 엔티티: 24시간
+    cache_ttl_seconds: int = 2592000  # 정상 엔티티 (레이블 있음): 30일
+    cache_missing_ttl_seconds: int = 10800  # "missing" 엔티티: 3시간
+    cache_empty_label_ttl_seconds: int = 10800  # 정상 엔티티 (레이블 없음): 3시간
 
     # Collector Settings
     batch_size: int = 500

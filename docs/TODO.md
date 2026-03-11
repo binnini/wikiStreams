@@ -153,12 +153,6 @@
   - 처리량(Throughput) 및 10초 타임아웃 의존도 개선 기대
 
 
-- [ ] **SQLite 캐시를 공유 캐시로 교체**
-  - 현재 SQLite는 단일 프로세스에서만 유효 (Producer scale-out 불가)
-  - 2단계(Kafka → Redpanda)에서 Redis를 도입하지 않으므로, scale-out이 필요해지는 시점에 재검토
-  - 대안: Redpanda 전환 완료 후 Redis를 캐시 전용으로 별도 추가하거나, QuestDB 전환 시 SQLite 캐시 유지 (Producer 전용이므로 영향 없음)
-
-
 
 ## 우선순위 낮음
 
@@ -198,6 +192,11 @@
 - [x] **CI 파이프라인 이원화** *(2026-03-01 완료)*
   - `unit-tests` job: PR + main push — Lint, Format, Unit Tests (Docker 불필요, 빠름)
   - `integration-tests` job: main push 전용 — `needs: unit-tests` + `if: github.event_name == 'push'` 조건으로 unit 통과 후에만 실행, Docker Compose 기동 후 통합/E2E 테스트
+
+- [ ] **SQLite 캐시를 공유 캐시로 교체**
+  - 현재 SQLite는 단일 프로세스에서만 유효 (Producer scale-out 불가)
+  - 2단계(Kafka → Redpanda)에서 Redis를 도입하지 않으므로, scale-out이 필요해지는 시점에 재검토
+  - 대안: Redpanda 전환 완료 후 Redis를 캐시 전용으로 별도 추가하거나, QuestDB 전환 시 SQLite 캐시 유지 (Producer 전용이므로 영향 없음)
 
 - [ ] **확장성 검증 리포트 작성**
   - `k6` 또는 `Locust`로 초당 수천 건의 가상 이벤트를 Producer에 주입

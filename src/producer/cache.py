@@ -88,8 +88,11 @@ def get_qids_from_cache(q_ids: list) -> dict:
         placeholders = ", ".join("?" for _ in q_ids)
         ttl = settings.cache_ttl_seconds
         missing_ttl = settings.cache_missing_ttl_seconds
+        empty_label_ttl = settings.cache_empty_label_ttl_seconds
         ttl_condition = (
-            f"(is_missing = 0 AND timestamp > datetime('now', '-{ttl} seconds')) "
+            f"(is_missing = 0 AND label != '' AND timestamp > datetime('now', '-{ttl} seconds')) "
+            f"OR "
+            f"(is_missing = 0 AND (label IS NULL OR label = '') AND timestamp > datetime('now', '-{empty_label_ttl} seconds')) "
             f"OR "
             f"(is_missing = 1 AND timestamp > datetime('now', '-{missing_ttl} seconds'))"
         )
