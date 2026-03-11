@@ -1,115 +1,183 @@
-# WikiStreams 프로젝트 트러블슈팅 및 개선 기록
+# WikiStreams 트러블슈팅 기록
 
-이 문서는 `wikiStreams` 프로젝트의 데이터 분석 스크립트를 개발하면서 마주친 문제점들과 이를 해결하기 위해 적용한 방안들을 기록한 것입니다.
-
-## 1. 분석 스크립트의 정확도 개선
-
-초기 분석 스크립트(`analyze_trends.py`)는단순히 편집 횟수만을 집계하여 실제 의미있는 트렌드를 파악하기 어려웠습니다. 결과가 시스템 활동이나 분류(Category) 편집에 의해 과도하게 부풀려지는 문제가 있었습니다.
-
-### 문제점: 분석 결과의 노이즈 (Noise)
-
-- **원인 1: 분류(Categorize) 활동 집계:** 문서에 카테고리를 추가/삭제하는 `type = 'categorize'` 활동이 편집 횟수에 포함되어, 실제 콘텐츠 변경이 아닌 분류 정리 작업이 트렌드 상위를 차지했습니다.
-- **원인 2: 불필요한 네임스페이스(Namespace) 포함:** '사용자 토론', '미디어위키' 등 일반적인 콘텐츠 트렌드와 무관한 네임스페이스의 편집까지 모두 집계되었습니다.
-- **원인 3: 사소한 편집(Minor Edits) 포함:** 오타 수정 등 `minor = TRUE`로 기록되는 사소한 편집까지 모두 집계에 포함되었습니다.
-
-### 해결 방안: Druid SQL 쿼리에 필터 조건 추가
-
-위 문제들을 해결하기 위해 모든 분석 쿼리의 `WHERE` 절에 다음과 같은 필터 조건을 추가하여 집계의 정확도를 높였습니다.
-
-1.  **콘텐츠 편집 유형 필터링:** `AND "type" IN ('edit', 'new')`
-    - 실제 문서의 내용이 생성되거나 수정된 활동에만 집중합니다.
-2.  **핵심 네임스페이스 필터링:** `AND "namespace" IN (0, 4, 6, 14)`
-    - 일반 문서(0), 프로젝트(4), 파일(6), 분류(14) 네임스페이스에만 집중합니다.
-3.  **사소한 편집 제외 필터링:** `AND "minor" = FALSE`
-    - 의미있는 편집 활동만을 집계 대상으로 삼습니다.
+> 운영 중 마주친 문제와 해결 방법을 기록합니다.
+> 아키텍처 의사결정 과정의 상세 배경은 [DEV_LOG.md](DEV_LOG.md)를 참조하세요.
 
 ---
 
-## 2. Q-ID의 가독성 문제 해결
+## 1. Wikidata Q-ID 보강 아키텍처 결정
 
-노이즈를 제거한 후, 결과에 `Q`로 시작하는 위키데이터(Wikidata) 항목들이 다수 나타났습니다. 이 ID만으로는 어떤 항목에 대한 트렌드인지 파악하기 어려웠습니다.
+### 배경
 
-### 문제점: Q-ID의 직관성 부족
+분석 결과에 `Q24000605` 같은 Wikidata Q-ID가 다수 등장했지만, 실시간 파이프라인에서 매번 API를 호출하면 레이트 리밋과 처리 지연 문제가 있었습니다.
 
-- **원인:** 위키데이터 항목은 `Q24000605`와 같은 고유 ID로 식별됩니다. 이 ID는 기계적으로는 명확하지만 사람이 이해하기는 어렵습니다.
+(실측: 30분간 약 1,000개의 고유 Q-ID 발생)
 
-### 해결 방안: 도메인 정보 추가 및 Wikidata API 연동
+### 대안 비교
 
-#### 1단계: 출처 도메인 확인
+| 방안 | 장점 | 단점 | 결정 |
+|---|---|---|---|
+| A. PostgreSQL 캐시 | 인프라 재활용 | 네트워크 오버헤드, DB 부하 공유 | 차선 |
+| B. Druid Lookups | 아키텍처 우수 | 대용량 덤프 파일 필수, 온디맨드 불가 | 기각 |
+| **C. Producer-Side SQLite 캐시** | 단순, 빠름, 독립성, 영속성 | 다중 컨슈머 환경 부적합 | **채택** |
 
-- **시도:** `"meta.domain"` 컬럼을 쿼리에 추가했으나 `Column not found` 오류 발생.
-- **해결:** 사용자 피드백을 통해 정확한 컬럼 이름이 `"server_name"`임을 확인하고 쿼리를 수정했습니다. 이를 통해 Q-ID가 `www.wikidata.org`에서 발생했음을 명확히 할 수 있었습니다.
+### 결론
 
-#### 2단계: Q-ID에 이름(Label)과 설명(Description) 정보 통합
+단일 Producer 구조에서 SQLite 로컬 캐시가 가장 실용적입니다. 캐시 히트 시 API 호출 없이 즉시 응답, 미스 시 Wikidata API 50개 청크 일괄 조회 후 캐시 저장.
 
-- **초기 해결:** `get_wikidata_label.py`라는 별도 스크립트를 작성하여, Q-ID를 입력하면 위키데이터 API를 호출해 관련 정보를 조회하도록 했습니다.
-- **최종 해결:** `detect_surge.py` 스크립트에 API 조회 로직을 **통합**했습니다. Druid에서 트렌드 분석 후, 결과에 포함된 Q-ID들을 모아 **한 번의 API 호출**로 관련 정보를 가져온 뒤, 원본 데이터와 합쳐서 최종 결과를 출력하도록 개선했습니다. 이를 통해 분석과 해석이 하나의 스크립트에서 완결되도록 워크플로우를 최적화했습니다.
+TTL 구조:
+- 정상 엔티티 (레이블 있음): 30일
+- 빈 레이블 엔티티 (레이블 없음): 3시간 ← 스테일 캐시 방지
+- missing 엔티티: 3시간
 
 ---
 
-## 3. 실시간 파이프라인을 위한 Q-ID 보강 아키텍처 결정
+## 2. QuestDB orphan 컨테이너 포트 충돌
 
-분석 스크립트가 아닌 실시간 데이터 파이프라인에 Q-ID 보강(Enrichment) 기능을 통합하는 방안을 논의하며, 여러 아키텍처의 장단점을 비교하고 최종 방안을 결정했습니다.
+### 증상
 
-### 문제점: 실시간 API 호출의 한계
+ClickHouse → QuestDB 전환 시 `questdb` 컨테이너가 네트워크에 연결되지 않고, Grafana에서 데이터소스 연결 실패.
 
-- **원인 1 (지연 시간):** 외부 API를 호출하는 데 따르는 네트워크 지연은 실시간 데이터 처리의 병목이 될 수 있습니다.
-- **원인 2 (호출량 제한):** 실시간으로 수많은 요청을 보내면 위키데이터 API 서버의 호출량 제한(Rate Limit)에 걸려 서비스가 차단될 위험이 있습니다. (`30분간 약 1000개의 고유 Q-ID 발생 확인`)
-- **원인 3 (외부 의존성):** 위키데이터 API의 상태에 따라 우리 파이프라인 전체의 안정성이 좌우됩니다.
+### 원인
 
-### 대안 비교 및 최종 결정
+`clickhouse` 컨테이너가 포트 9000을 점유한 상태로 남아있어(`docker ps -a` 확인) QuestDB 기동 시 포트 충돌.
 
-다양한 대안을 비교한 결과, 이 프로젝트의 요구사항(단일 컨슈머, 경량 로직, 스토리지 제약)에 가장 적합한 방식을 선택했습니다.
+### 해결
 
-| 구분 | 방안 | 장점 | 단점 | 평가 |
-| :--- | :--- | :--- | :--- | :--- |
-| **A** | **PostgreSQL 캐시** | 인프라 재활용 | 네트워크 오버헤드, Druid DB에 부하 공유 | 차선책. 가능하지만 성능, 안정성 우려. |
-| **B** | **Druid Lookups** | 아키텍처 우수, 유연성, 스토리지 효율 | **대용량 덤프 파일 처리 필수**, 온디맨드 방식 불가 | 기능적으로 강력하나, 초기 구축 복잡성이 높음. |
-| **C**| **Producer-Side 온디맨드 캐싱 (SQLite)** | **덤프 불필요, 단순함, 빠름, 독립성, 영속성** | 다중 컨슈머 환경에서는 부적합 | **최종 선택.** 단일 컨슈머 환경의 제약사항에 완벽히 부합하는 가장 실용적이고 균형잡힌 방식. |
+```bash
+docker compose down --remove-orphans
+docker compose up -d
+```
 
-### 최종 아키텍처: SQLite를 사용한 Producer-Side 온디맨드 캐싱
+`--remove-orphans`로 compose 파일에서 제거된 orphan 컨테이너를 함께 정리.
 
-- **구현 방식:**
-    1.  데이터 수집기(`producer/main.py`)에 **SQLite**를 로컬 캐시 데이터베이스로 연동합니다.
-    2.  Wikimedia로부터 Q-ID가 포함된 데이터를 받으면, 먼저 로컬 SQLite DB에 해당 정보가 있는지 조회합니다.
-    3.  **Cache Hit (정보 있음):** API 호출 없이 DB에서 즉시 정보를 가져와 데이터에 추가(보강)합니다.
-    4.  **Cache Miss (정보 없음):** 그 때만 위키데이터 API를 호출하여 정보를 가져온 뒤, **그 결과를 SQLite DB에 저장**하고 데이터를 보강합니다.
-- **기대 효과:**
-    - 대용량 덤프 파일이나 별도의 서버 없이 **최소한의 자원**으로 Q-ID 보강 기능을 구현합니다.
-    - API 호출 횟수를 극적으로 줄여 **성능과 안정성**을 모두 확보합니다.
-    - 데이터 수집 로직과 통합되어 파이프라인이 단순하게 유지됩니다.
+---
 
-## 1. Apache Superset 통합 관련
+## 3. SLI-A2 ClickHouse 성공률 항상 ~50% 고정
 
-### 1.1. Python 모듈 누락 (`ModuleNotFoundError: No module named 'psycopg2'`)
+### 증상
 
-*   **증상**: Superset 컨테이너 실행 중 로그에 `psycopg2` 모듈을 찾을 수 없다는 에러가 발생하며 서버가 시작되지 않음.
-*   **원인**: 
-    *   Apache Superset 공식 이미지는 `app` 사용자와 가상환경(`/.venv`)을 사용함.
-    *   `Dockerfile`에서 `root` 권한으로 `pip install`을 실행하면 시스템 전역 경로(`/usr/local/lib/...`)에 설치됨.
-    *   Superset 실행 시 가상환경만 참조하고 시스템 경로는 참조하지 않아 모듈을 찾지 못함.
-*   **해결**: `Dockerfile`에서 `PYTHONPATH` 환경변수를 설정하여 시스템 라이브러리 경로를 명시적으로 추가함.
-    ```dockerfile
-    ENV PYTHONPATH="${PYTHONPATH}:/usr/local/lib/python3.10/site-packages"
-    ```
+Grafana SLO 대시보드에서 ClickHouse 쿼리 성공률이 항상 50%대로 표시됨. 실제 오류는 없는 상태.
 
-### 1.2. 메타데이터 DB 연결 실패 (`FATAL: database "superset" does not exist`)
+### 원인
 
-*   **증상**: Superset 실행 시 Postgres에 연결할 수 없다는 `OperationalError` 발생.
-*   **원인**:
-    *   `docker-compose.yml`에서 `postgres` 컨테이너에 초기화 스크립트(`init_postgres.sql`)를 마운트했으나, Postgres 이미지는 **데이터 디렉토리가 비어있을 때만** 초기화 스크립트를 실행함.
-    *   이미 Druid용 데이터가 생성된 상태여서 스크립트가 무시됨.
-*   **해결**: 실행 중인 Postgres 컨테이너에 접속하여 수동으로 DB 생성.
-    ```bash
-    docker exec -u postgres postgres psql -U druid -d druid -c "CREATE DATABASE superset;"
-    ```
+`system.query_log`에 모든 쿼리에 대해 `QueryStart`와 `QueryFinish` 두 개의 행이 기록됨. 분모에 `QueryStart`가 포함되어 분자(성공)/분모 비율이 ~50%로 고정됨.
 
-### 1.3. 프론트엔드 로딩 실패 (검은 화면, `Uncaught TypeError: ... reading 'flag'`)
+### 해결
 
-*   **증상**: Superset 웹 UI 접속 시 로그인 화면이 뜨지 않고 검은 화면만 보임. 개발자 도구 콘솔에 `flag` 속성을 읽을 수 없다는 에러 발생.
-*   **원인**:
-    *   `superset_config.py`에서 언어를 한국어(`ko`)로 설정했으나, 프론트엔드 에셋(국기 아이콘 등) 로딩에 실패함.
-    *   설정을 영어(`en`)로 변경했음에도 브라우저 캐시/쿠키에 한국어 설정이 남아있어 계속 오류 발생.
-*   **해결**:
-    *   `superset_config.py`에서 `BABEL_DEFAULT_LOCALE = "en"`으로 변경.
-    *   브라우저 **시크릿 모드(Incognito)**로 접속하거나 캐시/쿠키 삭제 후 재접속.
+```sql
+-- 변경 전
+SELECT countIf(type = 'QueryFinish') / count() FROM system.query_log
+
+-- 변경 후
+SELECT countIf(type = 'QueryFinish') / count()
+FROM system.query_log
+WHERE type NOT IN ('QueryStart')
+```
+
+실제 수치: 99.92%
+
+---
+
+## 4. macOS에서 Promtail 로그 수집 불가
+
+### 증상
+
+Mac Mini(Apple Silicon)에서 Promtail이 `/var/lib/docker/containers` 마운트 실패. 컨테이너 로그 수집 안 됨.
+
+### 원인
+
+macOS Docker Desktop은 컨테이너를 내부 Linux VM에서 실행. 호스트에서 `/var/lib/docker/containers` 경로에 직접 접근 불가.
+
+### 해결
+
+Promtail → **Grafana Alloy** 교체. `loki.source.docker` 컴포넌트가 Docker socket API(`/var/run/docker.sock`)를 직접 사용하여 로그 수트리밍.
+
+```hcl
+# monitoring/alloy-config.alloy
+loki.source.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+  ...
+}
+```
+
+---
+
+## 5. Redpanda 서비스명 변경으로 인한 통합 테스트 실패
+
+### 증상
+
+```
+FAILED tests/integration/test_producer_kafka_integration.py
+```
+
+### 원인
+
+`docker-compose.yml`에서 `kafka-kraft` → `redpanda`로 서비스명이 변경되었으나, 통합 테스트의 fallback 경로에서 `port_for("kafka-kraft", 9092)`를 참조.
+
+### 해결
+
+```python
+# 변경 전
+port = docker_services.port_for("kafka-kraft", 9092)
+
+# 변경 후
+port = docker_services.port_for("redpanda", 9092)
+```
+
+---
+
+## 6. S3 Exporter 초기 구현의 메모리 스파이크
+
+### 증상
+
+하루치 데이터(~100만 건)를 일괄 로드 시 메모리 사용량이 ~960 MB까지 급증.
+
+### 원인
+
+QuestDB `/exp` API에서 하루 전체 데이터를 한 번에 CSV로 다운로드 후 Arrow Table로 변환.
+
+### 해결
+
+시간별 24청크로 분할 처리 + `ParquetWriter` 순차 write로 변경.
+
+```python
+for hour in range(24):
+    table = _fetch_hour_as_arrow(target, hour)  # 1시간치씩
+    if writer is None:
+        writer = pq.ParquetWriter(buf, table.schema, compression="snappy")
+    writer.write_table(table)
+    del table  # 즉시 메모리 해제
+```
+
+실측: 2.5시간치 기준 ~100 MB → ~50 MB (약 50% 절감).
+
+---
+
+## 7. QuestDB mmap RSS 선형 증가
+
+### 증상
+
+QuestDB 컨테이너 RSS가 24시간 관측 시 +34 MiB/h 선형 증가.
+
+### 원인
+
+QuestDB는 컬럼 파일을 mmap으로 읽어 OS page cache에 완전 위임. ClickHouse처럼 명시적 LRU 캐시 예산 설정이 없어, RAM이 넉넉한 환경에서는 RSS가 working set에 비례해 증가.
+
+### 해결
+
+두 가지 제어 수단 병행:
+1. `mem_limit: 1100m` — cgroup 압력으로 강제 page eviction
+2. `PARTITION BY DAY TTL 5d` — working set 상한 제한 (최대 5일치 컬럼 파일)
+
+```yaml
+# docker-compose.yml
+questdb:
+  mem_limit: 1100m
+```
+
+```sql
+-- QuestDB 테이블 정의
+wikimedia_events (...)
+PARTITION BY DAY TTL 5d;
+```

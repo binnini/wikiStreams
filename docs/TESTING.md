@@ -1,60 +1,126 @@
-# 테스트 구조 (`test.md`)
+# WikiStreams 테스트 가이드
 
-이 문서는 `wikiStreams` 프로젝트의 테스트 구조와 실행 방법에 대해 설명합니다.
+> 현재 단위 테스트: **276개** | 통합 테스트: **4개 파일**
 
-## 1. 디렉토리 구조
+---
 
-이 프로젝트는 표준 `src` 레이아웃을 따르며, 소스 코드와 테스트 코드를 명확하게 분리합니다.
+## 테스트 구조
 
 ```
-project_root/
-├── src/                  # 애플리케이션 소스 코드
-│   └── producer/
-├── tests/                # 모든 테스트 코드
-│   ├── conftest.py       # 전역 설정 및 공용 Fixture
-│   ├── unit/             # 단위 테스트
-│   │   └── producer/
-│   │       ├── test_cache.py
-│   │       ├── test_collector.py
-│   │       ├── test_enricher.py
-│   │       ├── test_main.py
-│   │       └── test_sender.py
-│   ├── integration/      # (미래의) 통합 테스트
-│   └── e2e/              # (미래의) 종단 간 테스트
-└── pytest.ini            # pytest 설정 파일
+tests/
+├── conftest.py                          # 전역 Fixture
+├── unit/
+│   ├── producer/                        # 수집·보강·발행 로직
+│   │   ├── test_cache.py                # SQLite TTL 캐시 (3-way TTL)
+│   │   ├── test_collector.py            # SSE 수집, 지수 백오프, 배치 타임아웃
+│   │   ├── test_enricher.py             # Wikidata Q-ID 보강, 캐시 히트/미스
+│   │   ├── test_models.py               # Pydantic 스키마 검증, DLQ 격리
+│   │   ├── test_sender.py               # Kafka 발행, DLQ 라우팅
+│   │   └── test_main.py                 # 파이프라인 오케스트레이션
+│   ├── reporter/                        # 트렌드 리포트
+│   │   ├── test_fetcher.py              # ClickHouse 쿼리, 뉴스 스크래핑, 썸네일
+│   │   ├── test_builder.py              # Claude API 호출, selected_indices 파싱
+│   │   ├── test_publisher.py            # Discord Embed 구성
+│   │   ├── test_prompts.py              # 프롬프트 스타일 동적 로드
+│   │   └── test_main.py                 # 리포트 파이프라인 전체 흐름
+│   ├── resource_monitor/                # 이상 감지
+│   │   ├── test_baseline.py             # EMA + Welford online variance
+│   │   ├── test_collector.py            # Docker stats 수집
+│   │   ├── test_detector.py             # z-score, abs_threshold, severity
+│   │   └── test_alerter.py              # Slack 알림, cooldown, runbook
+│   └── s3_exporter/                     # S3 Datalake 내보내기
+│       └── test_main.py                 # s3_key, s3_exists, export, next_run_utc
+└── integration/
+    ├── test_enrichment_cache.py          # 실제 SQLite 연동
+    ├── test_producer_kafka_integration.py # 실제 Redpanda 연동
+    ├── test_e2e_pipeline.py              # Producer → Redpanda → QuestDB 전체 흐름
+    └── test_reporter_integration.py      # 실제 Wikipedia API, Google News RSS
 ```
 
--   **`tests/unit/`**: 각 모듈(함수, 클래스)을 외부 의존성(네트워크, DB 등)으로부터 완전히 분리(고립)하여 테스트합니다. 매우 빠르고 실패 원인을 명확하게 알 수 있습니다.
--   **`tests/integration/`**: 두 개 이상의 모듈이나 서비스(e.g., Sender와 실제 Kafka)를 연동하여 상호작용을 검증하는 테스트를 위치시킵니다.
--   **`tests/e2e/`**: 전체 시스템의 흐름을 사용자 관점에서 처음부터 끝까지 검증하는 테스트를 위치시킵니다.
--   **`conftest.py`**: 모든 테스트 파일에서 공용으로 사용할 수 있는 Pytest Fixture나 헬퍼 함수를 정의하는 곳입니다.
+---
 
-## 2. 테스트 실행 방법
-
-테스트 실행에는 `pytest` 프레임워크를 사용합니다.
-
-### 전체 테스트 실행
-
-프로젝트 루트 디렉토리에서 다음 명령어를 실행하면 `tests/` 디렉토리 하위의 모든 테스트를 실행할 수 있습니다.
+## 실행 방법
 
 ```bash
+# 단위 테스트 (외부 의존성 없음, ~1초)
+PYTHONPATH=src pytest tests/unit/ -v
+
+# 특정 모듈만
+PYTHONPATH=src pytest tests/unit/producer/test_cache.py -v
+PYTHONPATH=src pytest tests/unit/resource_monitor/ -v
+
+# 통합 테스트 (Redpanda, QuestDB 실행 중 필요)
+PYTHONPATH=src pytest tests/integration/ -m integration
+
+# 전체
 PYTHONPATH=src pytest tests/
 ```
 
--   `PYTHONPATH=src`: `src` 디렉토리를 Python의 모듈 검색 경로에 추가하여, 테스트 코드에서 `from producer import ...`와 같은 import 구문을 올바르게 사용할 수 있도록 합니다.
+---
 
-### 특정 테스트만 실행
+## 단위 테스트 핵심 패턴
 
-특정 파일이나 디렉토리의 테스트만 실행할 수도 있습니다.
+### SQLite 임시 DB (cache, baseline)
 
-```bash
-# 단위 테스트만 실행
-PYTHONPATH=src pytest tests/unit/
-
-# collector 테스트만 실행
-PYTHONPATH=src pytest tests/unit/producer/test_collector.py
+```python
+@pytest.fixture
+def temp_db(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+    monkeypatch.setattr(settings, "database_path", str(db_path))
+    cache.setup_database()
+    yield
+    cache.close_db_connection()
 ```
 
-## 3. 테스트 설정 (`pytest.ini`)
+`tmp_path`로 테스트마다 격리된 DB를 생성하고, `monkeypatch`로 설정 경로를 교체합니다.
 
-`pytest.ini` 파일은 `pytest`의 동작을 설정합니다. 현재는 테스트 실행 시 `INFO` 레벨 이상의 로그가 터미널에 실시간으로 출력되도록 설정되어 있습니다.
+### httpx 모킹 (alerter, publisher, fetcher)
+
+```python
+@pytest.fixture
+def mock_httpx(mocker):
+    mock_cm = MagicMock()
+    mock_cm.__enter__.return_value = mock_cm
+    mock_cm.__exit__.return_value = False
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+    mock_cm.post.return_value = mock_resp
+    mocker.patch("resource_monitor.alerter.httpx.Client", return_value=mock_cm)
+    return mock_cm
+```
+
+`httpx.Client`를 context manager mock으로 교체합니다. 복수 호출이 필요한 경우 `side_effect=[cm1, cm2]` 사용.
+
+### Kafka/Redpanda 발행 모킹 (sender)
+
+```python
+mocker.patch("producer.sender.KafkaProducer")
+```
+
+`KafkaProducer` 클래스 자체를 mock으로 교체하여 실제 브로커 연결 없이 발행 로직만 검증합니다.
+
+### Claude API 모킹 (builder)
+
+```python
+mocker.patch("reporter.builder.anthropic.Anthropic")
+```
+
+---
+
+## 통합 테스트 마커
+
+`pytest.ini`에 `integration` 마커가 등록되어 있습니다. 통합 테스트는 `@pytest.mark.integration` 데코레이터를 사용하며, 단위 테스트 실행(`tests/unit/`)에는 포함되지 않습니다.
+
+CI에서는 `unit-tests` job(PR + main push)과 `integration-tests` job(main push 전용)으로 분리됩니다.
+
+---
+
+## pytest.ini 주요 설정
+
+```ini
+[pytest]
+log_cli = true
+log_cli_level = INFO
+markers =
+    integration: marks tests as integration tests
+```

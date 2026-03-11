@@ -18,7 +18,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | C3 | QuestDB | 이벤트 저장 및 분석 쿼리 제공 (TTL 5일) | 상시 실행 |
 | C4 | Reporter | 일일 트렌드 분석 → Discord 발송 | 스케줄 실행 (09:00 KST) |
 | C5 | Grafana | 실시간 대시보드 제공 | 상시 실행 |
-| C6 | S3 Datalake | 이벤트 데이터 오프호스트 백업 저장소 | 미구현 (로드맵 대기) |
+| C6 | S3 Exporter | 이벤트 데이터 오프호스트 백업 저장소 (일일 Parquet → S3) | 스케줄 실행 (01:00 UTC, profiles: s3) |
 
 ---
 
@@ -33,7 +33,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | Anthropic Claude API | C4 Reporter | 리포트 생성 불가 |
 | Discord Webhook | C4 Reporter | 리포트 발송 불가 |
 | Google News RSS | C4 Reporter | 뉴스 섹션 누락 (부분 발송 가능) |
-| S3 Compatible Storage | C6 Datalake | 백업 저장 불가 → RPO 보장 불가 (파이프라인 동작 자체는 유지) |
+| S3 Compatible Storage | C6 S3 Exporter | 백업 저장 불가 → RPO 보장 불가 (파이프라인 동작 자체는 유지) |
 
 ---
 
@@ -84,8 +84,8 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | NFR-RC1 | 전체 파이프라인 | 단일 컴포넌트 재시작 시 다른 컴포넌트에 영향 없이 독립 복구 | Docker Compose 독립 컨테이너 구조 |
 | NFR-RC2 | C1 Producer | 재시작 후 Redpanda 오프셋 기반으로 중단 지점부터 재개 (메시지 중복 허용, 유실 불허) | Redpanda 컨슈머 오프셋 |
 | NFR-RC3 | C3 QuestDB | 컨테이너 재시작 후 데이터 영속성 보장 (볼륨 마운트) | Docker volume 설정 |
-| NFR-RC4 | C6 S3 Datalake | RPO ≤ 1시간: 호스트 전체 장애 시 최대 1시간 분량의 이벤트 데이터 손실 허용 | 미구현 — S3 Datalake 도입 후 적용; TTL 5일로 로컬 보존 기간 제한 |
-| NFR-RC5 | C3 QuestDB + C6 | RTO ≤ 30분: S3 백업으로부터 QuestDB 데이터 복원 및 전체 서비스 재기동 완료 | 미구현 — S3 Datalake 도입 후 runbook 작성 |
+| NFR-RC4 | C6 S3 Exporter | RPO ≤ 1일: 호스트 전체 장애 시 최대 1일 분량의 이벤트 데이터 손실 허용 (매일 01:00 UTC 백업) | S3 Exporter 운영 중 (2026-03-11). 1시간 단위 백업은 현재 미구현 |
+| NFR-RC5 | C3 QuestDB + C6 | RTO ≤ 30분: S3 백업으로부터 QuestDB 데이터 복원 및 전체 서비스 재기동 완료 | runbook 미작성 — DuckDB로 S3 Parquet 직접 조회는 가능 |
 
 ### 3.6 유지보수성 (Maintainability)
 
