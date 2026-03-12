@@ -19,7 +19,7 @@
       "title": "CPU 사용률 (최근 2분 평균, 컨테이너별)",
       "type": "bargauge",
       "gridPos": { "x": 0, "y": 1, "w": 12, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "options": {
         "orientation": "horizontal",
         "reduceOptions": { "calcs": ["lastNotNull"] },
@@ -38,12 +38,16 @@
               { "color": "red", "value": 50 }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "rawSql": "SELECT container, avg(cpu_pct) as cpu_pct FROM resource_metrics WHERE $__timeFilter(ts) AND ts > dateadd('m', -2, now()) GROUP BY container ORDER BY container",
-          "format": "table"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT container, avg(cpu_pct) as cpu_pct FROM resource_metrics WHERE ts > dateadd('m', -2, now()) GROUP BY container ORDER BY container",
+          "refId": "A"
         }
       ]
     },
@@ -52,7 +56,7 @@
       "title": "메모리 사용률 (최근 2분 평균, 컨테이너별)",
       "type": "bargauge",
       "gridPos": { "x": 12, "y": 1, "w": 12, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "options": {
         "orientation": "horizontal",
         "reduceOptions": { "calcs": ["lastNotNull"] },
@@ -71,12 +75,16 @@
               { "color": "red", "value": 85 }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "targets": [
         {
-          "rawSql": "SELECT container, avg(mem_pct) as mem_pct FROM resource_metrics WHERE $__timeFilter(ts) AND ts > dateadd('m', -2, now()) GROUP BY container ORDER BY container",
-          "format": "table"
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT container, avg(mem_pct) as mem_pct FROM resource_metrics WHERE ts > dateadd('m', -2, now()) GROUP BY container ORDER BY container",
+          "refId": "A"
         }
       ]
     },
@@ -92,18 +100,18 @@
       "title": "producer CPU (%)",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 8, "w": 8, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
-        }
+        "defaults": { "unit": "percent", "min": 0 },
+        "overrides": []
       },
       "targets": [
         {
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
           "rawSql": "SELECT ts, avg(cpu_pct) as \"producer\" FROM resource_metrics WHERE $__timeFilter(ts) AND container = 'producer' SAMPLE BY 1m FILL(NULL)",
-          "format": "time_series"
+          "refId": "A"
         }
       ]
     },
@@ -112,18 +120,18 @@
       "title": "questdb CPU (%)",
       "type": "timeseries",
       "gridPos": { "x": 8, "y": 8, "w": 8, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
-        }
+        "defaults": { "unit": "percent", "min": 0 },
+        "overrides": []
       },
       "targets": [
         {
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
           "rawSql": "SELECT ts, avg(cpu_pct) as \"questdb\" FROM resource_metrics WHERE $__timeFilter(ts) AND container = 'questdb' SAMPLE BY 1m FILL(NULL)",
-          "format": "time_series"
+          "refId": "A"
         }
       ]
     },
@@ -132,18 +140,18 @@
       "title": "redpanda CPU (%)",
       "type": "timeseries",
       "gridPos": { "x": 16, "y": 8, "w": 8, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "fieldConfig": {
-        "defaults": {
-          "unit": "percent",
-          "min": 0,
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }] }
-        }
+        "defaults": { "unit": "percent", "min": 0 },
+        "overrides": []
       },
       "targets": [
         {
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
           "rawSql": "SELECT ts, avg(cpu_pct) as \"redpanda\" FROM resource_metrics WHERE $__timeFilter(ts) AND container = 'redpanda' SAMPLE BY 1m FILL(NULL)",
-          "format": "time_series"
+          "refId": "A"
         }
       ]
     },
@@ -159,7 +167,7 @@
       "title": "producer 메모리 (%)",
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 15, "w": 8, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -173,12 +181,16 @@
               { "color": "red", "value": 85 }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "targets": [
         {
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
           "rawSql": "SELECT ts, avg(mem_pct) as \"producer\" FROM resource_metrics WHERE $__timeFilter(ts) AND container = 'producer' SAMPLE BY 1m FILL(NULL)",
-          "format": "time_series"
+          "refId": "A"
         }
       ]
     },
@@ -187,7 +199,7 @@
       "title": "questdb 메모리 (%)",
       "type": "timeseries",
       "gridPos": { "x": 8, "y": 15, "w": 8, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "fieldConfig": {
         "defaults": {
           "unit": "percent",
@@ -201,12 +213,16 @@
               { "color": "red", "value": 85 }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "targets": [
         {
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
           "rawSql": "SELECT ts, avg(mem_pct) as \"questdb\" FROM resource_metrics WHERE $__timeFilter(ts) AND container = 'questdb' SAMPLE BY 1m FILL(NULL)",
-          "format": "time_series"
+          "refId": "A"
         }
       ]
     },
@@ -215,7 +231,7 @@
       "title": "전체 스택 메모리 사용량 (MiB 합산)",
       "type": "timeseries",
       "gridPos": { "x": 16, "y": 15, "w": 8, "h": 6 },
-      "datasource": { "type": "postgres", "uid": "QuestDB" },
+      "datasource": { "type": "grafana-postgresql-datasource", "uid": "QuestDB" },
       "fieldConfig": {
         "defaults": {
           "unit": "mebibytes",
@@ -228,12 +244,16 @@
               { "color": "red", "value": 1700 }
             ]
           }
-        }
+        },
+        "overrides": []
       },
       "targets": [
         {
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
           "rawSql": "SELECT ts, sum(mem_mb) as \"total_mem_mb\" FROM resource_metrics WHERE $__timeFilter(ts) SAMPLE BY 1m FILL(NULL)",
-          "format": "time_series"
+          "refId": "A"
         }
       ]
     }
