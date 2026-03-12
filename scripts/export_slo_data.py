@@ -62,16 +62,19 @@ def questdb_json(sql: str, timeout: int = 30) -> list[dict]:
 # ── Loki 헬퍼 ────────────────────────────────────────────────────────────────
 
 
-def _loki_request(logql: str, start: datetime, end: datetime,
-                  step: str, timeout: int) -> dict:
+def _loki_request(
+    logql: str, start: datetime, end: datetime, step: str, timeout: int
+) -> dict:
     """Loki /query_range HTTP 요청 → 원본 JSON 반환."""
-    params = urllib.parse.urlencode({
-        "query": logql,
-        "start": int(start.timestamp()),
-        "end": int(end.timestamp()),
-        "step": step,
-        "limit": 5000,
-    })
+    params = urllib.parse.urlencode(
+        {
+            "query": logql,
+            "start": int(start.timestamp()),
+            "end": int(end.timestamp()),
+            "step": step,
+            "limit": 5000,
+        }
+    )
     url = f"{LOKI_URL}/loki/api/v1/query_range?{params}"
     try:
         with urllib.request.urlopen(url, timeout=timeout) as resp:
@@ -81,8 +84,9 @@ def _loki_request(logql: str, start: datetime, end: datetime,
         return {}
 
 
-def loki_metric_query(logql: str, start: datetime, end: datetime,
-                      step: str = "5m", timeout: int = 60) -> list[dict]:
+def loki_metric_query(
+    logql: str, start: datetime, end: datetime, step: str = "5m", timeout: int = 60
+) -> list[dict]:
     """Loki metric 쿼리 (count_over_time 등) → [{timestamp, value, labels}] 반환."""
     body = _loki_request(logql, start, end, step, timeout)
     results = []
@@ -90,18 +94,21 @@ def loki_metric_query(logql: str, start: datetime, end: datetime,
         labels = series.get("metric", series.get("stream", {}))
         label_str = ",".join(f"{k}={v}" for k, v in labels.items())
         for ts, value in series.get("values", []):
-            results.append({
-                "timestamp": datetime.fromtimestamp(
-                    float(ts), tz=timezone.utc
-                ).isoformat(),
-                "value": value,
-                "labels": label_str,
-            })
+            results.append(
+                {
+                    "timestamp": datetime.fromtimestamp(
+                        float(ts), tz=timezone.utc
+                    ).isoformat(),
+                    "value": value,
+                    "labels": label_str,
+                }
+            )
     return results
 
 
-def loki_log_query(logql: str, start: datetime, end: datetime,
-                   step: str = "1m", timeout: int = 60) -> list[dict]:
+def loki_log_query(
+    logql: str, start: datetime, end: datetime, step: str = "1m", timeout: int = 60
+) -> list[dict]:
     """Loki 로그 스트림 쿼리 → [{timestamp, line, labels}] 반환."""
     body = _loki_request(logql, start, end, step, timeout)
     results = []
@@ -109,13 +116,15 @@ def loki_log_query(logql: str, start: datetime, end: datetime,
         labels = stream.get("stream", {})
         label_str = ",".join(f"{k}={v}" for k, v in labels.items())
         for ts_ns, line in stream.get("values", []):
-            results.append({
-                "timestamp": datetime.fromtimestamp(
-                    int(ts_ns) / 1e9, tz=timezone.utc
-                ).isoformat(),
-                "line": line,
-                "labels": label_str,
-            })
+            results.append(
+                {
+                    "timestamp": datetime.fromtimestamp(
+                        int(ts_ns) / 1e9, tz=timezone.utc
+                    ).isoformat(),
+                    "line": line,
+                    "labels": label_str,
+                }
+            )
     return sorted(results, key=lambda r: r["timestamp"])
 
 
@@ -127,23 +136,30 @@ def docker_stats_snapshot() -> list[dict]:
     try:
         result = subprocess.run(
             [
-                "docker", "stats", "--no-stream", "--format",
+                "docker",
+                "stats",
+                "--no-stream",
+                "--format",
                 "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}",
             ],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         rows = []
         for line in result.stdout.strip().splitlines():
             parts = line.split("\t")
             if len(parts) == 4:
                 name, cpu, mem_usage, mem_pct = parts
-                rows.append({
-                    "container": name,
-                    "cpu_pct": cpu.rstrip("%"),
-                    "mem_usage": mem_usage,
-                    "mem_pct": mem_pct.rstrip("%"),
-                    "snapshot_time": datetime.now(timezone.utc).isoformat(),
-                })
+                rows.append(
+                    {
+                        "container": name,
+                        "cpu_pct": cpu.rstrip("%"),
+                        "mem_usage": mem_usage,
+                        "mem_pct": mem_pct.rstrip("%"),
+                        "snapshot_time": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
         return rows
     except Exception as e:
         print(f"  ⚠ docker stats 실패: {e}")
@@ -254,7 +270,9 @@ def export_query_latency(output_dir: Path):
         try:
             questdb_json(sql)
             elapsed_ms = (time.perf_counter() - t0) * 1000
-            rows.append({"trial": i + 1, "latency_ms": round(elapsed_ms, 2), "status": "ok"})
+            rows.append(
+                {"trial": i + 1, "latency_ms": round(elapsed_ms, 2), "status": "ok"}
+            )
         except Exception as e:
             rows.append({"trial": i + 1, "latency_ms": None, "status": f"error: {e}"})
 
@@ -271,9 +289,9 @@ def export_dlq_events(output_dir: Path, start: datetime, end: datetime):
     print("📊 DLQ 이벤트 추이 (R1) 내보내기...")
     # Loki 레이블: container (not container_name)
     logql = (
-        'count_over_time('
+        "count_over_time("
         '{container=~"producer|questdb-consumer"} |~ "(?i)dlq" [5m]'
-        ')'
+        ")"
     )
     rows = loki_metric_query(logql, start, end, step="5m")
 
@@ -307,17 +325,20 @@ def export_batch_processing(output_dir: Path, start: datetime, end: datetime):
     for r in raw_rows:
         m = pattern.search(r["line"])
         if m:
-            rows.append({
-                "timestamp": r["timestamp"],
-                "batch_processing_seconds": float(m.group("batch_sec")),
-                "batch_size": int(m.group("batch_size")),
-                "valid": int(m.group("valid")),
-            })
+            rows.append(
+                {
+                    "timestamp": r["timestamp"],
+                    "batch_processing_seconds": float(m.group("batch_sec")),
+                    "batch_size": int(m.group("batch_size")),
+                    "valid": int(m.group("valid")),
+                }
+            )
 
     out = output_dir / "slo_batch_processing.csv"
     with out.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["timestamp", "batch_processing_seconds", "batch_size", "valid"]
+            f,
+            fieldnames=["timestamp", "batch_processing_seconds", "batch_size", "valid"],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -346,18 +367,28 @@ def export_cache_hitrate(output_dir: Path, start: datetime, end: datetime):
         if m:
             total = int(m.group("total"))
             api_calls = int(m.group("api_calls"))
-            hit_rate = round((total - api_calls) / total * 100, 2) if total > 0 else None
-            rows.append({
-                "timestamp": r["timestamp"],
-                "total_enriched": total,
-                "new_api_calls": api_calls,
-                "cache_hit_rate_pct": hit_rate,
-            })
+            hit_rate = (
+                round((total - api_calls) / total * 100, 2) if total > 0 else None
+            )
+            rows.append(
+                {
+                    "timestamp": r["timestamp"],
+                    "total_enriched": total,
+                    "new_api_calls": api_calls,
+                    "cache_hit_rate_pct": hit_rate,
+                }
+            )
 
     out = output_dir / "slo_cache_hitrate.csv"
     with out.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["timestamp", "total_enriched", "new_api_calls", "cache_hit_rate_pct"]
+            f,
+            fieldnames=[
+                "timestamp",
+                "total_enriched",
+                "new_api_calls",
+                "cache_hit_rate_pct",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -371,7 +402,14 @@ def export_resources(output_dir: Path):
     out = output_dir / "slo_resources_snapshot.csv"
     with out.open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(
-            f, fieldnames=["container", "cpu_pct", "mem_usage", "mem_pct", "snapshot_time"]
+            f,
+            fieldnames=[
+                "container",
+                "cpu_pct",
+                "mem_usage",
+                "mem_pct",
+                "snapshot_time",
+            ],
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -397,7 +435,9 @@ def export_summary(output_dir: Path, days: int):
         cnt = int(rows[0]["cnt"]) if rows else 0
         epm = cnt / 5
         status = "✅" if epm >= 800 else "❌"
-        lines.append(f"[P5]  처리량           {epm:8.0f} events/min  {status} (목표 ≥800)")
+        lines.append(
+            f"[P5]  처리량           {epm:8.0f} events/min  {status} (목표 ≥800)"
+        )
     except Exception as e:
         lines.append(f"[P5]  처리량           조회 실패 ({e})")
 
@@ -405,11 +445,16 @@ def export_summary(output_dir: Path, days: int):
     try:
         rows = questdb_json("SELECT max(timestamp) AS latest FROM wikimedia_events")
         if rows and rows[0]["latest"]:
-            ts_str = rows[0]["latest"].replace("Z", "+00:00").replace("T", " ")[:26] + "+00:00"
+            ts_str = (
+                rows[0]["latest"].replace("Z", "+00:00").replace("T", " ")[:26]
+                + "+00:00"
+            )
             latest = datetime.fromisoformat(ts_str)
             lag = (datetime.now(timezone.utc) - latest).total_seconds()
             status = "✅" if lag <= 30 else "❌"
-            lines.append(f"[D1]  데이터 lag       {lag:8.1f} s           {status} (목표 ≤30s)")
+            lines.append(
+                f"[D1]  데이터 lag       {lag:8.1f} s           {status} (목표 ≤30s)"
+            )
     except Exception as e:
         lines.append(f"[D1]  데이터 lag       조회 실패 ({e})")
 
@@ -427,7 +472,9 @@ def export_summary(output_dir: Path, days: int):
         if total >= 100:
             rate = labeled / total * 100
             status = "✅" if rate >= 80 else "❌"
-            lines.append(f"[D2]  레이블 보강률    {rate:8.1f} %           {status} (목표 ≥80%, {labeled}/{total}건)")
+            lines.append(
+                f"[D2]  레이블 보강률    {rate:8.1f} %           {status} (목표 ≥80%, {labeled}/{total}건)"
+            )
         else:
             lines.append(f"[D2]  레이블 보강률    데이터 부족 ({total}건 < 100건)")
     except Exception as e:
@@ -454,7 +501,11 @@ def export_summary(output_dir: Path, days: int):
     # CAP1/CAP2: 리소스
     stats = docker_stats_snapshot()
     qdb = next(
-        (r for r in stats if "questdb" in r["container"] and "consumer" not in r["container"]),
+        (
+            r
+            for r in stats
+            if "questdb" in r["container"] and "consumer" not in r["container"]
+        ),
         None,
     )
     if qdb:
@@ -469,7 +520,9 @@ def export_summary(output_dir: Path, days: int):
     if prod:
         cpu_pct = float(prod["cpu_pct"])
         status = "✅" if cpu_pct <= 70 else "❌"
-        lines.append(f"[CAP2] Producer CPU  {cpu_pct:8.2f} %           {status} (목표 ≤70%)")
+        lines.append(
+            f"[CAP2] Producer CPU  {cpu_pct:8.2f} %           {status} (목표 ≤70%)"
+        )
 
     summary_text = "\n".join(lines)
     out = output_dir / "slo_summary.txt"
@@ -484,11 +537,15 @@ def export_summary(output_dir: Path, days: int):
 def main():
     parser = argparse.ArgumentParser(description="WikiStreams SLO 데이터 내보내기")
     parser.add_argument(
-        "--days", type=int, default=5,
+        "--days",
+        type=int,
+        default=5,
         help="분석 기간(일). QuestDB TTL=5일이므로 최대 5 (기본값: 5)",
     )
     parser.add_argument(
-        "--output-dir", type=str, default="slo_export",
+        "--output-dir",
+        type=str,
+        default="slo_export",
         help="출력 디렉터리 (기본값: ./slo_export)",
     )
     args = parser.parse_args()
@@ -500,8 +557,10 @@ def main():
     end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
 
-    print(f"\n🚀 WikiStreams SLO 데이터 내보내기 시작")
-    print(f"   기간: {start.strftime('%Y-%m-%d %H:%M')} ~ {end.strftime('%Y-%m-%d %H:%M')} UTC ({days}일)")
+    print("\n🚀 WikiStreams SLO 데이터 내보내기 시작")
+    print(
+        f"   기간: {start.strftime('%Y-%m-%d %H:%M')} ~ {end.strftime('%Y-%m-%d %H:%M')} UTC ({days}일)"
+    )
     print(f"   출력: {output_dir.resolve()}\n")
 
     # QuestDB 기반
@@ -523,7 +582,7 @@ def main():
     print()
     export_summary(output_dir, days)
 
-    print(f"\n✅ 완료! 파일 목록:")
+    print("\n✅ 완료! 파일 목록:")
     for f in sorted(output_dir.iterdir()):
         size_kb = f.stat().st_size / 1024
         print(f"   {f.name:45s} {size_kb:7.1f} KB")
