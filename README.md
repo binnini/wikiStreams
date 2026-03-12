@@ -2,7 +2,21 @@
 
 [![Python Code Quality CI](https://github.com/puding-development/wikiStreams/actions/workflows/ci.yml/badge.svg)](https://github.com/puding-development/wikiStreams/actions/workflows/ci.yml)
 
-**WikiStreams**는 전 세계 위키미디어(위키피디아, 위키데이터)의 실시간 편집 스트림을 수집·분석하여 트렌드를 파악하는 홈랩 데이터 파이프라인입니다. 현업 수준의 아키텍처(카파 아키텍처, SLO 기반 운영, 이상 감지 알림)를 비용 없이 단일 호스트에서 구현하는 것을 목표로 합니다.
+**WikiStreams**는 전 세계 위키미디어(위키피디아, 위키데이터)의 실시간 편집 스트림을 수집·분석하여 트렌드를 파악하는 홈랩 데이터 파이프라인입니다. 현업 수준의 아키텍처(카파 아키텍처, SLO 기반 운영, 이상 감지 알림)를 **월 $15(AWS t4g.small)** 단일 호스트에서 구현합니다.
+
+> 📄 **상세 회고 및 포트폴리오** → [`docs/PORTFOLIO.md`](docs/PORTFOLIO.md)
+
+### 핵심 성과
+
+| 지표 | 수치 |
+|---|---|
+| 스택 메모리 절감 | 4,043 MiB → 947 MiB (**-77%**) |
+| QuestDB 쿼리 p99 | 52ms → 9~16ms (**-83%**) |
+| 배치 처리 p95 | 1.208s → 0.723s (**-40%**) |
+| 처리량 | ~1,000 events/min, TTL 5일 |
+| 월 운영비 | **~$15** (t4g.small + EBS) |
+| 단위 테스트 | **276개** (외부 의존성 없음) |
+| SLO 항목 | **11개** 정의·모니터링 중 |
 
 ---
 
