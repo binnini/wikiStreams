@@ -23,7 +23,13 @@ def mock_dependencies():
         "producer.main.KafkaSender"
     ) as MockSender, patch(
         "producer.main.WikimediaCollector"
-    ) as MockCollector:
+    ) as MockCollector, patch(
+        "producer.main.SloWriter"
+    ) as MockSloWriter:
+
+        # SloWriter 기본 동작: ensure_table 성공
+        MockSloWriter.return_value.ensure_table.return_value = None
+        MockSloWriter.return_value.write.return_value = None
 
         yield {
             "setup_db": mock_setup,
@@ -31,6 +37,7 @@ def mock_dependencies():
             "Enricher": MockEnricher,
             "Sender": MockSender,
             "Collector": MockCollector,
+            "SloWriter": MockSloWriter,
         }
 
 
@@ -74,10 +81,11 @@ def test_process_batch_callback_flow(mock_dependencies):
         {**VALID_EVENT, "title": "Event2"},
     ]
     enriched_events = [{"title": "Event1", "label": "L1"}, {"title": "Event2"}]
+    enrich_stats = {"total_enriched": 2, "new_api_calls": 1}
 
     # Mock 객체들의 동작 설정
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = enriched_events
+    enricher_instance.enrich_events.return_value = (enriched_events, enrich_stats)
 
     sender_instance = mock_dependencies["Sender"].return_value
 
@@ -104,7 +112,7 @@ def test_process_batch_invalid_events_routed_to_dlq(mock_dependencies):
     invalid_events = [{"title": "no_required_fields"}]
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = []
+    enricher_instance.enrich_events.return_value = ([], {"total_enriched": 0, "new_api_calls": 0})
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback(invalid_events)
@@ -130,7 +138,7 @@ def test_process_batch_mixed_valid_and_invalid(mock_dependencies):
     mixed_events = [valid_event, invalid_event]
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = [valid_event]
+    enricher_instance.enrich_events.return_value = ([valid_event], {"total_enriched": 1, "new_api_calls": 0})
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback(mixed_events)
@@ -183,7 +191,7 @@ def test_process_batch_log_events_silently_dropped(mock_dependencies):
     log_event = {"type": "log", "meta": {"domain": "en.wikipedia.org"}}
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = []
+    enricher_instance.enrich_events.return_value = ([], {"total_enriched": 0, "new_api_calls": 0})
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback([log_event])
@@ -203,7 +211,7 @@ def test_process_batch_canary_events_silently_dropped(mock_dependencies):
     canary_event = {"type": "edit", "meta": {"domain": "canary"}}
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = []
+    enricher_instance.enrich_events.return_value = ([], {"total_enriched": 0, "new_api_calls": 0})
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback([canary_event])

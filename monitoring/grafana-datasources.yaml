@@ -3,17 +3,10 @@ apiVersion: 1
 deleteDatasources:
   - name: ClickHouse
     orgId: 1
+  - name: Loki
+    orgId: 1
 
 datasources:
-  - name: Loki
-    type: loki
-    access: proxy
-    url: http://loki:3100
-    uid: Loki
-    isDefault: true
-    jsonData:
-      derivedFields: []
-
   - name: QuestDB
     type: postgres
     uid: QuestDB
@@ -26,3 +19,4 @@ datasources:
       sslmode: disable
       postgresVersion: 1200
       timescaledb: false
+    isDefault: true

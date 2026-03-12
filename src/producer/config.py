@@ -18,6 +18,10 @@ class Settings(BaseSettings):
     batch_size: int = 500
     batch_timeout_seconds: float = 10.0
 
+    # QuestDB Settings (SLO 지표 전송용)
+    questdb_host: str = "questdb"
+    questdb_rest_port: int = 9000
+
     # DLQ Settings
     dlq_max_retries: int = 3
 

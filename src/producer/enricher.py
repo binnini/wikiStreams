@@ -80,9 +80,9 @@ class WikidataEnricher:
             logging.error(f"❌ Wikidata API 오류: {e}")
             return {}
 
-    def enrich_events(self, events: list) -> list:
+    def enrich_events(self, events: list) -> tuple[list, dict]:
         if not events:
-            return []
+            return [], {"total_enriched": 0, "new_api_calls": 0}
 
         q_ids_in_batch = {
             event.get("title")
@@ -118,7 +118,7 @@ class WikidataEnricher:
 
         new_api_calls = len(all_qid_info) - len(cached_qids) if q_ids_in_batch else 0
         logging.info(
-            f"정보 보강 후 {len(events)}개의 이벤트를 전송했습니다. (신규 API 호출: {new_api_calls}개)"
+            "enrich_done total=%d new_api_calls=%d", len(events), new_api_calls
         )
 
-        return events
+        return events, {"total_enriched": len(events), "new_api_calls": new_api_calls}

@@ -114,152 +114,6 @@
       "type": "gauge"
     },
     {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-A3: 당일 Reporter 발송 성공 여부. 1=성공, 0=미발송. 목표: 매일 1회",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "red",
-                  "index": 0,
-                  "text": "미발송"
-                },
-                "1": {
-                  "color": "green",
-                  "index": 1,
-                  "text": "발송 완료"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 1
-      },
-      "id": 2,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "auto"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "count_over_time({container=\"reporter\"} |= \"Publish complete\" [1d])",
-          "legendFormat": "발송 횟수",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "SLI-A3: Reporter 일일 발송 성공 — 목표 매일 1회",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-A3: Reporter 발송 이력 (30일)",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "lineWidth": 1,
-            "spanNulls": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 1
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [
-            "count"
-          ],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "count_over_time({container=\"reporter\"} |= \"Publish complete\" [1d])",
-          "legendFormat": "발송",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "SLI-A3: Reporter 발송 이력",
-      "type": "timeseries"
-    },
-    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -273,8 +127,8 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "postgres",
+        "uid": "QuestDB"
       },
       "description": "SLI-P1: 배치 처리 소요 시간 (enrich + Kafka flush). 목표: ≤ 5초 (캐시 히트 기준)",
       "fieldConfig": {
@@ -328,23 +182,23 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "Loki"
+            "type": "postgres",
+            "uid": "QuestDB"
           },
           "editorMode": "code",
-          "expr": "max_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [5m])",
-          "legendFormat": "최대 처리 시간",
-          "queryType": "instant",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT max(batch_processing_seconds) FROM producer_slo_metrics WHERE $__timeFilter(ts)",
           "refId": "A"
         }
       ],
-      "title": "SLI-P1: 배치 처리 소요 시간 (최근 5m) — 목표 ≤ 5s",
+      "title": "SLI-P1: 배치 처리 소요 시간 (최근 최대값) — 목표 ≤ 5s",
       "type": "gauge"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "postgres",
+        "uid": "QuestDB"
       },
       "description": "SLI-P1 추이: 배치 처리 소요 시간 5분 이동평균. 목표: ≤ 5s",
       "fieldConfig": {
@@ -368,6 +222,10 @@
               {
                 "color": "green",
                 "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 3
               },
               {
                 "color": "red",
@@ -404,17 +262,17 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "Loki"
+            "type": "postgres",
+            "uid": "QuestDB"
           },
           "editorMode": "code",
-          "expr": "avg(avg_over_time({container=\"producer\"} |= \"batch_processing_seconds\" | logfmt | unwrap batch_processing_seconds [5m]))",
-          "legendFormat": "5분 평균",
-          "queryType": "range",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts, avg(batch_processing_seconds) FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 5m FILL(NULL)",
           "refId": "A"
         }
       ],
-      "title": "SLI-P1: 배치 처리 소요 시간 추이 (5분 이동평균)",
+      "title": "SLI-P1: 배치 처리 소요 시간 추이 (5분 평균)",
       "type": "timeseries"
     },
     {
@@ -560,8 +418,8 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "postgres",
+        "uid": "QuestDB"
       },
       "description": "SLI-P7: Wikidata 캐시 히트율. 목표: ≥ 80%",
       "fieldConfig": {
@@ -582,7 +440,7 @@
               },
               {
                 "color": "yellow",
-                "value": 60
+                "value": 70
               },
               {
                 "color": "green",
@@ -617,23 +475,23 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "Loki"
+            "type": "postgres",
+            "uid": "QuestDB"
           },
           "editorMode": "code",
-          "expr": "(sum(sum_over_time({container=\"producer\"} |= \"정보 보강 후\" | regexp \"정보 보강 후 (?P<total>\\\\d+)개의 이벤트를 전송했습니다\" | unwrap total [10m])) - sum(sum_over_time({container=\"producer\"} |= \"정보 보강 후\" | regexp \"신규 API 호출: (?P<api>\\\\d+)개\" | unwrap api [10m]))) / sum(sum_over_time({container=\"producer\"} |= \"정보 보강 후\" | regexp \"정보 보강 후 (?P<total>\\\\d+)개의 이벤트를 전송했습니다\" | unwrap total [10m])) * 100",
-          "legendFormat": "캐시 히트율",
-          "queryType": "instant",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT avg(cache_hit_rate_pct) FROM producer_slo_metrics WHERE $__timeFilter(ts)",
           "refId": "A"
         }
       ],
-      "title": "SLI-P7: 캐시 히트율 (10m) — 목표 ≥ 80%",
+      "title": "SLI-P7: 캐시 히트율 — 목표 ≥ 80%",
       "type": "gauge"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "postgres",
+        "uid": "QuestDB"
       },
       "description": "SLI-P2: 배치당 이벤트 수 5분 이동평균.",
       "fieldConfig": {
@@ -686,17 +544,97 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "Loki"
+            "type": "postgres",
+            "uid": "QuestDB"
           },
           "editorMode": "code",
-          "expr": "avg(avg_over_time({container=\"producer\"} |= \"batch_size\" | logfmt | unwrap batch_size [5m]))",
-          "legendFormat": "5분 평균",
-          "queryType": "range",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts, avg(batch_size) as batch_size, avg(valid) as valid FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 5m FILL(NULL)",
           "refId": "A"
         }
       ],
-      "title": "SLI-P2: 배치 크기 추이 (5분 이동평균)",
+      "title": "SLI-P2: 배치 크기 추이 (5분 평균)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "QuestDB"
+      },
+      "description": "SLI-P7 추이: Wikidata 캐시 히트율 10분 이동평균. 목표: ≥ 80%",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "spanNulls": true,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "green",
+                "value": 80
+              }
+            ]
+          },
+          "min": 0,
+          "max": 100,
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 16,
+      "options": {
+        "legend": {
+          "calcs": [
+            "max",
+            "mean"
+          ],
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "QuestDB"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts, avg(cache_hit_rate_pct) as cache_hit_rate_pct FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 10m FILL(NULL)",
+          "refId": "A"
+        }
+      ],
+      "title": "SLI-P7: 캐시 히트율 추이 (10분 평균)",
       "type": "timeseries"
     },
     {
@@ -705,7 +643,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "id": 300,
       "title": "신뢰성 (Reliability)",
@@ -713,18 +651,17 @@
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "postgres",
+        "uid": "QuestDB"
       },
-      "description": "SLI-R1: DLQ 유입 비율. 목표: ≤ 1%",
+      "description": "SLI-R1: DLQ 유입 이벤트 수 (batch_size - valid). 목표: ≤ 1%",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
-          "decimals": 2,
+          "decimals": 0,
           "mappings": [],
-          "max": 10,
           "min": 0,
           "thresholds": {
             "mode": "absolute",
@@ -735,15 +672,15 @@
               },
               {
                 "color": "yellow",
-                "value": 0.5
+                "value": 1
               },
               {
                 "color": "red",
-                "value": 1
+                "value": 10
               }
             ]
           },
-          "unit": "percent",
+          "unit": "none",
           "noValue": "0"
         },
         "overrides": []
@@ -752,42 +689,43 @@
         "h": 8,
         "w": 6,
         "x": 0,
-        "y": 27
+        "y": 35
       },
       "id": 20,
       "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "sum"
           ],
           "fields": "",
           "values": false
         },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "text": {}
+        "textMode": "auto"
       },
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "Loki"
+            "type": "postgres",
+            "uid": "QuestDB"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({container=\"producer\"} |= \"DLQ로 이벤트 라우팅\" [5m])) / (sum(sum_over_time({container=\"producer\"} |= \"으로 전송했습니다\" | regexp \"(?P<count>\\\\d+)개의 이벤트\" | unwrap count [5m])) + sum(count_over_time({container=\"producer\"} |= \"DLQ로 이벤트 라우팅\" [5m]))) * 100",
-          "legendFormat": "DLQ 비율",
-          "queryType": "instant",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT sum(batch_size - valid) FROM producer_slo_metrics WHERE $__timeFilter(ts)",
           "refId": "A"
         }
       ],
-      "title": "SLI-R1: DLQ 유입 비율 (5m) — 목표 ≤ 1%",
-      "type": "gauge"
+      "title": "SLI-R1: DLQ 이벤트 수 (기간 합계)",
+      "type": "stat"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "Loki"
+        "type": "postgres",
+        "uid": "QuestDB"
       },
       "description": "SLI-R1 추이: DLQ 이벤트 발생 시계열",
       "fieldConfig": {
@@ -819,7 +757,7 @@
         "h": 8,
         "w": 18,
         "x": 6,
-        "y": 27
+        "y": 35
       },
       "id": 21,
       "options": {
@@ -837,13 +775,13 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "Loki"
+            "type": "postgres",
+            "uid": "QuestDB"
           },
           "editorMode": "code",
-          "expr": "sum(count_over_time({container=\"producer\"} |= \"DLQ로 이벤트 라우팅\" [$__interval]))",
-          "legendFormat": "DLQ 이벤트",
-          "queryType": "range",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT ts, sum(batch_size - valid) as dlq_events FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 5m FILL(0)",
           "refId": "A"
         }
       ],
@@ -856,7 +794,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 43
       },
       "id": 400,
       "title": "데이터 품질 (Data Quality)",
@@ -900,7 +838,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 36
+        "y": 44
       },
       "id": 30,
       "options": {
@@ -972,7 +910,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 36
+        "y": 44
       },
       "id": 31,
       "options": {
@@ -1032,7 +970,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 36
+        "y": 44
       },
       "id": 32,
       "options": {
@@ -1064,374 +1002,6 @@
       ],
       "title": "QuestDB 적재 이벤트 수 (1h)",
       "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 44
-      },
-      "id": 500,
-      "title": "용량 (Capacity)",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-CAP1: QuestDB 메모리 사용률. 목표: ≤ 80%",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 1,
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 60
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 45
-      },
-      "id": 40,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "text": {}
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"questdb\" | unwrap mem_pct [2m])",
-          "legendFormat": "QuestDB 메모리",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "SLI-CAP1: QuestDB 메모리 사용률 — 목표 ≤ 80%",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-CAP2: Producer CPU 사용률. 목표: ≤ 70%",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 1,
-          "mappings": [],
-          "max": 100,
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 50
-              },
-              {
-                "color": "red",
-                "value": 70
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 45
-      },
-      "id": 41,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "text": {}
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"producer\" | unwrap cpu_pct [2m])",
-          "legendFormat": "Producer CPU",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "SLI-CAP2: Producer CPU 사용률 — 목표 ≤ 70%",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-CAP1/CAP2: 메모리·CPU 사용률 추이 (30일)",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "spanNulls": true
-          },
-          "mappings": [],
-          "min": 0,
-          "max": 100,
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 45
-      },
-      "id": 42,
-      "options": {
-        "legend": {
-          "calcs": [
-            "max",
-            "mean"
-          ],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"questdb\" | unwrap mem_pct [5m]) by (target_container)",
-          "legendFormat": "QuestDB 메모리",
-          "queryType": "range",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "avg_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | target_container=\"producer\" | unwrap cpu_pct [1m]) by (target_container)",
-          "legendFormat": "Producer CPU",
-          "queryType": "range",
-          "refId": "B"
-        }
-      ],
-      "title": "SLI-CAP: 리소스 사용률 추이",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-CAP3: 전체 컨테이너 합산 메모리 사용량 (현재값)",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 6000
-              },
-              {
-                "color": "red",
-                "value": 9000
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 0,
-        "y": 53
-      },
-      "id": 43,
-      "options": {
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showThresholdLabels": false,
-        "showThresholdMarkers": true,
-        "text": {}
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "sum(avg by (target_container) (last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap mem_mb [1m])))",
-          "legendFormat": "전체 메모리",
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "SLI-CAP3: 전체 컨테이너 합산 메모리",
-      "type": "gauge"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "Loki"
-      },
-      "description": "SLI-CAP3 추이: 전체 컨테이너 합산 메모리 사용량 시계열",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "spanNulls": true
-          },
-          "mappings": [],
-          "min": 0,
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 18,
-        "x": 6,
-        "y": 53
-      },
-      "id": 44,
-      "options": {
-        "legend": {
-          "calcs": [
-            "max",
-            "mean"
-          ],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "multi"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "Loki"
-          },
-          "editorMode": "code",
-          "expr": "sum(avg by (target_container) (last_over_time({container=\"resource-monitor\"} |= \"DockerStats\" | logfmt | unwrap mem_mb [$__interval])))",
-          "legendFormat": "전체 메모리 합산",
-          "queryType": "range",
-          "refId": "A"
-        }
-      ],
-      "title": "SLI-CAP3: 전체 컨테이너 합산 메모리 추이",
-      "type": "timeseries"
     }
   ],
   "refresh": "30s",
@@ -1453,5 +1023,5 @@
   "timezone": "Asia/Seoul",
   "title": "WikiStreams SLO Dashboard",
   "uid": "wikistreams-slo",
-  "version": 1
+  "version": 2
 }

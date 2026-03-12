@@ -3,30 +3,9 @@ volumes:
   grafana_data: {}
   questdb_data: {}
   resource_monitor_data: {}
-  loki_data: {}
   minio_data: {}
 
 services:
-  loki:
-    image: grafana/loki:3.0.0
-    container_name: loki
-    ports:
-      - "3100:3100"
-    volumes:
-      - ./monitoring/loki-config.yaml:/etc/loki/local-config.yaml
-      - loki_data:/loki
-    command: -config.file=/etc/loki/local-config.yaml
-    restart: always
-
-  alloy:
-    image: grafana/alloy:latest
-    container_name: alloy
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./monitoring/alloy-config.alloy:/etc/alloy/config.alloy
-    command: run /etc/alloy/config.alloy
-    restart: always
-
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -45,8 +24,6 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
       - SLACK_ALERT_WEBHOOK_URL=${SLACK_ALERT_WEBHOOK_URL}
       - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL}
-    depends_on:
-      - loki
     restart: always
 
   questdb:
@@ -107,6 +84,8 @@ services:
       KAFKA_BROKER: 'redpanda:9092'
       KAFKA_TOPIC: 'wikimedia.recentchange'
       KAFKA_DLQ_TOPIC: 'wikimedia.recentchange.dlq'
+      QUESTDB_HOST: 'questdb'
+      QUESTDB_REST_PORT: '9000'
 
   # dlq-consumer: 1단계 경량화 — 제거 (2026-03-07 스테이징 검증, 2026-03-08 운영 반영)
   # 제거 근거: _should_skip() 사전 필터로 log/canary 이벤트 드롭 → DLQ near-zero 확인

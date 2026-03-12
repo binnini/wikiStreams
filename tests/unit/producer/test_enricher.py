@@ -178,10 +178,12 @@ def test_enrich_scenarios(
         mock_client_get = mocker.patch("httpx.Client.get", return_value=mock_response)
 
     # --- Act ---
-    result_events = enricher.enrich_events(events)
+    result_events, enrich_stats = enricher.enrich_events(events)
 
     # --- Assert ---
     assert result_events == expected_events
+    assert "total_enriched" in enrich_stats
+    assert "new_api_calls" in enrich_stats
 
     qids_in_batch = {
         e["title"]
@@ -218,7 +220,7 @@ def test_missing_entity_flagged_and_saved(mocker, enricher):
     }
     mocker.patch("httpx.Client.get", return_value=mock_response)
 
-    result = enricher.enrich_events([{"title": "Q9999999"}])
+    result, _ = enricher.enrich_events([{"title": "Q9999999"}])
 
     # missing 엔티티는 빈 문자열로 채워져야 함
     assert result == [

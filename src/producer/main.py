@@ -11,6 +11,7 @@ from .collector import WikimediaCollector
 from .enricher import WikidataEnricher
 from .models import WikimediaEvent
 from .sender import KafkaSender
+from .slo_writer import SloWriter
 
 # --- 1. 설정값 불러오기 ---
 logging.basicConfig(
@@ -38,6 +39,9 @@ def run_producer():
     """
     setup_database()
 
+    slo_writer = SloWriter(settings.questdb_host, settings.questdb_rest_port)
+    slo_writer.ensure_table()
+
     enricher = WikidataEnricher()
     sender = KafkaSender(
         settings.kafka_broker, settings.kafka_topic, settings.kafka_dlq_topic
@@ -63,7 +67,7 @@ def run_producer():
                 logging.warning(f"⚠️ 스키마 검증 실패, DLQ로 격리: {e}")
                 sender.send_to_dlq(event, f"Schema validation error: {e}")
 
-        enriched_events = enricher.enrich_events(valid_events)
+        enriched_events, enrich_stats = enricher.enrich_events(valid_events)
         sender.send_events(enriched_events)
 
         elapsed = time.perf_counter() - t0
@@ -72,6 +76,13 @@ def run_producer():
             elapsed,
             batch_size,
             len(valid_events),
+        )
+        slo_writer.write(
+            batch_sec=elapsed,
+            batch_size=batch_size,
+            valid=len(valid_events),
+            total_enriched=enrich_stats["total_enriched"],
+            new_api_calls=enrich_stats["new_api_calls"],
         )
 
     collector = WikimediaCollector(settings.batch_size, settings.batch_timeout_seconds)

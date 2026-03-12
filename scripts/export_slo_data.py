@@ -2,7 +2,7 @@
 """
 WikiStreams SLO 데이터 내보내기 스크립트
 
-QuestDB, Loki, Docker Stats에서 SLO 관련 데이터를 수집하여
+QuestDB와 Docker Stats에서 SLO 관련 데이터를 수집하여
 분석용 CSV 파일로 저장합니다.
 
 사용법 (EC2 서버에서):
@@ -15,9 +15,8 @@ QuestDB, Loki, Docker Stats에서 SLO 관련 데이터를 수집하여
     slo_by_wiki.csv             - 위키별 이벤트 수 및 봇 비율
     slo_namespace.csv           - 네임스페이스별 분포
     slo_query_latency.csv       - P3: 쿼리 응답 레이턴시 (20회 측정)
-    slo_dlq_events.csv          - R1: DLQ 이벤트 추이 (Loki, 5분 버킷)
-    slo_batch_processing.csv    - P1: 배치 처리 시간 로그 (Loki)
-    slo_cache_hitrate.csv       - P7: 캐시 히트율 (Loki, 5분 버킷)
+    slo_batch_processing.csv    - P1: 배치 처리 시간 (producer_slo_metrics)
+    slo_cache_hitrate.csv       - P7: 캐시 히트율 (producer_slo_metrics)
     slo_resources_snapshot.csv  - CAP1/CAP2: 현재 컨테이너 리소스
     slo_summary.txt             - 현재 SLO 달성 여부 요약
 """
@@ -33,7 +32,6 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 QUESTDB_URL = "http://localhost:9000"
-LOKI_URL = "http://localhost:3100"
 
 
 # ── QuestDB 헬퍼 ─────────────────────────────────────────────────────────────
@@ -57,75 +55,6 @@ def questdb_json(sql: str, timeout: int = 30) -> list[dict]:
         raise RuntimeError(f"QuestDB 오류: {body['error']}")
     columns = [col["name"] for col in body.get("columns", [])]
     return [dict(zip(columns, row)) for row in body.get("dataset", [])]
-
-
-# ── Loki 헬퍼 ────────────────────────────────────────────────────────────────
-
-
-def _loki_request(
-    logql: str, start: datetime, end: datetime, step: str, timeout: int
-) -> dict:
-    """Loki /query_range HTTP 요청 → 원본 JSON 반환."""
-    params = urllib.parse.urlencode(
-        {
-            "query": logql,
-            "start": int(start.timestamp()),
-            "end": int(end.timestamp()),
-            "step": step,
-            "limit": 5000,
-        }
-    )
-    url = f"{LOKI_URL}/loki/api/v1/query_range?{params}"
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
-            return json.loads(resp.read())
-    except Exception as e:
-        print(f"  ⚠ Loki 조회 실패: {e}")
-        return {}
-
-
-def loki_metric_query(
-    logql: str, start: datetime, end: datetime, step: str = "5m", timeout: int = 60
-) -> list[dict]:
-    """Loki metric 쿼리 (count_over_time 등) → [{timestamp, value, labels}] 반환."""
-    body = _loki_request(logql, start, end, step, timeout)
-    results = []
-    for series in body.get("data", {}).get("result", []):
-        labels = series.get("metric", series.get("stream", {}))
-        label_str = ",".join(f"{k}={v}" for k, v in labels.items())
-        for ts, value in series.get("values", []):
-            results.append(
-                {
-                    "timestamp": datetime.fromtimestamp(
-                        float(ts), tz=timezone.utc
-                    ).isoformat(),
-                    "value": value,
-                    "labels": label_str,
-                }
-            )
-    return results
-
-
-def loki_log_query(
-    logql: str, start: datetime, end: datetime, step: str = "1m", timeout: int = 60
-) -> list[dict]:
-    """Loki 로그 스트림 쿼리 → [{timestamp, line, labels}] 반환."""
-    body = _loki_request(logql, start, end, step, timeout)
-    results = []
-    for stream in body.get("data", {}).get("result", []):
-        labels = stream.get("stream", {})
-        label_str = ",".join(f"{k}={v}" for k, v in labels.items())
-        for ts_ns, line in stream.get("values", []):
-            results.append(
-                {
-                    "timestamp": datetime.fromtimestamp(
-                        int(ts_ns) / 1e9, tz=timezone.utc
-                    ).isoformat(),
-                    "line": line,
-                    "labels": label_str,
-                }
-            )
-    return sorted(results, key=lambda r: r["timestamp"])
 
 
 # ── Docker stats 헬퍼 ────────────────────────────────────────────────────────
@@ -284,115 +213,42 @@ def export_query_latency(output_dir: Path):
     print(f"  → {out} (n={n})")
 
 
-def export_dlq_events(output_dir: Path, start: datetime, end: datetime):
-    """R1: DLQ 이벤트 추이 (Loki, 5분 버킷)."""
-    print("📊 DLQ 이벤트 추이 (R1) 내보내기...")
-    # Loki 레이블: container (not container_name)
-    logql = (
-        "count_over_time("
-        '{container=~"producer|questdb-consumer"} |~ "(?i)dlq" [5m]'
-        ")"
-    )
-    rows = loki_metric_query(logql, start, end, step="5m")
-
-    out = output_dir / "slo_dlq_events.csv"
-    with out.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["timestamp", "value", "labels"])
-        writer.writeheader()
-        writer.writerows(rows)
-    status = f"{len(rows):,}건" if rows else "0건 (DLQ 유입 없음 — 정상)"
-    print(f"  → {out} ({status})")
-
-
-def export_batch_processing(output_dir: Path, start: datetime, end: datetime):
-    """P1: 배치 처리 시간 (Loki 로그 스트림 → Python 정규식 파싱).
-
-    실제 로그 형식:
-        2026-03-12 03:51:42,141 - INFO - batch_processing_seconds=0.691 batch_size=175 valid=167
-    """
-    import re
-
+def export_batch_processing(output_dir: Path, days: int):
+    """P1: 배치 처리 시간 (producer_slo_metrics 테이블)."""
     print("📊 배치 처리 시간 (P1) 내보내기...")
-    logql = '{container="producer"} |= "batch_processing_seconds="'
-    raw_rows = loki_log_query(logql, start, end, step="1m")
-
-    pattern = re.compile(
-        r"batch_processing_seconds=(?P<batch_sec>[0-9.]+)"
-        r"\s+batch_size=(?P<batch_size>[0-9]+)"
-        r"\s+valid=(?P<valid>[0-9]+)"
+    sql = (
+        f"SELECT ts, batch_processing_seconds, batch_size, valid "
+        f"FROM producer_slo_metrics "
+        f"WHERE ts > dateadd('d', -{days}, now()) "
+        f"ORDER BY ts"
     )
-    rows = []
-    for r in raw_rows:
-        m = pattern.search(r["line"])
-        if m:
-            rows.append(
-                {
-                    "timestamp": r["timestamp"],
-                    "batch_processing_seconds": float(m.group("batch_sec")),
-                    "batch_size": int(m.group("batch_size")),
-                    "valid": int(m.group("valid")),
-                }
-            )
-
-    out = output_dir / "slo_batch_processing.csv"
-    with out.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=["timestamp", "batch_processing_seconds", "batch_size", "valid"],
-        )
-        writer.writeheader()
-        writer.writerows(rows)
-    print(f"  → {out} ({len(rows):,}건)")
+    try:
+        csv_data = questdb_csv(sql)
+        out = output_dir / "slo_batch_processing.csv"
+        out.write_text(csv_data, encoding="utf-8")
+        line_count = csv_data.count("\n") - 1
+        print(f"  → {out} ({line_count:,}건)")
+    except Exception as e:
+        print(f"  ⚠ 조회 실패: {e}")
 
 
-def export_cache_hitrate(output_dir: Path, start: datetime, end: datetime):
-    """P7: 캐시 히트율 (Loki 로그 스트림 → Python 정규식 파싱).
-
-    실제 로그 형식:
-        정보 보강 후 167개의 이벤트를 전송했습니다. (신규 API 호출: 18개)
-    """
-    import re
-
+def export_cache_hitrate(output_dir: Path, days: int):
+    """P7: 캐시 히트율 (producer_slo_metrics 테이블)."""
     print("📊 캐시 히트율 (P7) 내보내기...")
-    logql = '{container="producer"} |= "정보 보강 후"'
-    raw_rows = loki_log_query(logql, start, end, step="1m")
-
-    pattern = re.compile(
-        r"정보 보강 후 (?P<total>[0-9]+)개의 이벤트를 전송했습니다\."
-        r".*신규 API 호출: (?P<api_calls>[0-9]+)개"
+    sql = (
+        f"SELECT ts, total_enriched, new_api_calls, cache_hit_rate_pct "
+        f"FROM producer_slo_metrics "
+        f"WHERE ts > dateadd('d', -{days}, now()) "
+        f"ORDER BY ts"
     )
-    rows = []
-    for r in raw_rows:
-        m = pattern.search(r["line"])
-        if m:
-            total = int(m.group("total"))
-            api_calls = int(m.group("api_calls"))
-            hit_rate = (
-                round((total - api_calls) / total * 100, 2) if total > 0 else None
-            )
-            rows.append(
-                {
-                    "timestamp": r["timestamp"],
-                    "total_enriched": total,
-                    "new_api_calls": api_calls,
-                    "cache_hit_rate_pct": hit_rate,
-                }
-            )
-
-    out = output_dir / "slo_cache_hitrate.csv"
-    with out.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f,
-            fieldnames=[
-                "timestamp",
-                "total_enriched",
-                "new_api_calls",
-                "cache_hit_rate_pct",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows(rows)
-    print(f"  → {out} ({len(rows):,}건)")
+    try:
+        csv_data = questdb_csv(sql)
+        out = output_dir / "slo_cache_hitrate.csv"
+        out.write_text(csv_data, encoding="utf-8")
+        line_count = csv_data.count("\n") - 1
+        print(f"  → {out} ({line_count:,}건)")
+    except Exception as e:
+        print(f"  ⚠ 조회 실패: {e}")
 
 
 def export_resources(output_dir: Path):
@@ -422,9 +278,29 @@ def export_summary(output_dir: Path, days: int):
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         f"WikiStreams SLO 요약 — {now_str}",
-        f"분석 기간: 최근 {days}일 (QuestDB TTL: 5일)",
+        f"분석 기간: 최근 {days}일",
         "=" * 60,
     ]
+
+    # P1: 배치 처리 시간
+    try:
+        rows = questdb_json(
+            "SELECT max(batch_processing_seconds) AS max_sec, "
+            "avg(batch_processing_seconds) AS avg_sec "
+            "FROM producer_slo_metrics "
+            "WHERE ts > dateadd('m', -30, now())"
+        )
+        if rows and rows[0]["max_sec"] is not None:
+            max_sec = float(rows[0]["max_sec"])
+            avg_sec = float(rows[0]["avg_sec"])
+            status = "✅" if max_sec <= 5 else "❌"
+            lines.append(
+                f"[P1]  배치 처리 시간   max={max_sec:.2f}s avg={avg_sec:.2f}s  {status} (목표 ≤5s)"
+            )
+        else:
+            lines.append("[P1]  배치 처리 시간   데이터 없음")
+    except Exception as e:
+        lines.append(f"[P1]  배치 처리 시간   조회 실패 ({e})")
 
     # P5: 처리량
     try:
@@ -440,6 +316,24 @@ def export_summary(output_dir: Path, days: int):
         )
     except Exception as e:
         lines.append(f"[P5]  처리량           조회 실패 ({e})")
+
+    # P7: 캐시 히트율
+    try:
+        rows = questdb_json(
+            "SELECT avg(cache_hit_rate_pct) AS avg_hit "
+            "FROM producer_slo_metrics "
+            "WHERE ts > dateadd('h', -1, now())"
+        )
+        if rows and rows[0]["avg_hit"] is not None:
+            hit = float(rows[0]["avg_hit"])
+            status = "✅" if hit >= 80 else "❌"
+            lines.append(
+                f"[P7]  캐시 히트율     {hit:8.1f} %           {status} (목표 ≥80%)"
+            )
+        else:
+            lines.append("[P7]  캐시 히트율     데이터 없음")
+    except Exception as e:
+        lines.append(f"[P7]  캐시 히트율     조회 실패 ({e})")
 
     # D1: 데이터 신선도
     try:
@@ -554,26 +448,20 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     days = min(args.days, 5)  # QuestDB TTL=5일
 
-    end = datetime.now(timezone.utc)
-    start = end - timedelta(days=days)
-
     print("\n🚀 WikiStreams SLO 데이터 내보내기 시작")
-    print(
-        f"   기간: {start.strftime('%Y-%m-%d %H:%M')} ~ {end.strftime('%Y-%m-%d %H:%M')} UTC ({days}일)"
-    )
+    print(f"   기간: 최근 {days}일")
     print(f"   출력: {output_dir.resolve()}\n")
 
-    # QuestDB 기반
+    # QuestDB 기반 (wikimedia_events)
     export_throughput(output_dir, days)
     export_enrichment_hourly(output_dir, days)
     export_by_wiki(output_dir, days)
     export_namespace(output_dir, days)
     export_query_latency(output_dir)
 
-    # Loki 기반
-    export_dlq_events(output_dir, start, end)
-    export_batch_processing(output_dir, start, end)
-    export_cache_hitrate(output_dir, start, end)
+    # QuestDB 기반 (producer_slo_metrics)
+    export_batch_processing(output_dir, days)
+    export_cache_hitrate(output_dir, days)
 
     # Docker stats 스냅샷
     export_resources(output_dir)

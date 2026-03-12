@@ -77,7 +77,7 @@ graph TD
 | 수집·보강 | Python 3.11, Pydantic, SQLite |
 | 메시지 버스 | Redpanda (Kafka 호환, KRaft) |
 | 시계열 DB | QuestDB 9.3.3 (ILP + REST API, TTL) |
-| 시각화·모니터링 | Grafana, Loki, Grafana Alloy |
+| 시각화·모니터링 | Grafana (QuestDB 기반 SLO 대시보드) |
 | AI 리포팅 | Claude Haiku (`claude-haiku-4-5`) |
 | Datalake | PyArrow, Parquet(Snappy), AWS S3 |
 | 인프라 | Docker, Docker Compose, AWS EC2 (t3.small) |
@@ -141,7 +141,7 @@ wikiStreams/
 │   ├── SLO.md / SLI.md / SLA.md  # SRE 문서
 │   ├── NFR.md / SRE.md     # 비기능 요구사항 / SRE 정책
 │   └── TROUBLE_SHOOTING.md # 트러블슈팅 기록
-├── monitoring/             # Grafana 대시보드 4종 + 알림 규칙
+├── monitoring/             # Grafana 대시보드 3종 + 알림 규칙
 ├── scripts/                # launchd plist (Mac Mini 자동 시작)
 ├── src/
 │   ├── producer/           # SSE 수집 + Wikidata 보강 + Kafka 발행
@@ -152,7 +152,7 @@ wikiStreams/
 ├── tests/
 │   ├── unit/               # 276개 단위 테스트 (외부 의존성 없음)
 │   └── integration/        # Redpanda, SQLite, Wikipedia API 연동 테스트
-└── docker-compose.yml      # 전체 인프라 정의 (9개 서비스)
+└── docker-compose.yml      # 전체 인프라 정의 (7개 서비스)
 ```
 
 ---
@@ -229,5 +229,6 @@ flake8 .         # 정적 분석
 | 2026-03-08 | Kafka → **Redpanda** (-802 MiB) |
 | 2026-03-08 | ClickHouse → **QuestDB** (-1,756 MiB) → t3.small 전환 달성 |
 | 2026-03-11 | **S3 Datalake** 추가 (Parquet 장기 보관) |
+| 2026-03-12 | **Loki/Alloy 제거** — SLO 지표(P1/P7)를 QuestDB로 이관, 로그 수집 스택 제거 |
 
 상세 벤치마크 및 트레이드오프 분석 → [`docs/ARCH_LIGHTENING_REPORT.md`](docs/ARCH_LIGHTENING_REPORT.md)
