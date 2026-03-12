@@ -269,10 +269,10 @@ def export_query_latency(output_dir: Path):
 def export_dlq_events(output_dir: Path, start: datetime, end: datetime):
     """R1: DLQ 이벤트 추이 (Loki, 5분 버킷)."""
     print("📊 DLQ 이벤트 추이 (R1) 내보내기...")
-    # DLQ 라우팅 로그: producer가 DLQ 토픽으로 전송할 때 기록
+    # Loki 레이블: container (not container_name)
     logql = (
         'count_over_time('
-        '{container_name=~"producer|questdb-consumer"} |~ "(?i)dlq" [5m]'
+        '{container=~"producer|questdb-consumer"} |~ "(?i)dlq" [5m]'
         ')'
     )
     rows = loki_metric_query(logql, start, end, step="5m")
@@ -282,60 +282,77 @@ def export_dlq_events(output_dir: Path, start: datetime, end: datetime):
         writer = csv.DictWriter(f, fieldnames=["timestamp", "value", "labels"])
         writer.writeheader()
         writer.writerows(rows)
-    print(f"  → {out} ({len(rows):,}건)")
+    status = f"{len(rows):,}건" if rows else "0건 (DLQ 유입 없음 — 정상)"
+    print(f"  → {out} ({status})")
 
 
 def export_batch_processing(output_dir: Path, start: datetime, end: datetime):
-    """P1: 배치 처리 시간 로그 (Loki logfmt)."""
+    """P1: 배치 처리 시간 (Loki 로그 스트림 → Python 정규식 파싱).
+
+    실제 로그 형식:
+        2026-03-12 03:51:42,141 - INFO - batch_processing_seconds=0.691 batch_size=175 valid=167
+    """
+    import re
+
     print("📊 배치 처리 시간 (P1) 내보내기...")
-    # Producer가 배치 처리 완료 후 logfmt로 batch_processing_seconds 필드 기록
-    logql = (
-        '{container_name="producer"} '
-        '| logfmt '
-        '| batch_processing_seconds != ""'
+    logql = '{container="producer"} |= "batch_processing_seconds="'
+    raw_rows = loki_log_query(logql, start, end, step="1m")
+
+    pattern = re.compile(
+        r"batch_processing_seconds=(?P<batch_sec>[0-9.]+)"
+        r"\s+batch_size=(?P<batch_size>[0-9]+)"
+        r"\s+valid=(?P<valid>[0-9]+)"
     )
-    rows = loki_log_query(logql, start, end, step="1m")
+    rows = []
+    for r in raw_rows:
+        m = pattern.search(r["line"])
+        if m:
+            rows.append({
+                "timestamp": r["timestamp"],
+                "batch_processing_seconds": float(m.group("batch_sec")),
+                "batch_size": int(m.group("batch_size")),
+                "valid": int(m.group("valid")),
+            })
 
     out = output_dir / "slo_batch_processing.csv"
-    fieldnames = ["timestamp", "line", "labels"]
     with out.open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer = csv.DictWriter(
+            f, fieldnames=["timestamp", "batch_processing_seconds", "batch_size", "valid"]
+        )
         writer.writeheader()
         writer.writerows(rows)
     print(f"  → {out} ({len(rows):,}건)")
 
 
 def export_cache_hitrate(output_dir: Path, start: datetime, end: datetime):
-    """P7: 캐시 히트율 (Loki unwrap, 5분 버킷)."""
+    """P7: 캐시 히트율 (Loki 로그 스트림 → Python 정규식 파싱).
+
+    실제 로그 형식:
+        정보 보강 후 167개의 이벤트를 전송했습니다. (신규 API 호출: 18개)
+    """
+    import re
+
     print("📊 캐시 히트율 (P7) 내보내기...")
-    logql_enriched = (
-        'sum_over_time('
-        '{container_name="producer"} | logfmt | unwrap total_enriched [5m]'
-        ')'
-    )
-    logql_api = (
-        'sum_over_time('
-        '{container_name="producer"} | logfmt | unwrap new_api_calls [5m]'
-        ')'
-    )
-    rows_enriched = loki_metric_query(logql_enriched, start, end, step="5m")
-    rows_api = loki_metric_query(logql_api, start, end, step="5m")
+    logql = '{container="producer"} |= "정보 보강 후"'
+    raw_rows = loki_log_query(logql, start, end, step="1m")
 
-    enriched_map = {r["timestamp"]: float(r["value"]) for r in rows_enriched}
-    api_map = {r["timestamp"]: float(r["value"]) for r in rows_api}
-
-    all_ts = sorted(set(enriched_map) | set(api_map))
+    pattern = re.compile(
+        r"정보 보강 후 (?P<total>[0-9]+)개의 이벤트를 전송했습니다\."
+        r".*신규 API 호출: (?P<api_calls>[0-9]+)개"
+    )
     rows = []
-    for ts in all_ts:
-        total = enriched_map.get(ts, 0)
-        api_calls = api_map.get(ts, 0)
-        hit_rate = round((total - api_calls) / total * 100, 2) if total > 0 else None
-        rows.append({
-            "timestamp": ts,
-            "total_enriched": int(total),
-            "new_api_calls": int(api_calls),
-            "cache_hit_rate_pct": hit_rate,
-        })
+    for r in raw_rows:
+        m = pattern.search(r["line"])
+        if m:
+            total = int(m.group("total"))
+            api_calls = int(m.group("api_calls"))
+            hit_rate = round((total - api_calls) / total * 100, 2) if total > 0 else None
+            rows.append({
+                "timestamp": r["timestamp"],
+                "total_enriched": total,
+                "new_api_calls": api_calls,
+                "cache_hit_rate_pct": hit_rate,
+            })
 
     out = output_dir / "slo_cache_hitrate.csv"
     with out.open("w", newline="", encoding="utf-8") as f:

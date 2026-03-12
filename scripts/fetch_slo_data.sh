@@ -11,7 +11,7 @@ set -e
 REMOTE_HOST="wikistreams"
 REMOTE_DIR="~/wikiStreams"
 REMOTE_EXPORT_DIR="$REMOTE_DIR/slo_export"
-LOCAL_EXPORT_DIR="./slo_export"
+LOCAL_EXPORT_DIR="./"
 EXTRA_ARGS="$@"
 
 echo "🚀 WikiStreams SLO 데이터 수집 시작"
