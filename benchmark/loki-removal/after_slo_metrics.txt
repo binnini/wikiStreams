@@ -1,0 +1,1 @@
+{"query":"SELECT count(), avg(batch_processing_seconds), avg(cache_hit_rate_pct) FROM producer_slo_metrics","columns":[{"name":"count()","type":"LONG"},{"name":"avg(batch_processing_seconds)","type":"DOUBLE"},{"name":"avg(cache_hit_rate_pct)","type":"DOUBLE"}],"timestamp":-1,"dataset":[[1730,0.7231529106586536,94.02596531791922]],"count":1}

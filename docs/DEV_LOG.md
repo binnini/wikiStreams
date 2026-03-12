@@ -1448,9 +1448,40 @@
   ---
   4단계: 결과 로컬로 수집
 
-  # 로컬에서
-  scp wikistreams:/tmp/before_*.txt ./benchmark/loki-removal/
-  scp wikistreams:/tmp/after_*.txt ./benchmark/loki-removal/
+  # 로컬에서 (작은따옴표로 원격 glob 보호 필요)
+  mkdir -p ./benchmark/loki-removal
+  scp 'wikistreams:/tmp/before_*.txt' ./benchmark/loki-removal/
+  scp 'wikistreams:/tmp/after_*.txt' ./benchmark/loki-removal/
+
+  ---
+  5단계: 잔여 이미지 정리
+
+  ssh wikistreams 'docker image rm grafana/alloy grafana/loki:3.0.0'
+  # alloy(673MB) + loki(105MB) = 778MB 절감
+
+- **측정 결과 (benchmark/loki-removal/ 기준, after는 안정화 후 재측정)**
+
+  | 항목 | Before (Loki+Alloy 포함) | After (제거 후 안정화) | 변화 |
+  |------|--------------------------|----------------------|------|
+  | 컨테이너 수 | 10개 | 8개 | -2 |
+  | CPU 합계 | 70.58% | 13.28% | **-57.3%** |
+  | RAM 합계 (컨테이너) | 989.6 MiB | 946.8 MiB | -42.8 MiB |
+  | Swap used | 700 MiB | 205 MiB | **-495 MiB** |
+  | 시스템 available | 550 MiB | 568 MiB | +18 MiB |
+
+  - CPU 57% 감소의 주원인: Loki/Alloy 자체(1%) 보다 이들이 유발하던 로그 스트림 처리 부하(producer/questdb/redpanda) 제거 효과
+  - Loki/Alloy 직접 RAM 기여: 174.8 MiB / QuestDB SLO 지표 이관 비용: +86.8 MiB
+  - **Swap 495 MiB 감소가 핵심** — OOM 위험 해소 (700 MiB → 205 MiB)
+
+- **SLO 지표 연속성 확인** (after_slo_metrics.txt)
+  - 적재 행 수: 1,730건 (before 대비 +347건 신규 적재 확인)
+  - avg batch_processing_seconds: **0.723s** (목표 ≤2s ✅)
+  - avg cache_hit_rate_pct: **94.0%** (목표 ≥80% ✅)
+
+- **트러블슈팅 메모**
+  - `scp wikistreams:/tmp/before_*.txt` → zsh가 `*`를 로컬 glob으로 확장하여 "no matches found" 발생. 작은따옴표로 감싸야 함.
+  - `docker stats --format "..."` SSH 원격 실행 시 줄 바꿈으로 `--format` 인자 분리 오류 발생. 큰따옴표 안에 한 줄로 작성하거나 `ssh wikistreams '...'` 형태 사용.
+  - after_slo_metrics.txt 최초 수집 시 DEV_LOG 명령에 URL 줄 바꿈(`FRO\nM`)이 포함돼 빈 파일 생성 → 단일 라인으로 재실행.
 
 ### 40. Grafana SLO & Resources Monitor Dashboard 데이터 미표시 오류 해결
 

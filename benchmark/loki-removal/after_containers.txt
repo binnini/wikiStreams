@@ -1,0 +1,8 @@
+questdb-consumer	Up About an hour
+producer	Up About an hour
+reporter	Up About an hour
+grafana	Up About an hour
+resource-monitor	Up About an hour
+questdb	Up About an hour
+redpanda	Up About an hour
+s3-exporter	Up 7 hours

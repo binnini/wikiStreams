@@ -1,0 +1,10 @@
+wikistreams-producer	253MB
+wikistreams-resource-monitor	254MB
+wikistreams-questdb-consumer	233MB
+wikistreams-reporter	259MB
+wikistreams-s3-exporter	469MB
+grafana/alloy	673MB
+grafana/grafana	950MB
+redpandadata/redpanda	663MB
+questdb/questdb	466MB
+grafana/loki	105MB

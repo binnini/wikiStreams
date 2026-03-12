@@ -1,0 +1,8 @@
+questdb-consumer	0.14%	15.5MiB / 1.799GiB	0.84%
+producer	1.46%	51.54MiB / 1.799GiB	2.80%
+reporter	0.00%	5.387MiB / 1.799GiB	0.29%
+grafana	0.38%	138.4MiB / 1.799GiB	7.51%
+resource-monitor	0.20%	38.21MiB / 1.799GiB	2.07%
+questdb	10.81%	408.5MiB / 1.074GiB	37.13%
+redpanda	0.29%	288.6MiB / 1.799GiB	15.66%
+s3-exporter	0.00%	700KiB / 1.799GiB	0.04%

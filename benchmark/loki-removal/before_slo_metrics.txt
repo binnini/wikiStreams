@@ -1,0 +1,1 @@
+{"query":"SELECT count() FROM producer_slo_metrics","columns":[{"name":"count()","type":"LONG"}],"timestamp":-1,"dataset":[[1383]],"count":1}

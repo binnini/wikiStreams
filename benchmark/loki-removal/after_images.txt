@@ -1,0 +1,8 @@
+wikistreams-producer	latest	253MB
+wikistreams-questdb-consumer	latest	233MB
+wikistreams-resource-monitor	latest	254MB
+wikistreams-reporter	latest	259MB
+wikistreams-s3-exporter	latest	469MB
+grafana/grafana	latest	950MB
+redpandadata/redpanda	latest	663MB
+questdb/questdb	9.3.3	466MB
