@@ -112,7 +112,10 @@ def test_process_batch_invalid_events_routed_to_dlq(mock_dependencies):
     invalid_events = [{"title": "no_required_fields"}]
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = ([], {"total_enriched": 0, "new_api_calls": 0})
+    enricher_instance.enrich_events.return_value = (
+        [],
+        {"total_enriched": 0, "new_api_calls": 0},
+    )
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback(invalid_events)
@@ -138,7 +141,10 @@ def test_process_batch_mixed_valid_and_invalid(mock_dependencies):
     mixed_events = [valid_event, invalid_event]
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = ([valid_event], {"total_enriched": 1, "new_api_calls": 0})
+    enricher_instance.enrich_events.return_value = (
+        [valid_event],
+        {"total_enriched": 1, "new_api_calls": 0},
+    )
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback(mixed_events)
@@ -191,7 +197,10 @@ def test_process_batch_log_events_silently_dropped(mock_dependencies):
     log_event = {"type": "log", "meta": {"domain": "en.wikipedia.org"}}
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = ([], {"total_enriched": 0, "new_api_calls": 0})
+    enricher_instance.enrich_events.return_value = (
+        [],
+        {"total_enriched": 0, "new_api_calls": 0},
+    )
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback([log_event])
@@ -211,7 +220,10 @@ def test_process_batch_canary_events_silently_dropped(mock_dependencies):
     canary_event = {"type": "edit", "meta": {"domain": "canary"}}
 
     enricher_instance = mock_dependencies["Enricher"].return_value
-    enricher_instance.enrich_events.return_value = ([], {"total_enriched": 0, "new_api_calls": 0})
+    enricher_instance.enrich_events.return_value = (
+        [],
+        {"total_enriched": 0, "new_api_calls": 0},
+    )
     sender_instance = mock_dependencies["Sender"].return_value
 
     process_batch_callback([canary_event])

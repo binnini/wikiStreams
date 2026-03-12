@@ -28,7 +28,7 @@ import subprocess
 import time
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 QUESTDB_URL = "http://localhost:9000"
