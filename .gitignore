@@ -21,3 +21,4 @@ reports/*.json
 
 # Benchmark results (CSV 측정 결과)
 benchmark/results/*.csv
+/slo_export/*
