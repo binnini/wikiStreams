@@ -202,7 +202,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, avg(cache_hit_rate_pct) as cache_hit_rate_pct FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 10m FILL(NULL)",
+          "rawSql": "SELECT ts as time, avg(cache_hit_rate_pct) as cache_hit_rate_pct FROM producer_slo_metrics WHERE ts >= dateadd('h', -6, now()) SAMPLE BY 10m FILL(NULL)",
           "refId": "A"
         }
       ],
@@ -382,7 +382,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, avg(batch_processing_seconds) FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 5m FILL(NULL)",
+          "rawSql": "SELECT ts as time, avg(batch_processing_seconds) as batch_processing_seconds FROM producer_slo_metrics WHERE ts >= dateadd('h', -3, now()) SAMPLE BY 5m FILL(NULL)",
           "refId": "A"
         }
       ],
@@ -484,7 +484,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, avg(batch_size) as batch_size, avg(valid) as valid FROM producer_slo_metrics WHERE $__timeFilter(ts) SAMPLE BY 5m FILL(NULL)",
+          "rawSql": "SELECT ts as time, avg(batch_size) as batch_size, avg(valid) as valid FROM producer_slo_metrics WHERE ts >= dateadd('h', -3, now()) SAMPLE BY 5m FILL(NULL)",
           "refId": "A"
         }
       ],

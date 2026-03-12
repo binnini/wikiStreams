@@ -1386,3 +1386,85 @@
   - `tests/unit/producer/test_cache.py`: 빈 레이블 TTL 케이스 테스트 2개 추가 (`test_empty_label_entry_expires_with_short_ttl`, `test_empty_label_entry_returned_within_short_ttl`)
 
 - **결과**: 단위 테스트 13개 전부 통과. EC2 배포 후 기존 빈 레이블 캐시가 3시간 내 만료되어 Wikidata 재조회 → SLO-D2 개선 기대.
+
+## 2026-03-12
+### 39. Loki/Alloy 제거 후 t4g.small 벤치마크 작성
+
+- **배경**: EC2 배포 운영 환경에서 OOM 문제 발생. 메모리 경감을 위하여 아키텍처 변경.
+
+  ssh wikistreams
+
+  # 1. 컨테이너별 메모리/CPU (핵심 지표)
+  docker stats --no-stream --format \
+    "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | tee /tmp/before_stats.txt
+
+  # 2. 전체 스택 메모리 합계
+  free -h | tee /tmp/before_free.txt
+
+  # 3. Docker 이미지 크기 (loki/alloy 포함 여부)
+  docker images --format "{{.Repository}}\t{{.Size}}" | tee /tmp/before_images.txt
+
+  # 4. 컨테이너 목록
+  docker ps --format "{{.Names}}\t{{.Status}}" | tee /tmp/before_containers.txt
+
+  # 5. producer_slo_metrics 데이터 유무 확인 (테이블 없으면 0건 기대)
+  curl -s "http://localhost:9000/exec?query=SELECT+count()+FROM+producer_slo_metrics" 2>&1 \
+    | tee /tmp/before_slo_metrics.txt
+
+  ---
+  2단계: After 배포
+
+  # EC2에서
+  cd ~/wikiStreams
+
+  # 새 브랜치 pull
+  git fetch origin feat/remove-loki-alloy
+  git checkout feat/remove-loki-alloy
+
+  # 중지 → 재빌드 → 시작
+  docker compose down
+  docker compose build producer
+  docker compose up -d
+
+  # 서비스 안정화 대기 (~30초)
+  sleep 30
+
+  ---
+  3단계: After 측정 (배포 후 ~5분 경과 후)
+
+  # 동일한 지표 재측정
+  docker stats --no-stream --format \
+    "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" | tee /tmp/after_stats.txt
+
+  free -h | tee /tmp/after_free.txt
+  docker images --format "{{.Repository}}\t{{.Size}}" | tee /tmp/after_images.txt
+  docker ps --format "{{.Names}}\t{{.Status}}" | tee /tmp/after_containers.txt
+
+  # producer_slo_metrics 테이블 데이터 확인 (새로 쌓이는지)
+  curl -s "http://localhost:9000/exec?query=SELECT+count(),+avg(batch_processing_seconds),+avg(cache_hit_rate_pct)+FRO
+  M+producer_slo_metrics" \
+    | tee /tmp/after_slo_metrics.txt
+
+  ---
+  4단계: 결과 로컬로 수집
+
+  # 로컬에서
+  scp wikistreams:/tmp/before_*.txt ./benchmark/loki-removal/
+  scp wikistreams:/tmp/after_*.txt ./benchmark/loki-removal/
+
+### 40. Grafana SLO & Resources Monitor Dashboard 데이터 미표시 오류 해결
+
+- **배경**: Loki/Alloy 제거 후 Grafana 대시보드 쿼리를 QuestDB에 의존하도록 변경했으나 문제 발생.
+
+- **에러 메시지**: `db has no time column: time column is missing; make sure your data includes a time column for time series format or switch to a table format that doesn't require it`
+
+  단순 수치를 불러오는 작업은 정상 동작 하지만 time column을 불러오지 못함
+
+- **원인**: `wikistreams-slo.json`, `wikistreams-producer.json`의 `time_series` 포맷 패널들이 `$__timeFilter(ts)` 매크로를 사용 중이었음. QuestDB Grafana 플러그인이 해당 매크로를 time series 쿼리에서 처리하지 못해 오류 발생. (table 포맷 게이지/stat 패널은 정상 동작)
+
+- **1차 시도**: `time_series` 패널의 `$__timeFilter(ts)` → `ts >= dateadd('h', -N, now())`로 교체. 에러 지속.
+
+- **진짜 원인 (Grafana API 직접 테스트로 확인)**: `grafana-postgresql-datasource` 플러그인이 time column을 **타입(OID)이 아닌 컬럼명**으로 식별함. `ts`는 인식 불가, `time`이라는 이름만 인식. PG wire OID는 동일(1114=timestamp)했으나 Grafana 플러그인이 이름 기반으로 처리.
+
+- **해결**: 모든 `time_series` 포맷 쿼리에서 `ts` → `ts as time` 컬럼 alias 추가. 집계 함수 컬럼에도 alias 추가(e.g. `avg(batch_processing_seconds) as batch_processing_seconds`). SLO 4개 패널 + Producer 3개 패널 + Resources 6개 패널 수정.
+  - Grafana API (`POST /api/ds/query`)로 수정 전/후 검증 완료: 전 → `error: time column is missing`, 후 → `status: 200, fields: [Time, ...]`

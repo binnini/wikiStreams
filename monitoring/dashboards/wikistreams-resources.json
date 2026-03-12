@@ -46,7 +46,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT container, avg(cpu_pct) as cpu_pct FROM resource_metrics WHERE ts > dateadd('m', -2, now()) GROUP BY container ORDER BY container",
+          "rawSql": "SELECT avg(CASE WHEN container = 'producer' THEN cpu_pct END) as producer, avg(CASE WHEN container = 'questdb' THEN cpu_pct END) as questdb, avg(CASE WHEN container = 'questdb-consumer' THEN cpu_pct END) as \"questdb-consumer\", avg(CASE WHEN container = 'redpanda' THEN cpu_pct END) as redpanda, avg(CASE WHEN container = 'reporter' THEN cpu_pct END) as reporter FROM resource_metrics WHERE ts > dateadd('m', -2, now())",
           "refId": "A"
         }
       ]
@@ -83,7 +83,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT container, avg(mem_pct) as mem_pct FROM resource_metrics WHERE ts > dateadd('m', -2, now()) GROUP BY container ORDER BY container",
+          "rawSql": "SELECT avg(CASE WHEN container = 'producer' THEN mem_pct END) as producer, avg(CASE WHEN container = 'questdb' THEN mem_pct END) as questdb, avg(CASE WHEN container = 'questdb-consumer' THEN mem_pct END) as \"questdb-consumer\", avg(CASE WHEN container = 'redpanda' THEN mem_pct END) as redpanda, avg(CASE WHEN container = 'reporter' THEN mem_pct END) as reporter FROM resource_metrics WHERE ts > dateadd('m', -2, now())",
           "refId": "A"
         }
       ]
@@ -110,7 +110,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, cpu_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'producer' ORDER BY ts",
+          "rawSql": "SELECT ts as time, cpu_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'producer' ORDER BY ts",
           "refId": "A"
         }
       ]
@@ -130,7 +130,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, cpu_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'questdb' ORDER BY ts",
+          "rawSql": "SELECT ts as time, cpu_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'questdb' ORDER BY ts",
           "refId": "A"
         }
       ]
@@ -150,7 +150,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, cpu_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'redpanda' ORDER BY ts",
+          "rawSql": "SELECT ts as time, cpu_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'redpanda' ORDER BY ts",
           "refId": "A"
         }
       ]
@@ -187,7 +187,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, mem_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'producer' ORDER BY ts",
+          "rawSql": "SELECT ts as time, mem_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'producer' ORDER BY ts",
           "refId": "A"
         }
       ]
@@ -217,7 +217,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, mem_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'questdb' ORDER BY ts",
+          "rawSql": "SELECT ts as time, mem_pct FROM resource_metrics WHERE ts > dateadd('h', -3, now()) AND container = 'questdb' ORDER BY ts",
           "refId": "A"
         }
       ]
@@ -247,7 +247,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts, sum(mem_mb) as total_mem_mb FROM resource_metrics WHERE ts > dateadd('h', -3, now()) SAMPLE BY 1m",
+          "rawSql": "SELECT ts as time, sum(mem_mb) as total_mem_mb FROM resource_metrics WHERE ts > dateadd('h', -3, now()) SAMPLE BY 1m",
           "refId": "A"
         }
       ]
