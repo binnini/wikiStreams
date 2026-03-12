@@ -10,6 +10,7 @@ from resource_monitor.baseline import BaselineStore
 from resource_monitor.collector import DockerStatsCollector, ContainerMetrics
 from resource_monitor.config import settings
 from resource_monitor.detector import detect
+from resource_monitor.questdb_writer import QuestDBWriter
 
 logging.basicConfig(
     level=getattr(logging, settings.log_level.upper(), logging.INFO),
@@ -49,12 +50,16 @@ def run() -> None:
     store = BaselineStore(settings.baseline_db_path, alpha=settings.ema_alpha)
     alerter = Alerter(settings.slack_alert_webhook_url, settings.alert_cooldown_seconds)
     collector = DockerStatsCollector()
+    qdb_writer = QuestDBWriter(settings.questdb_host, settings.questdb_rest_port)
+    qdb_writer.ensure_table()
 
     while True:
         now = datetime.now(tz=ZoneInfo("Asia/Seoul"))
         hour = now.hour
 
         metrics_list = collector.collect_all(settings.targets)
+
+        qdb_writer.write(metrics_list)
 
         for m in metrics_list:
             _log_metrics(m, hour)

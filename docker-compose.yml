@@ -100,6 +100,8 @@ services:
       MONITOR_TARGETS: 'producer,questdb,redpanda,questdb-consumer,reporter'
       SLACK_ALERT_WEBHOOK_URL: '${SLACK_ALERT_WEBHOOK_URL}'
       BASELINE_DB_PATH: '/data/resource_monitor_baseline.db'
+      QUESTDB_HOST: 'questdb'
+      QUESTDB_REST_PORT: '9000'
     restart: always
 
   reporter:

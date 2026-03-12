@@ -38,6 +38,10 @@ class Settings(BaseSettings):
     # EMA 평활 계수 (0 < alpha <= 1)
     ema_alpha: float = 0.1
 
+    # QuestDB 설정 (리소스 메트릭 기록용)
+    questdb_host: str = "questdb"
+    questdb_rest_port: int = 9000
+
     # SQLite 파일 경로
     baseline_db_path: str = "/data/resource_monitor_baseline.db"
 
