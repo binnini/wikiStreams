@@ -26,7 +26,7 @@ graph TD
         A[Wikimedia SSE]
     end
 
-    subgraph "Docker Host (AWS t3.small)"
+    subgraph "Docker Host (AWS t4g.small)"
         B[Producer]
         C[(SQLite Cache)]
         D[Wikidata API]
@@ -80,7 +80,7 @@ graph TD
 | 시각화·모니터링 | Grafana (QuestDB 기반 SLO 대시보드) |
 | AI 리포팅 | Claude Haiku (`claude-haiku-4-5`) |
 | Datalake | PyArrow, Parquet(Snappy), AWS S3 |
-| 인프라 | Docker, Docker Compose, AWS EC2 (t3.small) |
+| 인프라 | Docker, Docker Compose, AWS EC2 (t4g.small, Seoul) |
 | 테스트 | Pytest, pytest-mock, pytest-docker |
 | 코드 품질 | Black, Flake8, GitHub Actions CI |
 
@@ -157,6 +157,122 @@ wikiStreams/
 
 ---
 
+## EC2 배포
+
+### 인스턴스 스펙
+
+| 항목 | 값 |
+|---|---|
+| 인스턴스 | AWS EC2 t4g.small (Graviton3, ARM64) |
+| RAM | 2 GiB |
+| 리전 | ap-northeast-2 (Seoul) |
+| SSH 별칭 | `ssh wikistreams` (`~/.ssh/config` 등록) |
+
+### 초기 서버 설정
+
+EC2 인스턴스 최초 접속 후 Docker 설치:
+
+```bash
+ssh wikistreams
+
+# Docker 설치 (Amazon Linux 2023 기준)
+sudo yum update -y
+sudo yum install -y docker git
+sudo systemctl enable --now docker
+sudo usermod -aG docker ec2-user
+
+# Docker Compose plugin 설치
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-aarch64 \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# 재접속 후 확인
+exit && ssh wikistreams
+docker compose version
+```
+
+### 배포
+
+```bash
+ssh wikistreams
+
+git clone https://github.com/puding-development/wikiStreams.git
+cd wikiStreams
+
+# .env 파일 생성
+cat > .env <<EOF
+ANTHROPIC_API_KEY="sk-ant-..."
+SLACK_WEBHOOK_URL="https://hooks.slack.com/services/..."
+SLACK_ALERT_WEBHOOK_URL="https://hooks.slack.com/services/..."
+EOF
+
+docker compose up -d
+```
+
+### 업데이트 배포
+
+```bash
+ssh wikistreams
+cd wikiStreams
+
+git pull
+
+# 변경된 서비스만 재빌드
+docker compose build producer && docker compose up -d producer
+
+# 전체 재시작
+docker compose down && docker compose up -d
+```
+
+### 운영 접근
+
+EC2는 외부에서 직접 접근하지 않고 SSH 터널링으로 사용합니다.
+
+```bash
+# Grafana (로컬 브라우저에서 http://localhost:3000)
+ssh -L 3000:localhost:3000 wikistreams
+
+# QuestDB 콘솔 (로컬 브라우저에서 http://localhost:9000)
+ssh -L 9000:localhost:9000 wikistreams
+
+# 여러 포트 동시 포워딩
+ssh -L 3000:localhost:3000 -L 9000:localhost:9000 wikistreams
+```
+
+### 현재 메모리 현황 (2026-03-12 기준)
+
+아키텍처 경량화 4단계 완료 후 t4g.small에서 안정 운영 중입니다.
+
+```
+컨테이너 합산 RSS:  ~947 MiB / 2,048 MiB (46%)
+시스템 available:   ~568 MiB
+Swap 사용:          ~205 MiB  (안정 수준)
+```
+
+| 컨테이너 | RAM |
+|---|---|
+| QuestDB | ~408 MiB (mem_limit: 1100m, TTL 5d) |
+| Redpanda | ~288 MiB |
+| Grafana | ~138 MiB |
+| Producer | ~51 MiB |
+| Resource Monitor | ~38 MiB |
+| 기타 (consumer, reporter, s3-exporter) | ~22 MiB |
+
+### 운영 주의사항
+
+> **메모리 제약**: t4g.small은 RAM 2 GiB입니다. EC2에서 Node.js, npm install 등 무거운 프로세스를 직접 실행하면 OOM이 발생할 수 있습니다. 모든 작업은 Docker 컨테이너 안에서 실행하세요.
+
+```bash
+# 현재 메모리 상태 확인
+ssh wikistreams "free -h"
+
+# 컨테이너별 리소스 확인
+ssh wikistreams 'docker stats --no-stream --format "{{.Name}}\t{{.CPUPerc}}\t{{.MemUsage}}"'
+```
+
+---
+
 ## 운영 명령어
 
 ### 서비스 관리
@@ -227,7 +343,7 @@ flake8 .         # 정적 분석
 | 초기 | Kafka + Druid(5컨테이너) + Superset |
 | 2026-02-28 | Druid/Superset → **ClickHouse + Grafana** (아키텍처 단순화) |
 | 2026-03-08 | Kafka → **Redpanda** (-802 MiB) |
-| 2026-03-08 | ClickHouse → **QuestDB** (-1,756 MiB) → t3.small 전환 달성 |
+| 2026-03-08 | ClickHouse → **QuestDB** (-1,756 MiB) → t4g.small 전환 달성 |
 | 2026-03-11 | **S3 Datalake** 추가 (Parquet 장기 보관) |
 | 2026-03-12 | **Loki/Alloy 제거** — SLO 지표(P1/P7)를 QuestDB로 이관, 로그 수집 스택 제거 |
 
