@@ -1499,3 +1499,108 @@
 
 - **해결**: 모든 `time_series` 포맷 쿼리에서 `ts` → `ts as time` 컬럼 alias 추가. 집계 함수 컬럼에도 alias 추가(e.g. `avg(batch_processing_seconds) as batch_processing_seconds`). SLO 4개 패널 + Producer 3개 패널 + Resources 6개 패널 수정.
   - Grafana API (`POST /api/ds/query`)로 수정 전/후 검증 완료: 전 → `error: time column is missing`, 후 → `status: 200, fields: [Time, ...]`
+
+## 2026-03-13
+
+### 41. EC2 디스크 풀(100%) → 파이프라인 중단 장애 및 복구
+
+#### 장애 개요
+- **발생 시각**: 2026-03-13 05:16 KST (2026-03-12 20:16 UTC)
+- **증상**: `wikimedia_events` 데이터 적재 중단, Producer가 Redpanda 연결 끊김 에러 발생
+- **영향**: 약 9시간 동안 데이터 파이프라인 전체 중단
+
+#### 원인 분석
+
+**1단계: dmesg 확인**
+```
+[Thu Mar 12 03:06:20 2026] Out of memory: Killed process 57573 (claude-2.1.74-l)
+[Thu Mar 12 03:21:30 2026] Out of memory: Killed process 61476 (swapoff)
+```
+- 3월 12일 03:06 UTC에 EC2에서 실행 중이던 Claude Code CLI 프로세스(RSS ~942MB)가 OOM으로 kill됨
+- 이는 장애의 직접 원인이 아닌 선행 이벤트 (메모리 압박 전조)
+
+**2단계: 실제 장애 원인 — Redpanda 디스크 풀**
+
+Redpanda 로그에서 확인:
+```
+node 0 disk used: 11.509GiB, total: 11.525GiB (ratio: 0.9986, is_full: true)
+free: 16.555MiB  →  alert: low_space
+wikimedia.recentchange 파티션: 1.25GB (retention 미설정으로 무한 누적)
+```
+
+- `retention.ms = -1` (무제한), `retention.bytes = -1` (무제한) — Retention 정책 없음
+- 파이프라인 가동 이후 모든 이벤트를 무한 보관 → ~1.25GB까지 성장
+- Redpanda가 `is_full=true` 상태로 전환 → 새 메시지 쓰기 거부
+- Producer에서 `Error receiving network data closing socket` 에러 발생 (2026-03-12 20:32:33 UTC)
+
+**디스크 전체 사용 현황 (장애 당시)**:
+| 구성 요소 | 크기 |
+|---|---|
+| Redpanda 데이터 볼륨 | ~1.3GB (retention 미설정) |
+| QuestDB 데이터 볼륨 | ~2.2GB (TTL 5일, 정상) |
+| Docker 이미지 | ~3.5GB |
+| 빌드 캐시 | ~1.0GB |
+| 비활성 볼륨 (loki, clickhouse 등) | ~6.1GB |
+| **합계** | **20GB (100%)** |
+
+#### 복구 절차
+
+**1. 디스크 공간 확보 (6.7GB)**
+```bash
+# 빌드 캐시 삭제 (562MB)
+docker builder prune -f
+
+# 비활성 볼륨 삭제 (wikistreams_loki_data, wikistreams_clickhouse_data + 해시명 볼륨 6개)
+docker volume rm wikistreams_loki_data wikistreams_clickhouse_data
+docker volume prune -f
+# → 총 6.109GB 확보
+```
+
+**2. 전체 컨테이너 재시작**
+```bash
+docker compose down && docker compose up -d
+```
+- `docker restart`만으로는 questdb-consumer가 구 Redpanda 인스턴스의 소켓 상태를 물고 있어 새 로그가 전혀 생성되지 않는 문제 발생 (ep_poll 상태로 연결만 유지)
+- `docker compose down/up` 전체 재생성으로 해결
+
+**3. Redpanda Retention 정책 설정 (재발 방지)**
+```bash
+docker exec redpanda /usr/bin/rpk topic alter-config wikimedia.recentchange \
+  --set retention.bytes=524288000 \   # 500MB 상한
+  --set retention.ms=86400000 \       # 24시간 이상 메시지 삭제
+  --brokers localhost:9092
+```
+
+**4. 고아 볼륨 삭제**
+```bash
+# docker compose down/up 후 구 Redpanda 볼륨이 고아(LINKS=0)로 남아 있었음
+docker volume rm 5bc3beda0f6fcbc4a3137a09a56f67c98f60ce074b23ccdf5121d61cadc22d77
+# → 1.29GB 추가 확보
+```
+
+#### 부수적 버그 수정: SLI-R1 DLQ 메트릭 과다 집계
+
+**발견**: 장애 분석 중 Grafana SLO 대시보드에서 DLQ 비율이 6~8%로 표시 (목표 ≤1%)
+
+**원인**: `batch_size - valid` 계산에 `_should_skip()`으로 조용히 버려지는 `type=log` 이벤트(~6~8%)가 포함되어 실제 DLQ 이벤트와 구분 불가
+
+실제 DLQ(스키마 검증 실패)는 18시간 동안 **3건**뿐 — R1 SLO는 실제로 위반이 아니었음
+
+**수정 내용** (브랜치: `fix/dlq-metrics-skipped-count`):
+- `src/producer/main.py`: `skipped` 카운터 추가
+- `src/producer/slo_writer.py`: `skipped` 컬럼 추가 (CREATE TABLE / INSERT 명시적 컬럼명 사용)
+- `monitoring/dashboards/wikistreams-slo.json`: DLQ 쿼리를 `batch_size - valid - skipped`으로 수정
+
+EC2 적용 시:
+```bash
+# QuestDB 컬럼 추가 (기존 데이터 NULL로 보존)
+curl -sf 'http://localhost:9000/exec?query=ALTER+TABLE+producer_slo_metrics+ADD+COLUMN+skipped+INT'
+```
+
+#### 재발 방지 조치 요약
+| 조치 | 내용 |
+|---|---|
+| Redpanda retention 설정 | bytes=500MB, ms=24h 적용 완료 |
+| 비활성 볼륨 정리 | loki/clickhouse/해시명 볼륨 제거 |
+| DLQ 메트릭 수정 | skipped 이벤트 분리 집계 |
+| EC2에서 Claude Code CLI 실행 금지 확인 | CLAUDE.md에 이미 명시 (OOM 발생 이력) |
