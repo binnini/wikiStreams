@@ -1,7 +1,7 @@
 # WikiStreams 비기능 요구사항 (NFR)
 
 > 작성일: 2026-03-05
-> 최종 수정: 2026-03-10 (아키텍처 경량화 완료 — Redpanda + QuestDB 기준으로 재작성)
+> 최종 수정: 2026-03-13 (Loki/Alloy 제거, Slack 전환 반영)
 > 목적: SLI/SLO/SLA 도출을 위한 선행 산출물
 > 범위: WikiStreams 홈랩 데이터 파이프라인 전체 (Producer → Redpanda → QuestDB → Reporter/Grafana)
 
@@ -16,7 +16,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | C1 | Producer | Wikimedia SSE 구독 → Redpanda 발행 | 상시 실행 (무중단) |
 | ~~C2~~ | ~~DLQ Consumer~~ | ~~실패 이벤트 재처리 (최대 3회)~~ | ~~제거됨 (2026-03-07): Producer에서 사전 필터(_should_skip)로 대체~~ |
 | C3 | QuestDB | 이벤트 저장 및 분석 쿼리 제공 (TTL 5일) | 상시 실행 |
-| C4 | Reporter | 일일 트렌드 분석 → Discord 발송 | 스케줄 실행 (09:00 KST) |
+| C4 | Reporter | 일일 트렌드 분석 → Slack 발송 | 스케줄 실행 (09:00 KST) |
 | C5 | Grafana | 실시간 대시보드 제공 | 상시 실행 |
 | C6 | S3 Exporter | 이벤트 데이터 오프호스트 백업 저장소 (일일 Parquet → S3) | 스케줄 실행 (01:00 UTC, profiles: s3) |
 
@@ -31,7 +31,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | Wikimedia SSE API | C1 Producer | 이벤트 수집 중단 (재연결 자동 시도) |
 | Wikidata REST API | C1 Producer | 레이블 보강 불가 (캐시로 부분 완화) |
 | Anthropic Claude API | C4 Reporter | 리포트 생성 불가 |
-| Discord Webhook | C4 Reporter | 리포트 발송 불가 |
+| Slack Webhook | C4 Reporter | 리포트 발송 불가 |
 | Google News RSS | C4 Reporter | 뉴스 섹션 누락 (부분 발송 가능) |
 | S3 Compatible Storage | C6 S3 Exporter | 백업 저장 불가 → RPO 보장 불가 (파이프라인 동작 자체는 유지) |
 
@@ -66,7 +66,7 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | NFR-R1 | C1 Producer | 이벤트 DLQ 유입 비율 ≤ 1% (정상 운영 시) | `_should_skip()` 필터로 log/canary 사전 드롭; 진짜 실패만 DLQ 라우팅 |
 | ~~NFR-R2~~ | ~~C2 DLQ Consumer~~ | ~~DLQ 이벤트 최대 3회 재처리 시도~~ | ~~C2 제거로 폐기 (2026-03-07)~~ |
 | NFR-R3 | C1 Producer | Wikimedia SSE 연결 끊김 시 자동 재연결 (지수 백오프 2s → 60s) | `_RETRY_BASE_DELAY`, `_RETRY_MAX_DELAY` |
-| NFR-R4 | C4 Reporter | Claude API 또는 Discord 실패 시 오류 로그 기록 및 다음 스케줄에 재시도 | 리포트 누락 최소화 |
+| NFR-R4 | C4 Reporter | Claude API 또는 Slack 실패 시 오류 로그 기록 및 다음 스케줄에 재시도 | 리포트 누락 최소화 |
 | NFR-R5 | C1 Producer + C3 | SSE → QuestDB 파이프라인 완전성: 이벤트 유실률 ≤ 2% | DLQ 비율(R1)과 별개 — SSE 연결 끊김·QuestDB 적재 누락 포함한 엔드투엔드 유실 허용 임계 |
 
 ### 3.4 데이터 품질 (Data Quality)
@@ -92,9 +92,9 @@ WikiStreams는 다음 6개 컴포넌트로 구성된다. 각 컴포넌트는 독
 | ID | 대상 | 요구사항 | 근거 |
 |----|------|----------|------|
 | NFR-M1 | 전체 | 코드 변경 후 단일 컴포넌트만 재빌드·재시작 가능 | `docker compose build {service} && up -d {service}` |
-| NFR-M2 | 전체 | 모든 컴포넌트 로그는 Loki에 집계되어 Grafana에서 조회 가능 | 운영 가시성 |
+| NFR-M2 | 전체 | SLO 핵심 지표(P1/P7/R1)는 QuestDB producer_slo_metrics에 저장. 일반 로그는 docker compose logs로 접근 | Loki/Alloy 제거(2026-03-12) 후 구조 |
 | NFR-M3 | C4 Reporter | 프롬프트 스타일 변경 시 코드 수정 없이 환경변수(`PROMPT_STYLE`)로 전환 가능 | `prompts/__init__.py` 동적 로드 |
-| NFR-M4 | C5 Loki | 로그 보존 기간 ≥ 30일 | SLO 측정 롤링 기간(30일) 확보; 보존 기간 미달 시 SLI 측정 공백 발생 |
+| ~~NFR-M4~~ | ~~C5 Loki~~ | ~~로그 보존 기간 ≥ 30일~~ | ~~Loki/Alloy 제거(2026-03-12)로 폐기~~ |
 
 ### 3.7 용량 (Capacity)
 
