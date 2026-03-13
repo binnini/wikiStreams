@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS producer_slo_metrics (
     batch_processing_seconds DOUBLE,
     batch_size               INT,
     valid                    INT,
+    skipped                  INT,
     total_enriched           INT,
     new_api_calls            INT,
     cache_hit_rate_pct       DOUBLE,
@@ -53,6 +54,7 @@ class SloWriter:
         batch_sec: float,
         batch_size: int,
         valid: int,
+        skipped: int,
         total_enriched: int,
         new_api_calls: int,
     ) -> None:
@@ -66,7 +68,7 @@ class SloWriter:
 
         sql = (
             f"INSERT INTO producer_slo_metrics VALUES ("
-            f"{batch_sec}, {batch_size}, {valid}, "
+            f"{batch_sec}, {batch_size}, {valid}, {skipped}, "
             f"{total_enriched}, {new_api_calls}, {hit_rate_sql}, now()"
             f");"
         )

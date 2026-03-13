@@ -654,7 +654,7 @@
         "type": "postgres",
         "uid": "QuestDB"
       },
-      "description": "SLI-R1: DLQ 유입 이벤트 수 (batch_size - valid). 목표: ≤ 1%",
+      "description": "SLI-R1: DLQ 유입 이벤트 수 (batch_size - valid - skipped). 목표: ≤ 1%",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -715,7 +715,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT sum(batch_size - valid) FROM producer_slo_metrics WHERE $__timeFilter(ts)",
+          "rawSql": "SELECT sum(batch_size - valid - skipped) FROM producer_slo_metrics WHERE $__timeFilter(ts)",
           "refId": "A"
         }
       ],
@@ -781,7 +781,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT ts as time, sum(batch_size - valid) as dlq_events FROM producer_slo_metrics WHERE ts >= dateadd('h', -24, now()) SAMPLE BY 5m FILL(0)",
+          "rawSql": "SELECT ts as time, sum(batch_size - valid - skipped) as dlq_events FROM producer_slo_metrics WHERE ts >= dateadd('h', -24, now()) SAMPLE BY 5m FILL(0)",
           "refId": "A"
         }
       ],

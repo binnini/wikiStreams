@@ -52,8 +52,10 @@ def run_producer():
         batch_size = len(events)
 
         valid_events = []
+        skipped = 0
         for event in events:
             if _should_skip(event):
+                skipped += 1
                 logging.debug(
                     "⏭️ 이벤트 skip: type=%s domain=%s",
                     event.get("type"),
@@ -81,6 +83,7 @@ def run_producer():
             batch_sec=elapsed,
             batch_size=batch_size,
             valid=len(valid_events),
+            skipped=skipped,
             total_enriched=enrich_stats["total_enriched"],
             new_api_calls=enrich_stats["new_api_calls"],
         )
