@@ -67,7 +67,9 @@ class SloWriter:
             hit_rate_sql = "NULL"
 
         sql = (
-            f"INSERT INTO producer_slo_metrics VALUES ("
+            f"INSERT INTO producer_slo_metrics "
+            f"(batch_processing_seconds, batch_size, valid, skipped, "
+            f"total_enriched, new_api_calls, cache_hit_rate_pct, ts) VALUES ("
             f"{batch_sec}, {batch_size}, {valid}, {skipped}, "
             f"{total_enriched}, {new_api_calls}, {hit_rate_sql}, now()"
             f");"
