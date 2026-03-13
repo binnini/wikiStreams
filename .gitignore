@@ -10,7 +10,7 @@ venv/
 .idea/
 .vscode/
 *.swp
-./aws
+aws/
 docker-sompose.override.yml
 
 # docs
